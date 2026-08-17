@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from tests.frontend_order import position
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -457,7 +459,7 @@ def test_selecting_answer_text_offers_asking_about_it():
     assert "if (!askable && !rememberable) return hideMenu();" in memory_edit
 
     assert 'id="composerQuote"' in index
-    assert '/static/js/composer-quote.js' in index
+    assert position("composer-quote.js") >= 0
 
     # Das Zitat ist beim Senden Teil der Frage -- genau ein Text fuer Thread,
     # Bookmark, Chat-Kontext und die sechs Modelle. Die getippte Frage steht

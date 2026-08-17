@@ -187,6 +187,7 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
         "window.AUTH_BOOTSTRAP_TIMEOUT_MS = 30;"
     )
     context.route("**/static/firebase.js*", lambda route: route.abort())
+    context.route("**/static/dist/firebase.*.js", lambda route: route.abort())
     context.route(
         "https://cloud.umami.is/**",
         lambda route: route.fulfill(content_type="application/javascript", body="/* e2e */"),
@@ -194,6 +195,9 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
     page = context.new_page()
     try:
         page.goto(phase4_server + "/app", wait_until="domcontentloaded")
+        assert page.evaluate(
+            "() => typeof window.App?.emailVerification"
+        ) == "object"
         login = page.locator("#authTopLoginBtn")
         expect(login).to_be_visible(timeout=5000)
         expect(page.locator("#loginContainer .login-skeleton")).to_have_count(0)
@@ -730,6 +734,7 @@ def test_template_visibility_classes_remain_overridable_by_ui_controls(
         expect(page.locator("#systemPromptModal")).to_be_hidden()
 
         page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
+        page.click("#settingsTabConnections")
         expect(page.locator("#apiSettingsArea")).to_be_hidden()
         page.evaluate("() => document.getElementById('apiSettingsToggle').click()")
         expect(page.locator("#apiSettingsArea")).to_be_visible()

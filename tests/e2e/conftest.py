@@ -140,10 +140,13 @@ def browser():
 def context(browser):
     ctx = browser.new_context(viewport={"width": 1440, "height": 900})
     # Firebase-Modul durch den Auth-Stub ersetzen (eingeloggter Free-User).
-    ctx.route(
-        "**/static/firebase.js*",
-        lambda route: route.fulfill(content_type="application/javascript", body=FIREBASE_STUB),
-    )
+    # Built und Source-Modus haben unterschiedliche URLs; beide muessen lokal
+    # bleiben, sonst redet die angeblich isolierte Suite mit dem echten SDK.
+    def fulfill_firebase_stub(route):
+        route.fulfill(content_type="application/javascript", body=FIREBASE_STUB)
+
+    ctx.route("**/static/firebase.js*", fulfill_firebase_stub)
+    ctx.route("**/static/dist/firebase.*.js", fulfill_firebase_stub)
     # Analytics im Test nicht laden (Netz-Rauschen + Konsolen-Warnungen).
     ctx.route(
         "https://cloud.umami.is/**",

@@ -31,6 +31,7 @@ from app.core.background_tasks import (
     supervise_background_task,
     task_health_snapshot,
 )
+from app.core.concurrency import apply_worker_thread_budget
 from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.e2e_profile import e2e_test_mode_enabled
 from app.core.rate_limit import limiter
@@ -119,6 +120,11 @@ def _one_shot_task(func, name: str):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Before the E2E early-return: the streaming endpoints are the same
+    # thread-hungry code in every profile, so the budget must not depend on
+    # which maintenance loops are enabled.
+    apply_worker_thread_budget()
+
     if e2e_test_mode_enabled():
         # Request-level persistence still runs against the isolated emulator,
         # but no cleanup, recovery, backfill, webhook or scheduler writer is

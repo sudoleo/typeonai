@@ -11,5 +11,9 @@
    gehen weder Pageviews noch umami.track()-Events raus. Ueber ?notrack=1
    laesst sich das auch auf Geraeten setzen, die keine Konsole haben
    (Handy/Tablet); ?notrack=0 nimmt den Ausschluss wieder zurueck. #}
+{% if content_hashed_app_assets | default(false) %}
+<script src="{{ asset_url('/static/js/analytics-opt-out.js') }}"></script>
+{% else %}
 <script src="/static/js/analytics-opt-out.js?v=20260811-phase6"></script>
+{% endif %}
 <script defer src="https://cloud.umami.is/script.js" data-website-id="30bf073f-bcd0-49a1-9754-ce060829715b" data-domains="consens.io,www.consens.io" data-do-not-track="true" data-exclude-search="true" data-exclude-hash="true"></script>

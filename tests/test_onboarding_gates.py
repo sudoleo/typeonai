@@ -63,8 +63,9 @@ def test_verification_banner_offers_resend_and_recheck():
     assert "spam" in banner.lower()
 
     module = read("static/js/email-verify.js")
-    assert "export function showEmailVerificationGate" in module
-    assert "export function hideEmailVerificationGate" in module
+    assert "function showEmailVerificationGate" in module
+    assert "function hideEmailVerificationGate" in module
+    assert "window.App.emailVerification = Object.freeze" in module
     # Bestaetigt wird meist in einem anderen Tab; die Rueckkehr soll reichen.
     assert "visibilitychange" in module
 

@@ -11,7 +11,12 @@ passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
 
 **Schnell-Hinweise:**
 - Frontend-Module reden über `window.*` / `window.App` (keine ES-Imports). Die
-  Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.
-- Nach CSS/JS-Änderungen den `?v=`-Cache-Buster bumpen.
-- Frontend hat keine Auto-Tests → `docs/smoke-checklist.md` durchgehen.
-  Backend: `.\venv\Scripts\python.exe -m pytest tests`.
+  Script-Ladereihenfolge ist ein Vertrag — für `/app` steht sie in
+  `static/js/bundles.json`, nicht mehr in `templates/index.html`.
+- Nach Änderungen unter `static/` für `/app`: `npm run build` (Marke kommt aus
+  dem Inhalt, es gibt dort nichts mehr von Hand zu bumpen) — Details in
+  [`docs/frontend-build.md`](docs/frontend-build.md). Die öffentlichen Seiten
+  und `admin.html` hängen weiter am manuellen `?v=`-Buster.
+- Tests: `npm test` (JS-Verhalten, Vitest + jsdom) und
+  `.\venv\Scripts\python.exe -m pytest tests`. Für alles, was noch keine
+  Auto-Tests hat, `docs/smoke-checklist.md` durchgehen.

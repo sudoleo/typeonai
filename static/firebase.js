@@ -11,10 +11,12 @@ import {
   browserSessionPersistence,
 } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
-import {
+// Loaded as part of the content-addressed head group. Keeping this dependency
+// in bundles.json means source mode cannot serve a stale nested module import.
+const {
   showEmailVerificationGate,
   hideEmailVerificationGate,
-} from "/static/js/email-verify.js?v=20260804-verify1";
+} = window.App.emailVerification;
 
 const googleProvider = new GoogleAuthProvider();
 // Optional: Kontoauswahl erzwingen

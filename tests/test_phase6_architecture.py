@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.core.security import CustomSecurityMiddleware
 from app.core.site import normalize_public_site_url
 from app.services.consensus_pipeline import run_consensus_pipeline
+from tests.frontend_order import loads_before
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -128,9 +129,8 @@ def test_cross_module_frontend_state_has_enforced_owners_and_no_direct_writers()
         if direct_write.search(path.read_text(encoding="utf-8")):
             offenders.append(path.relative_to(ROOT).as_posix())
     assert offenders == []
-    template = source("templates/index.html")
-    assert template.index("/static/js/app-state.js") < template.index("/static/firebase.js")
-    assert template.index("/static/js/consensus-anchor.js") < template.index("/static/js/consensus-insights.js")
+    assert loads_before("app-state.js", "firebase.js")
+    assert loads_before("consensus-anchor.js", "consensus-insights.js")
 
 
 def test_privileged_app_and_admin_templates_are_external_script_surfaces():

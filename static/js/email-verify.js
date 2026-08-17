@@ -1,3 +1,6 @@
+(function () {
+"use strict";
+
 // =====================================================================
 // email-verify.js
 // Der Streifen fuer den Zustand "angemeldet, aber E-Mail noch nicht
@@ -132,7 +135,7 @@ function wire() {
   });
 }
 
-export function showEmailVerificationGate(options) {
+function showEmailVerificationGate(options) {
   handlers = options || {};
   wire();
   const banner = el("verifyBanner");
@@ -144,10 +147,17 @@ export function showEmailVerificationGate(options) {
   syncResendButton();
 }
 
-export function hideEmailVerificationGate() {
+function hideEmailVerificationGate() {
   const banner = el("verifyBanner");
   if (banner) banner.hidden = true;
   document.body.classList.remove("is-unverified");
   setStatus("");
   handlers = null;
 }
+
+window.App = window.App || {};
+window.App.emailVerification = Object.freeze({
+  showEmailVerificationGate,
+  hideEmailVerificationGate
+});
+})();

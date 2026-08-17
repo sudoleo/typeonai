@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import client_errors
 from app.core.rate_limit import limiter
+from tests.frontend_order import group_of, loads_before
 
 
 def _client(monkeypatch, captured):
@@ -101,6 +102,7 @@ def test_client_error_report_rejects_foreign_origin_without_fetch_metadata(
 
 
 def test_error_reporter_loads_before_app_modules():
-    html = open("templates/index.html", encoding="utf-8").read()
-    assert "error-reporter.js?v=20260731-criticalalerts1" in html
-    assert html.index("error-reporter.js") < html.index("app-core.js")
+    # Must be in place before anything can throw: the head group is
+    # render-blocking, the app group is deferred.
+    assert group_of("error-reporter.js") == "head"
+    assert loads_before("error-reporter.js", "app-core.js")

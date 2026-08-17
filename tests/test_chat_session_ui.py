@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from tests.frontend_order import loads_before
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -220,19 +221,10 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     firebase = (ROOT / "static" / "firebase.js").read_text(encoding="utf-8")
     app_init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
 
-    assert template.index("/static/js/app-core.js") < template.index(
-        "/static/js/chat-session.js"
-    )
-    assert template.index("/static/js/chat-session.js") < template.index(
-        "/static/js/consensus-run.js"
-    )
-    assert template.index("/static/js/consensus-run.js") < template.index(
-        "/static/js/query-send.js"
-    )
-    assert template.index("/static/js/query-send.js") < template.index(
-        "/static/js/app-init.js"
-    )
-    assert "chat-session.js?v=20260806-chatlimits1" in template
+    assert loads_before("app-core.js", "chat-session.js")
+    assert loads_before("chat-session.js", "consensus-run.js")
+    assert loads_before("consensus-run.js", "query-send.js")
+    assert loads_before("query-send.js", "app-init.js")
     assert 'data-engine-provider="{{ model.provider }}"' in template
     assert "consensusPayload.chat_id = chatTurnIds.chatId" in consensus
     assert "consensusPayload.turn_id = chatTurnIds.turnId" in consensus

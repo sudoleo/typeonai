@@ -30,7 +30,11 @@ from app.services.llm.provider_runtime import (
 # To be supplied by main.py dependency injection or imported 
 # We'll import templates from main or setup a generic one here.
 from fastapi.templating import Jinja2Templates
+from app.core.assets import register_asset_globals
+
 templates = Jinja2Templates(directory="templates")
+# Content-hashed asset URLs replace the hand-maintained ?v= marks.
+register_asset_globals(templates)
 
 router = APIRouter()
 

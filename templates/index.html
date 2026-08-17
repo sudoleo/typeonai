@@ -27,77 +27,42 @@
         data-consensus-presets="{{ consensus_presets | tojson | forceescape }}"
         data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
         data-free-limit="{{ free_limit }}">
-  <script src="/static/js/app-bootstrap.js?v=20260811-phase6"></script>
-  <script src="/static/js/app-state.js?v=20260811-phase6"></script>
-  <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
-  <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
+  {#
+    Scripts and stylesheet come from static/js/bundles.json via
+    app/core/assets.py. Every URL carries a content hash, so no ?v= mark is
+    maintained by hand. `npm run build` collapses each group into one minified
+    file; without build output the same files are served individually in the
+    same order. See docs/frontend-build.md.
+  #}
+  {% set frontend = frontend_assets() %}
+  {#
+    Render-blocking on purpose: this group seeds state before the first paint.
+  #}
+  {% for script in frontend.scripts if script.group == "head" %}
+  <script src="{{ script.src }}"></script>
+  {% endfor %}
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260817-quoteask4">
+  <link rel="stylesheet" href="{{ frontend.style }}">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
-  <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
-  <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
-  <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260727-thread12">
+  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
   <!-- Marked (Markdown -> HTML) -->
-  <script src="/static/js/error-reporter.js?v=20260731-criticalalerts1"></script>
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <!-- DOMPurify (HTML Sanitizer) -->
   <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
   <!-- KaTeX: mathematische Ausdruecke aus Modellantworten lesbar setzen. -->
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.js" integrity="sha384-AtrdNsnxl/75rvBneBVH7DtOvCxSVahR2zWqle1coBKd8DEmLoviqNeJSx64gNAs" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/contrib/auto-render.min.js" integrity="sha384-bjyGPfbij8/NDKJhSGZNP/khQVgtHUE5exjm4Ydllo42FwIgYsdLO2lXGmRBf5Mz" crossorigin="anonymous"></script>
-  <!-- Same-origin watchdog: bleibt selbst dann aktiv, wenn Firebase-CDN-
-       Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
-  <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
-  <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260817-quoteask1"></script>
-  <script type="module" src="/static/demo.js?v=20260814-directcompare1"></script>
-  <script src="/static/app-ui.js?v=20260817-settingstabs1" defer></script>
-  <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
-  <script src="/static/js/app-core.js?v=20260815-sentmessage1" defer></script>
-  <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
-  <script src="/static/js/model-picker.js?v=20260810-runblock1" defer></script>
-  <!-- Gemeinsame LaTeX-Aufbereitung; muss vor markdown-stream.js laden. -->
-  <script src="/static/js/math-render.js?v=20260809-phase0c1" defer></script>
-  <!-- Markdown-Rendering + SSE-Streaming-Helfer (aus index.html ausgelagert) -->
-  <script src="/static/js/markdown-stream.js?v=20260809-phase0c1" defer></script>
-  <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
-  <script src="/static/js/sources.js?v=20260815-claimrefs" defer></script>
-  <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260817-quoteask4" defer></script>
-  <!-- Agent Mode (aus index.html ausgelagert) -->
-  <script src="/static/js/agent-mode.js?v=20260815-bookmarkview1" defer></script>
-  <!-- Gefuehrte Fortschrittsanzeige fuer Agent-Mode-Laeufe. -->
-  <script src="/static/js/consensus-progress.js?v=20260807-threadmessages1" defer></script>
-  <!-- Consensus-Lifecycle: Gate/Sichtbarkeit/Abort/Run-State + Auto-Consensus-Persistenz -->
-  <script src="/static/js/consensus-lifecycle.js?v=20260811-phase6" defer></script>
-  <!-- Share-Dialog / oeffentliche Links (aus index.html ausgelagert) -->
-  <script src="/static/js/share-dialog.js?v=20260812-auditfix" defer></script>
-  <!-- Consensus-Actions: Copy/Citation/Share controls (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-actions.js?v=20260815-claimmark1" defer></script>
-  <!-- Consensus Watch: Aktivierung und Verwaltung; benoetigt Actions + Share-Modal -->
-  <script src="/static/js/watch.js?v=20260812-auditfix" defer></script>
-  <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
-  <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
-  <!-- Nutzereigenes Gedaechtnis: Einstellungen laden/speichern gegen /api/my/memory. -->
-  <script src="/static/js/user-memory.js?v=20260817-memoryedit1" defer></script>
-  <script src="/static/js/memory-edit.js?v=20260817-quoteask1" defer></script>
-  <!-- Zitat im Composer ("Ask about this"); memory-edit.js fuellt es aus der
-       Textauswahl, query-send.js setzt es beim Senden der Frage voran. -->
-  <script src="/static/js/composer-quote.js?v=20260817-quoteask1" defer></script>
-  <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
-  <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
-  <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
-       Absage-Karte im Thread. Vor query-send/consensus-run, die sie nutzen. -->
-  <script src="/static/js/usage-limit.js?v=20260802-storagebusy1" defer></script>
-  <!-- Deterministische Textanker getrennt von Netzwerk/Modal/Rendering. -->
-  <script src="/static/js/consensus-anchor.js?v=20260815-claimmark1" defer></script>
-  <!-- Consensus-Insights und Credibility-Frames (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260817-historydiffs1" defer></script>
-  <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260817-historydiffs1" defer></script>
-  <script src="/static/js/query-send.js?v=20260817-quoteask1" defer></script>
-  <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
-  <script src="/static/js/composer-collapse.js?v=20260817-quoteask1" defer></script>
+  {#
+    Everything below the CDN libraries: the auth watchdog, the two ES modules
+    and the deferred app group. Notes on individual files (load-order
+    constraints included) live next to them in static/js/bundles.json.
+  #}
+  {% for script in frontend.scripts if script.group != "head" %}
+  <script src="{{ script.src }}"{% if script.module %} type="module"{% endif %}{% if script.defer %} defer{% endif %}></script>
+  {% endfor %}
+  {% set content_hashed_app_assets = true %}
   {% include "partials/analytics.html" %}
 </head>
 
@@ -840,8 +805,9 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260817-quoteask1" defer></script>
-  <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
+  {# app-init.js and app-dom-events.js moved into the deferred "app" group in
+     <head>. Deferred scripts only run once parsing is finished, so their
+     position in the document never affected execution order. #}
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing

@@ -1,4 +1,5 @@
 from pathlib import Path
+from tests.frontend_order import loads_before
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,10 +17,8 @@ def test_consensus_result_precedes_model_answers_and_run_block_is_loaded():
     )
     assert 'id="consensusRun"' in template
     assert 'id="runStatus"' in template
-    assert 'src="/static/js/consensus-progress.js?' in template
-    assert template.index("/static/js/agent-mode.js?") < template.index(
-        "/static/js/consensus-progress.js?"
-    ) < template.index("/static/js/consensus-lifecycle.js?")
+    assert loads_before("agent-mode.js", "consensus-progress.js")
+    assert loads_before("consensus-progress.js", "consensus-lifecycle.js")
 
 
 def test_run_block_shows_one_step_at_a_time():

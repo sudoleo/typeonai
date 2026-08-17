@@ -1,5 +1,6 @@
-// E2E-Stub fuer /static/firebase.js - wird von Playwright per Route
-// anstelle des echten Moduls ausgeliefert (siehe tests/e2e/conftest.py).
+// E2E-Stub fuer /static/firebase.js bzw. das gehashte Firebase-Bundle - wird
+// von Playwright per Route anstelle des echten Moduls ausgeliefert
+// (siehe tests/e2e/conftest.py).
 // Simuliert einen eingeloggten, E-Mail-verifizierten Free-User ohne echtes
 // Firebase. Das Sentinel-Token akzeptiert das Backend nur mit MOCK_AUTH=1.
 //

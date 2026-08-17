@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.frontend_order import loads_before
+
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = pytest.mark.source_contract
@@ -112,7 +114,7 @@ def test_auth_bootstrap_watchdog_precedes_firebase_and_clears_stale_skeletons():
     watchdog = read("static/js/auth-bootstrap.js")
     bootstrap = read("static/js/app-bootstrap.js")
 
-    assert template.index("/static/js/auth-bootstrap.js?") < template.index("/static/firebase.js?")
+    assert loads_before("auth-bootstrap.js", "firebase.js")
     assert 'document.getElementById("authTopActions")' in bootstrap
     assert "authTopActions.hidden = false" in bootstrap
     assert "Login is temporarily unavailable" in watchdog

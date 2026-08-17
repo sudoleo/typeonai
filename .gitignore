@@ -21,6 +21,16 @@ data/benchmark/runs/
 # Clone rot, ebenfalls trotz der globalen *json-Regel oben.
 !tests/fixtures/*.json
 
+# Frontend-Toolchain (esbuild/vitest). Erneut gegen die globale *json-Regel:
+# ohne package.json ist in einem frischen Clone weder Build noch Test moeglich.
+node_modules/
+!package.json
+!package-lock.json
+!static/js/bundles.json
+# Build-Ausgabe wird mitcommittet, damit der Render-Deploy kein Node braucht.
+# Ohne sie liefert app/core/assets.py automatisch die Einzeldateien aus.
+!static/dist/manifest.json
+
 # Recording assets and local video generation tooling
 recordings/
 recording/

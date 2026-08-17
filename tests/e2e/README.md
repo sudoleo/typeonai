@@ -107,8 +107,8 @@ getestet; In-Memory-Fakes allein reichen für diese Race-Verträge nicht aus.
   SSE, Differences-Parsing, Anchor-/Quote-Verifikation und Agreement-Score
   laufen echt. `MOCK_LLM_DELAY_MS=40` hält Streaming-Zwischenzustände sichtbar.
 - `MOCK_AUTH=1` akzeptiert nur `e2e-mock-token` als Free-User
-  `e2e-mock-user`. Im Browser ersetzt eine Playwright-Route `firebase.js` durch
-  `firebase_stub.js`.
+  `e2e-mock-user`. Im Browser ersetzt eine Playwright-Route sowohl das gehashte
+  Firebase-Bundle als auch die Source-URL durch `firebase_stub.js`.
 - Dummy-Eigenkeys passieren lokale Key-Prüfungen, lösen mit `MOCK_LLM=1` aber
   keine Provideraufrufe aus.
 - CDN-Skripte wie marked und DOMPurify werden echt geladen; der Lauf braucht

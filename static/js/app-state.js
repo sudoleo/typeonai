@@ -3,6 +3,9 @@
 (function () {
   window.App = window.App || {};
 
+  // Deep-frozen: the owner table IS the enforcement. A shallow freeze left
+  // each entry writable, so any script could reassign an owner and then write
+  // whatever it liked through the front door (found by tests/js/app-state.test.mjs).
   const definitions = Object.freeze({
     lastQuestion: { owner: "run", initial: "" },
     currentEvidenceSources: { owner: "evidence", initial: [] },
@@ -13,6 +16,7 @@
     currentDeepLimit: { owner: "userTier", initial: null },
     spinnerHTML: { owner: "runUi", initial: "" }
   });
+  Object.values(definitions).forEach(Object.freeze);
   const values = Object.fromEntries(
     Object.entries(definitions).map(([key, value]) => [key, value.initial])
   );

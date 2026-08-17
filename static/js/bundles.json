@@ -1,0 +1,119 @@
+{
+  "_readme": [
+    "Single source of truth for the load order of the /app frontend.",
+    "`npm run build` concatenates each classic group in this exact order,",
+    "minifies it and writes a content-hashed file to static/dist/.",
+    "app/core/assets.py renders the tags from the same list, so a new script",
+    "is added here and nowhere else -- there is no ?v= mark left to forget.",
+    "Order is load order. An entry may be a plain path or {file, note}."
+  ],
+
+  "groups": [
+    {
+      "name": "head",
+      "kind": "classic",
+      "defer": false,
+      "note": "Render-blocking on purpose: seeds state (agent mode, theme, auth) before the first paint.",
+      "files": [
+        "static/js/app-bootstrap.js",
+        "static/js/app-state.js",
+        {
+          "file": "static/js/email-verify.js",
+          "note": "Defines window.App.emailVerification before the Firebase module consumes it. It is listed directly so source-mode cache busting covers it."
+        },
+        "static/js/auth-session-state.js",
+        "static/js/watch-state.js",
+        {
+          "file": "static/js/error-reporter.js",
+          "note": "Must be in place before anything can throw."
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "kind": "classic",
+      "defer": true,
+      "files": [
+        {
+          "file": "static/js/auth-bootstrap.js",
+          "note": "Same-origin watchdog: stays active even when the Firebase CDN modules cannot be imported. Must run before firebase.js."
+        }
+      ]
+    },
+    {
+      "name": "firebase",
+      "kind": "module",
+      "entry": "static/firebase.js",
+      "note": "ESM. Reads window.App.emailVerification from the head group; the gstatic Firebase SDK stays an external CDN import."
+    },
+    {
+      "name": "demo",
+      "kind": "module",
+      "entry": "static/demo.js"
+    },
+    {
+      "name": "app",
+      "kind": "classic",
+      "defer": true,
+      "note": "Everything deferred. app-init.js and app-dom-events.js used to sit at the end of <body>; deferred scripts only run after parsing, so their position in the document does not change execution order.",
+      "files": [
+        "static/app-ui.js",
+        {
+          "file": "static/js/app-core.js",
+          "note": "Shared base (window.App): central config + helpers. MUST load first."
+        },
+        "static/js/model-picker.js",
+        {
+          "file": "static/js/math-render.js",
+          "note": "Shared LaTeX preparation; must load before markdown-stream.js."
+        },
+        "static/js/markdown-stream.js",
+        "static/js/sources.js",
+        "static/js/attachments.js",
+        "static/js/agent-mode.js",
+        "static/js/consensus-progress.js",
+        {
+          "file": "static/js/consensus-lifecycle.js",
+          "note": "Gate/visibility/abort/run-state + auto-consensus persistence."
+        },
+        "static/js/share-dialog.js",
+        "static/js/consensus-actions.js",
+        {
+          "file": "static/js/watch.js",
+          "note": "Needs consensus-actions.js and the share modal."
+        },
+        "static/js/user-tier.js",
+        "static/js/user-memory.js",
+        "static/js/memory-edit.js",
+        {
+          "file": "static/js/composer-quote.js",
+          "note": "memory-edit.js fills it from the text selection, query-send.js prepends it when sending."
+        },
+        "static/js/sidebar-quota.js",
+        {
+          "file": "static/js/usage-limit.js",
+          "note": "Before query-send/consensus-run, which use it."
+        },
+        "static/js/consensus-anchor.js",
+        "static/js/consensus-insights.js",
+        "static/js/chat-session.js",
+        "static/js/consensus-run.js",
+        "static/js/query-send.js",
+        "static/js/composer-collapse.js",
+        {
+          "file": "static/js/app-init.js",
+          "note": "Must follow every feature module: aliases window.App.* and runs initApp() on DOMContentLoaded. app-dom-events.js then installs the remaining document-level listeners."
+        },
+        "static/js/app-dom-events.js"
+      ]
+    }
+  ],
+
+  "styles": [
+    {
+      "name": "app",
+      "entry": "static/style.css",
+      "note": "@import aggregator. The build inlines the imports in cascade order into one hashed file; static/dist/ is a sibling of static/css/, so every relative url(../fonts/...) still resolves."
+    }
+  ]
+}

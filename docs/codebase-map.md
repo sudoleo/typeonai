@@ -116,7 +116,8 @@ distinctive/commodity, distinctive Seiten bekommen 120 statt 60 Tage vor
 `noindex` und bei Unsichtbarkeit `refresh_title_and_intro`.
 
 **Zentrale Templates** (`templates/`, gerendert mit `Jinja2Templates`):
-`landing.html` (Marketing), `index.html` (die App — Haupt-Markup + Script-Tags),
+`landing.html` (Marketing), `index.html` (die App — Haupt-Markup; die
+Script-/Style-Tags rendert `app/core/assets.py` aus `static/js/bundles.json`),
 `admin.html`, `admin_benchmark.html` (Admin-Benchmark-Visualisierung, eigenes
 Template + Firebase-Auth-Modul wie `admin.html`), `share.html` (öffentliche
 Consensus-Seite), `share_unavailable.html`, plus statische Rechts-/SEO-Seiten
@@ -204,13 +205,22 @@ behalten die bisherige Policy während der weiteren Style-Migration.
 
 ## 3. Frontend-Architektur
 
-Geladen werden (Reihenfolge ist Vertrag, siehe §8): zuerst die synchronen
-`app-bootstrap.js`, `app-state.js`, `auth-session-state.js` und `watch-state.js`,
-dann CDN-Libs (`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
-`auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module),
-`app-ui.js`, danach die Feature-Module unter `static/js/` in fester Reihenfolge.
-Zuletzt — deferred am `</body>` — laufen `app-init.js` und
-`app-dom-events.js`.
+Geladen werden (Reihenfolge ist Vertrag, steht in `static/js/bundles.json`,
+siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
+`auth-session-state.js`, `watch-state.js` und `error-reporter.js` (Gruppe
+`head`, render-blockierend, weil sie den First Paint seeden), dann CDN-Libs
+(`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
+`email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
+den `auth-bootstrap.js`-Watchdog vor `firebase.js` + `demo.js` (ES-Module), dann
+deferred `app-ui.js` und die Feature-Module unter `static/js/` in fester
+Reihenfolge, zuletzt `app-init.js` und `app-dom-events.js`.
+
+In Produktion liefert `npm run build` daraus fünf inhaltsgehashte Bundles
+(419 KB statt 872 KB in 36 lokalen JS-Requests); ohne Build-Output oder mit
+`FRONTEND_DEV=1` gehen dieselben Dateien einzeln raus. Siehe
+`docs/frontend-build.md`. Das Build-Manifest inventarisiert alle Inputs
+einschließlich Konfiguration, Build-Skript und lokaler Modulabhängigkeiten, damit
+der Python-Staleness-Test auch indirekte Änderungen erkennt.
 
 **Modul-Verantwortlichkeiten** (alle in `static/js/` außer markiert):
 
@@ -917,7 +927,8 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   deaktiviert.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
-- **`email-verify.js`** (ES-Modul) — der Streifen `#verifyBanner` für
+- **`email-verify.js`** (klassisches Head-Skript,
+  `window.App.emailVerification`) — der Streifen `#verifyBanner` für
   angemeldete, aber unbestätigte Sessions (`showEmailVerificationGate` /
   `hideEmailVerificationGate`). Kennt Firebase bewusst nicht: `firebase.js`
   reicht Resend/Recheck/Sign-out als Callbacks herein (siehe §4, Auth).
@@ -1045,8 +1056,8 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   completed aktive Basis, pending Turn/Context, stabile `client_request_id`,
   zugehörigen Usage-Key und whitelisted Run-Metadaten. Das Modul hält keine
   Provider-Keys oder Antworten, kapselt Chat-/Turn-Anlage, Context-Build samt
-  begrenztem 202-Retry und owner-gebundene Turn-Reconciliation und muss in
-  `index.html` nach `app-core.js`, aber vor `consensus-run.js` geladen werden.
+  begrenztem 202-Retry und owner-gebundene Turn-Reconciliation und muss nach
+  `app-core.js`, aber vor `consensus-run.js` geladen werden.
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
   Agent-Mode-gebundener Auto-Consensus-Trigger, Query-Run-State
@@ -2561,7 +2572,18 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   Reine String-/Quelltextverträge sind mit `source_contract` gekennzeichnet und
   laufen weiterhin mit; sie gelten ausdrücklich nicht als Verhaltensabdeckung.
-  Verifizierte Baseline am 2026-08-11 nach Phase 6: **1076 passed, 5 warnings**.
+  Verifizierte Baseline am 2026-08-17: **1317 passed, 9 warnings**.
+- **JS-Verhaltenstests** (`tests/js/`, Vitest + jsdom):
+  ```powershell
+  npm test
+  ```
+  `tests/js/helpers/appWindow.mjs` lädt die Klassik-Skripte als `<script>` in ein
+  frisches jsdom — sie sind keine ES-Module und lassen sich nicht importieren.
+  Deckt bisher `app-state.js`, `composer-quote.js`, `consensus-anchor.js` ab.
+  Hierhin gehören schrittweise die Teilstring-Prüfungen aus `test_*_ui.py`.
+- **Frontend-Build** (`npm run build`, esbuild): siehe
+  `docs/frontend-build.md`. `npm run build:check` meldet ein veraltetes
+  `static/dist/`; dasselbe prüft `tests/test_frontend_build.py` ohne Node.
 - **Playwright-Smoke-Suite** (`tests/e2e/`, Python-Playwright):
   automatisiert die risikoreichsten Punkte der `docs/smoke-checklist.md`
   (Laden ohne Konsolen-Fehler, Send→Streaming, kompakte Antwort→Consensus-
@@ -2776,7 +2798,16 @@ ersten Check statt eines leeren Consensus-Panels.
   neue und bestehende Adressen denselben gehosteten Passwort-Setup-Link. Der
   Browser zeigt den neutralen Erfolgs-Screen und führt keinen Probe-Login aus.
   Eine spezifische Fehlermeldung oder ein Login-Seitenkanal wäre Konto-Enumeration.
-- **Script-Ladereihenfolge in `templates/index.html` ist ein Vertrag.**
+- **Script-Ladereihenfolge für `/app` steht in `static/js/bundles.json`.**
+  Seit 2026-08-17 listet `templates/index.html` die Dateien nicht mehr selbst;
+  es rendert die Tags aus `app/core/assets.py`, das dieselbe `bundles.json`
+  liest wie der Build (`scripts/build_frontend.mjs`, `npm run build`). Ein neues
+  Skript wird **nur dort** eingetragen. Reihenfolge-Zwänge stehen als `note`
+  neben der jeweiligen Datei. `app-init.js`/`app-dom-events.js` sind aus dem
+  `</body>` in die deferred `app`-Gruppe gewandert — deferred Skripte laufen
+  ohnehin erst nach dem Parsen, ihre Position im Dokument war nie die
+  Reihenfolge. Details: `docs/frontend-build.md`. Die Zwänge selbst gelten
+  unverändert:
   `app-bootstrap.js` setzt Config, die drei State-Owner laden vor Firebase und
   den Feature-Modulen; `app-core.js` ergänzt den bestehenden `window.App`-Bus;
   `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
@@ -2787,7 +2818,7 @@ ersten Check statt eines leeren Consensus-Panels.
   KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor
   `markdown-stream.js` geladen werden;
   `app-init.js` initialisiert danach die App; `app-dom-events.js` bindet zuletzt
-  die delegierten DOM-Events (beide deferred am `</body>`).
+  die delegierten DOM-Events (beide am Ende der deferred `app`-Gruppe).
   Reihenfolge umstellen oder ein Modul rausnehmen ⇒ `ReferenceError` /
   `window.X is not a function`.
 - **`window.App` ist die Classic-Script-Modulschnittstelle.** Es gibt keine ES-Imports zwischen den
@@ -2805,6 +2836,10 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
+- **`window.App.emailVerification`** wird im render-blockierenden Head-Bundle
+  definiert und von `firebase.js` konsumiert. Die Brücke hält
+  `email-verify.js` im content-gehashten Manifest statt hinter einem separaten,
+  manuell versionierten ESM-Import.
 - **`window.App.followup`** (definiert in `consensus-run.js`) ist der
   Follow-up-Kontext- und Verlauf-State (`offer/consume/reset/render`,
   `isArmed/hasContinuableExchange/markContinuationUnavailable/
@@ -2882,13 +2917,18 @@ ersten Check statt eines leeren Consensus-Panels.
   Browser still. `/app`, `/app/watches`, `/admin` und `/admin/*` erzwingen bei `script-src`
   die strict-variante ohne `'unsafe-inline'`; neue Inline-Skripte/-Handler würden
   dort deshalb nicht ausgeführt. `style-src` bleibt vorerst kompatibel.
-- **Static-Caching / `?v=`**: Nach CSS/JS-Änderungen den
-  `?v=YYYYMMDD-kurzlabel`-Query-String in allen aktiven Referenzen bumpen — für
-  App-CSS sowohl in `style.css` als auch den Templates. Der
-  `source_contract`-Test inventarisiert sämtliche lokalen JS-/CSS-Referenzen in
-  Templates und CSS-Imports, verlangt pro Asset einen einheitlichen Key und
-  weist Keys ab, deren Datum vor dem letzten Git-Commit beziehungsweise einer
-  aktuellen Arbeitsbaumänderung liegt.
+- **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit
+  2026-08-17 aus dem Dateiinhalt (`app/core/assets.py`); dort gibt es nichts
+  mehr zu bumpen, wohl aber nach jeder `static/`-Änderung ein `npm run build`,
+  weil `static/dist/` mitcommittet wird. `tests/test_frontend_build.py`
+  vergleicht dazu einen im Manifest hinterlegten Quell-Fingerabdruck mit den
+  echten Dateien und schlägt bei vergessenem Build fehl.
+  Für die **öffentlichen Seiten und `admin.html`** gilt weiterhin das manuelle
+  `?v=YYYYMMDD-kurzlabel` in allen aktiven Referenzen. Der Test
+  `test_all_active_local_assets_have_current_consistent_cache_keys`
+  inventarisiert diese Referenzen, verlangt pro Asset einen einheitlichen Key
+  und weist Keys ab, deren Datum vor dem letzten Git-Commit beziehungsweise
+  einer aktuellen Arbeitsbaumänderung liegt.
 - **Provider-Label-Konvention**: Frontend nutzt teils `Claude`, Backend kanonisch
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
@@ -2948,16 +2988,16 @@ Commit/PR**, wenn sich Folgendes ändert:
 - **Daten/Config**: neue Firestore-Collection/-Feld, neue Umgebungsvariable,
   geänderte Limit-/Modell-Quelle (§6).
 - **Cache-Busting (immer, auch bei Kleinständerungen)**: Nach **jeder** Änderung
-  an Dateien unter `static/` — egal ob großer Umbau oder Einzeiler — muss der
-  `?v=`-Query-String der betroffenen Datei gebumpt werden: für CSS-Module in
-  `static/style.css` (@import-Zeilen) **und** den `style.css`-Link in
-  `templates/index.html`, für JS die `<script>`-Tags in `templates/index.html`.
-  Für die öffentlichen Seiten zusätzlich der `public-tokens.css`-Import in
-  `landing.css`/`public-pages.css`/`topics.css` und die `<link>`-Tags der
-  jeweiligen Templates. Konvention: `?v=YYYYMMDD-kurzlabel`. Ohne Bump liefern
-  Browser/CDN die alte Datei aus und die Änderung ist in Produktion unsichtbar
-  (§8) — beim lokalen Verifizieren gilt dasselbe, ein nicht gebumptes
-  `app-init.js` sieht wie „mein Handler wird nicht gebunden“ aus.
+  an Dateien unter `static/`:
+  - **`/app`**: `npm run build` laufen lassen und `static/dist/` mitcommitten.
+    Die Marke selbst kommt aus dem Inhalt, es gibt dort nichts von Hand zu
+    bumpen. Lokal reicht der Source-Modus (`FRONTEND_DEV=1`, Launch-Config
+    `consensio-mock-dev`), der die Einzeldateien mit Inhalts-Hash ausliefert.
+  - **Öffentliche Seiten und `admin.html`**: `?v=YYYYMMDD-kurzlabel` der
+    betroffenen Datei bumpen — der `public-tokens.css`-Import in
+    `landing.css`/`public-pages.css`/`topics.css` und die `<link>`/`<script>`-Tags
+    der jeweiligen Templates. Ohne Bump liefern Browser/CDN die alte Datei aus
+    und die Änderung ist in Produktion unsichtbar (§8).
 
 Faustregel: Wenn ein neuer Agent durch deine Änderung an einer der obigen Stellen
 **überrascht** würde, gehört es hier rein. Kurz halten — verifizierte Fakten statt

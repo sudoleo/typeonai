@@ -11,6 +11,10 @@ answers" liegen. Ergebnis: eine Sekunde Fortschritt, dann eine leere Seite.
 from pathlib import Path
 import re
 
+from app.core import assets as assets_module
+from app.core.assets import frontend_assets
+from tests.frontend_order import loads_before
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,13 +42,8 @@ def test_blocked_card_exists_and_is_loaded_before_its_callers():
     assert 'role="alert"' in blocked[:200]
 
     # Vor query-send.js und consensus-run.js, die es benutzen.
-    assert "/static/js/usage-limit.js?" in template
-    assert template.index("/static/js/usage-limit.js?") < template.index(
-        "/static/js/query-send.js?"
-    )
-    assert template.index("/static/js/usage-limit.js?") < template.index(
-        "/static/js/consensus-run.js?"
-    )
+    assert loads_before("usage-limit.js", "query-send.js")
+    assert loads_before("usage-limit.js", "consensus-run.js")
 
 
 def test_blocked_card_sits_where_the_answer_would_be():
@@ -174,14 +173,30 @@ def test_deep_think_exhaustion_offers_the_cheaper_run():
     assert "--blocked-tone: var(--partial)" in shell
 
 
-def test_css_cache_busting_was_bumped():
-    """Ohne neue ?v= liefert der Server altes CSS aus und die Karte erscheint
-    ungestylt (Projektregel). Die Teildateien tragen den Stand ihres letzten
-    Eingriffs; style.css selbst muss mit JEDER Aenderung neu versioniert
-    werden, sonst sieht der Browser die neuen Import-URLs nie."""
-    style = read("static/style.css")
+def test_css_cache_busting_needs_no_manual_bump(monkeypatch):
+    """Frueher trug jede Teildatei eine handgepflegte ?v= und style.css musste
+    bei JEDER Aenderung neu versioniert werden -- vergass man es, lieferte der
+    Server altes CSS aus und die Karte erschien ungestylt. Die Marke kommt
+    jetzt aus dem Inhalt (app/core/assets.py), also kann sie nicht mehr
+    vergessen werden."""
     template = read("templates/index.html")
+    shell = ROOT / "static" / "css" / "shell.css"
 
-    for asset in ("shell.css", "components-misc.css", "components-input.css"):
-        assert re.search(rf"{re.escape(asset)}\?v=[\w.-]+", style)
-    assert re.search(r"/static/style\.css\?v=[\w.-]+", template)
+    assert not re.search(r'href="/static/style\.css\?v=', template)
+
+    # Source mode: in built mode the hash comes from the build output, and
+    # test_frontend_build.py is what keeps that output in sync with the sources.
+    monkeypatch.setenv("FRONTEND_DEV", "1")
+    assets_module._cache.clear()
+
+    original = shell.read_bytes()
+    before = frontend_assets().style
+    try:
+        shell.write_bytes(original + b"\n/* touched by the test */\n")
+        assets_module._cache.clear()
+        after = frontend_assets().style
+    finally:
+        shell.write_bytes(original)
+        assets_module._cache.clear()
+
+    assert before != after
