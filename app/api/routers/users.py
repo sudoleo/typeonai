@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
@@ -158,12 +159,11 @@ def release_usage_run(request: Request, data: dict = Body(...)):
     }
 
 class UserMemoryRequest(BaseModel):
-    """Das selbst geschriebene Profil.
+    """Das selbst geschriebene Profil samt grosser, manueller Notiz.
 
-    Die Feldgrenze hier ist reiner Missbrauchsschutz; die verbindliche Laenge
-    setzt ``user_memory.sanitize_profile`` (250 Zeichen je Feld, nach dem
-    Einebnen von Whitespace). Ein grosszuegiger Wert an der API-Grenze verhindert
-    422er fuer eingefuegten Text, der nach der Normalisierung laengst passt.
+    Die Grenzen hier sind Missbrauchsschutz; die verbindlichen Laengen setzt
+    ``user_memory.sanitize_profile``. Grosszuegigere API-Werte verhindern 422er
+    fuer Text, der nach der Normalisierung laengst passt.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -173,6 +173,9 @@ class UserMemoryRequest(BaseModel):
     focus: str = Field(default="", max_length=1000)
     style: str = Field(default="", max_length=1000)
     constraints: str = Field(default="", max_length=1000)
+    # ``None`` unterscheidet alte Browser, die das additive Feld noch nicht
+    # kennen, von einem bewussten Leeren durch die aktuelle UI (``""``).
+    notes: Optional[str] = Field(default=None, max_length=16_000)
 
 
 def _memory_uid(request: Request) -> str:
@@ -191,6 +194,7 @@ def _memory_response(profile: dict) -> dict:
         "memory": profile,
         "limits": {
             "field_chars": user_memory.MAX_FIELD_CHARS,
+            "notes_chars": user_memory.MAX_NOTES_CHARS,
             "profile_chars": user_memory.MAX_PROFILE_CHARS,
         },
     }

@@ -1,4 +1,4 @@
-"""Das nutzereigene Gedaechtnis: ein selbst geschriebenes Profil vor jedem Lauf.
+"""Das nutzereigene Gedaechtnis: selbst geschriebener Kontext vor jedem Lauf.
 
 Bewusst OHNE Ableitung aus Antworten. Was hier steht, hat der Nutzer selbst
 getippt -- damit ist der Autor eindeutig, es kostet keinen LLM-Call, es kann
@@ -11,9 +11,9 @@ Drei Grenzen sind Absicht und keine Sparmassnahme:
 1. **Hart gedeckelt.** Der Text geht ALLEN sechs Modellen identisch voran. Jeder
    gemeinsame Vorspann ist ein gemeinsamer Bias: je mehr davon, desto aehnlicher
    die Antworten, desto hoeher der Agreement-Score -- ohne dass die Modelle sich
-   einiger waeren. ``MAX_PROFILE_CHARS`` haelt diesen Effekt klein genug, um den
-   Score nicht zu verfaelschen. Dieselbe Ueberlegung hat schon ``differences_data``
-   aus dem abgeleiteten Chat-Kontext entfernt (siehe chat_context.py).
+   einiger waeren. Die vier Profilfelder bleiben deshalb kurz. Das separate
+   Notizfeld ist die ausdrueckliche Langform fuer importierte Erinnerungen und
+   wird ebenfalls auf ein dokumentiertes, technisch sicheres Maximum begrenzt.
 2. **Form, nicht Inhalt.** Der Rahmen sagt den Modellen ausdruecklich, dass das
    Profil beeinflusst, WIE geantwortet wird, nie WAS wahr ist. Sonst uebernehmen
    sechs Modelle synchron eine Meinung des Nutzers und der Vergleich misst sie
@@ -34,12 +34,14 @@ from app.core.observability import safe_exception
 from app.services import persistence_guard
 
 
-PROFILE_SCHEMA_VERSION = 1
+PROFILE_SCHEMA_VERSION = 2
 MEMORY_COLLECTION = "memory"
 PROFILE_DOCUMENT_ID = "profile"
 
 # Reihenfolge ist die Lesereihenfolge im Prompt und in der UI.
-PROFILE_FIELDS = ("role", "focus", "style", "constraints")
+SHORT_PROFILE_FIELDS = ("role", "focus", "style", "constraints")
+NOTES_FIELD = "notes"
+PROFILE_FIELDS = (*SHORT_PROFILE_FIELDS, NOTES_FIELD)
 
 PROFILE_FIELD_LABELS = {
     "role": "Who they are",
@@ -49,10 +51,13 @@ PROFILE_FIELD_LABELS = {
 }
 
 MAX_FIELD_CHARS = 250
-# Der gerenderte Inhalt ohne Rahmen. Deutlich unter den 8.000 Zeichen der
-# Chat-Memory: die Chat-Memory ist Gespraechsinhalt und wandert mit dem Thema,
-# das Profil steht unveraendert vor JEDEM Lauf.
-MAX_PROFILE_CHARS = 800
+# Genug fuer eine vollstaendige exportierte ChatGPT-Erinnerungszusammenfassung,
+# ohne das Firestore-Dokument oder jeden der sechs Provider-Prompts unbeschraenkt
+# wachsen zu lassen. Anders als die vier Kurzfelder bleibt die Absatzstruktur
+# erhalten: dieses Feld ist bewusst eine Notebox, keine abgeleitete Memory.
+MAX_NOTES_CHARS = 12_000
+# Gerenderter Inhalt ohne Rahmen: vier Kurzfelder plus Langnotiz und Labels.
+MAX_PROFILE_CHARS = 13_200
 
 # Marken, die einen Prompt-Rahmen schliessen. Ein Nutzer koennte sie sonst in ein
 # Profilfeld tippen und damit den Chat-Kontext-Rahmen vorzeitig beenden. Das
@@ -98,14 +103,30 @@ def _clean_field(value: object) -> str:
     return text
 
 
+def _clean_notes(value: object) -> str:
+    """Die grosse, manuell gepflegte Notiz prompt-sicher normalisieren.
+
+    Absatz- und Listenstruktur bleibt erhalten. Es gibt weder Zusammenfassung
+    noch LLM-Schritt; gekappt wird ausschliesslich an der dokumentierten Grenze.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = _CONTROL_RE.sub(" ", value.replace("\r\n", "\n").replace("\r", "\n"))
+    text = _FRAME_MARKER_RE.sub(" ", text).strip()
+    if len(text) > MAX_NOTES_CHARS:
+        text = text[:MAX_NOTES_CHARS].rstrip()
+    return text
+
+
 def sanitize_profile(value: object) -> dict:
     raw = value if isinstance(value, dict) else {}
     profile = empty_profile()
     # Kein Feld gesetzt heisst nicht "aus": ein leeres Profil rendert ohnehin
     # nichts. ``enabled`` ist die bewusste Pause bei gefuelltem Profil.
     profile["enabled"] = raw.get("enabled") is not False
-    for field in PROFILE_FIELDS:
+    for field in SHORT_PROFILE_FIELDS:
         profile[field] = _clean_field(raw.get(field))
+    profile[NOTES_FIELD] = _clean_notes(raw.get(NOTES_FIELD))
     return profile
 
 
@@ -125,7 +146,7 @@ def render_profile(profile: object) -> str:
 
     lines: list[str] = []
     used = 0
-    for field in PROFILE_FIELDS:
+    for field in SHORT_PROFILE_FIELDS:
         text = clean[field]
         if not text:
             continue
@@ -142,6 +163,14 @@ def render_profile(profile: object) -> str:
             line = line[:room].rstrip()
         lines.append(line)
         used += len(line) + 1
+    notes = clean[NOTES_FIELD]
+    if notes and used < MAX_PROFILE_CHARS:
+        heading = "SAVED MEMORIES (a verbatim note the user maintains manually):"
+        room = MAX_PROFILE_CHARS - used - len(heading) - 1
+        if room >= 40:
+            note_text = notes[:room].rstrip()
+            lines.append(f"{heading}\n{note_text}")
+            used += len(heading) + len(note_text) + 2
     if not lines:
         return ""
 
@@ -209,9 +238,16 @@ class FirestoreUserMemoryRepository:
         return sanitize_profile(snapshot.to_dict() or {})
 
     def save(self, uid: str, profile: object, *, now: datetime | None = None) -> dict:
-        clean = sanitize_profile(profile)
+        raw = dict(profile) if isinstance(profile, dict) else {}
+        # Ein bereits offener Browser mit der v1-UI sendet ``notes`` gar nicht.
+        # Das additive Feld darf dadurch nicht verschwinden. Die aktuelle UI
+        # sendet beim bewussten Leeren den String "" und loescht es damit normal.
+        preserve_existing_notes = (
+            NOTES_FIELD not in raw or raw.get(NOTES_FIELD) is None
+        )
         written = datetime.now(timezone.utc) if now is None else now
         profile_ref = self._profile_ref(uid)
+        saved: dict[str, dict] = {}
 
         def operation(transaction):
             # Derselbe Zaun wie bei jedem anderen nutzergebundenen Write: ein
@@ -219,10 +255,16 @@ class FirestoreUserMemoryRepository:
             persistence_guard.ensure_account_write_allowed(
                 uid=uid, db=self.db, transaction=transaction
             )
+            if preserve_existing_notes:
+                snapshot = profile_ref.get(transaction=transaction)
+                previous = snapshot.to_dict() if snapshot.exists else {}
+                raw[NOTES_FIELD] = (previous or {}).get(NOTES_FIELD, "")
+            clean = sanitize_profile(raw)
             transaction.set(profile_ref, {**clean, "updated_at": written})
+            saved["profile"] = clean
 
         self._transaction(operation)
-        return clean
+        return saved["profile"]
 
     def delete(self, uid: str) -> None:
         self._profile_ref(uid).delete()

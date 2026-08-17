@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260817-graycount1">
+  <link rel="stylesheet" href="/static/style.css?v=20260817-longmemory1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -79,7 +79,7 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
   <!-- Nutzereigenes Gedaechtnis: Einstellungen laden/speichern gegen /api/my/memory. -->
-  <script src="/static/js/user-memory.js?v=20260817-settingstabs1" defer></script>
+  <script src="/static/js/user-memory.js?v=20260817-longmemory1" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
@@ -1058,8 +1058,7 @@
             aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
               <h3 id="settingsMemoryTitle">Memory</h3>
-              <p>A short profile about you. Every model gets it before your question, so you don't have to
-                repeat yourself.</p>
+              <p>What every model should remember about you. consens.io never creates or rewrites it.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
@@ -1073,6 +1072,10 @@
               </div>
 
               <div class="settings-section settings-memory-fields">
+                <div class="settings-memory-subheading">
+                  <h4>About you</h4>
+                  <p>Short, reusable preferences for every question.</p>
+                </div>
                 <div class="settings-memory-field">
                   <label class="settings-field-label" for="memoryRoleInput">Who you are</label>
                   <textarea id="memoryRoleInput" rows="2" maxlength="250" data-memory-field="role"
@@ -1101,6 +1104,21 @@
                   <span class="settings-memory-count" data-memory-count-for="memoryConstraintsInput"></span>
                 </div>
 
+                <div class="settings-memory-subheading settings-memory-subheading--notes">
+                  <h4>Saved memories</h4>
+                  <p>Paste a longer memory summary or keep your own background note here. It is plain text:
+                    no model creates, summarizes, or edits it.</p>
+                </div>
+                <div class="settings-memory-field settings-memory-field--notes">
+                  <label class="settings-field-label" for="memoryNotesInput">Memory note</label>
+                  <textarea id="memoryNotesInput" rows="12" maxlength="12000" data-memory-field="notes"
+                    placeholder="Paste your existing ChatGPT memory summary or write your own notes…"></textarea>
+                  <span class="settings-memory-count" data-memory-count-for="memoryNotesInput"
+                    data-always-visible="true"></span>
+                  <small class="settings-memory-help">When Memory is on, this note is sent with your question to
+                    every selected model. It is stored on your account and nowhere in this browser.</small>
+                </div>
+
                 <div class="settings-memory-actions">
                   <button id="saveMemoryBtn" class="save-prompt-btn" type="button">Save memory</button>
                   <button id="clearMemoryBtn" class="settings-inline-btn" type="button">Clear all</button>
@@ -1115,9 +1133,9 @@
                 your profile and the evidence disagree, the evidence wins. Nothing is collected
                 automatically; only what you type here is used. It is stored on your account, reaches every
                 device, and is deleted with your account. Watch reruns never use it.</p>
-              <p>Keep it short: a long profile pulls all six models towards the same wording and makes the
-                agreement score look higher than it is. Please leave out health details, beliefs, or other
-                people's personal data.</p>
+              <p>The four About you fields are intentionally short. Saved memories allows up to 12,000 characters,
+                but a long shared note can pull all six models towards the same framing and make the agreement score
+                look higher than it is. Please leave out health details, beliefs, or other people's personal data.</p>
             </details>
           </section>
 

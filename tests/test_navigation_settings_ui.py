@@ -369,6 +369,7 @@ def test_memory_is_the_first_settings_category():
         "memoryFocusInput",
         "memoryStyleInput",
         "memoryConstraintsInput",
+        "memoryNotesInput",
         "saveMemoryBtn",
         "clearMemoryBtn",
         "memoryStatus",
@@ -389,10 +390,15 @@ def test_memory_is_the_first_settings_category():
     assert "never <strong>what</strong> is true" in memory_panel
     assert "Nothing is collected" in memory_panel
 
-    # Das Panel selbst bleibt kurz: eine Zeile Erklaerung im Kopf, ein Schalter,
-    # vier Felder. Keine Aufzaehlung und kein Absatz davor.
+    # Vier kompakte About-you-Felder plus die grosse, manuell gepflegte Notebox.
+    # Die Kapazitaet und der Verzicht auf automatische LLM-Bearbeitung muessen
+    # direkt am Feld erklaert sein.
     assert "<ul" not in memory_panel
-    assert memory_panel.count("<textarea") == 4
+    assert memory_panel.count("<textarea") == 5
+    assert 'id="memoryNotesInput" rows="12" maxlength="12000"' in memory_panel
+    assert 'data-always-visible="true"' in memory_panel
+    assert "no model creates, summarizes, or edits it" in memory_panel
+    assert "this note is sent with your question" in memory_panel
 
 
 def test_the_memory_profile_is_only_fetched_when_the_settings_open():

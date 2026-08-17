@@ -109,6 +109,20 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 
+## User Memory
+- [ ] Einstellungen → Memory zeigt vier kurze „About you“-Felder und darunter
+      „Saved memories“ als große, vertikal vergrößerbare Textarea mit sichtbarem
+      12.000-Zeichen-Zähler.
+- [ ] Eine mehrabsätzige Erinnerungszusammenfassung einfügen, speichern,
+      Einstellungen schließen/neu öffnen: Absatz- und Listenstruktur bleiben
+      erhalten; nach Neuladen und auf einem zweiten Gerät erscheint derselbe
+      Kontostand.
+- [ ] Mit aktivierter Memory enthält jeder ausgewählte `/ask_*`-Request den
+      gespeicherten Text; der Schalter pausiert Kurzprofil und Notiz gemeinsam,
+      ohne den Text zu löschen. Watch-Reruns verwenden beides weiterhin nicht.
+- [ ] „Clear all“ leert alle fünf Felder erst als Entwurf; dauerhaft gelöscht
+      wird erst nach „Save memory“.
+
 ## Multi-Turn Chat
 - [ ] Frische Frage sendet nach `/prepare` zunächst ohne Chat-Bindung an
       `/ask_*`; Chat und pending Turn 1 entstehen genau einmal erst bei der

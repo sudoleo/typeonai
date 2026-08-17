@@ -415,12 +415,16 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   offener Hinweis auf eine mögliche spätere Mitgliedschaft — nie „es gibt nichts
   zu kaufen“. Der Sidebar-Link heißt „Why limits?“ und öffnet denselben Dialog.
 - **User Memory (`user-memory.js` + `app/services/user_memory.py`, seit 2026-08-17)** —
-  ein **selbst geschriebenes** Profil (`role`, `focus`, `style`, `constraints`
-  plus Schalter `enabled`), das jedem `/ask_*` vorangeht. Erster Reiter der
+  ein **selbst geschriebener** Kontext aus Kurzprofil (`role`, `focus`, `style`,
+  `constraints`), großer Freitext-Notiz `notes` und Schalter `enabled`, der
+  jedem `/ask_*` vorangeht. Die Notiz ist ausdrücklich eine manuell gepflegte
+  Notebox für importierte Erinnerungszusammenfassungen: kein LLM erzeugt,
+  verdichtet oder verändert sie. Erster Reiter der
   Einstellungen (`#memorySettingsSection`) — Prominenz kommt aus der Position,
   nicht aus Sondergestaltung; das Panel hat keine eigene Optik mehr.
-  Im Panel steht nur eine Zeile Erklärung, der Schalter, die vier Felder und
-  die Aktionen; die vollständige Begründung liegt zugeklappt in
+  Im Panel stehen eine Zeile Erklärung, der Schalter, die vier kurzen
+  „About you“-Felder, die große „Saved memories“-Textarea und die Aktionen;
+  die vollständige Begründung liegt zugeklappt in
   `<details class="settings-note">` („How it works"). Die erste Fassung hatte
   Absatz + vier Aufzählungspunkte vor den Eingabefeldern — eine Textwand vor
   dem eigentlichen Formular. Die Zeichenzähler erscheinen erst ab 80 % der
@@ -430,7 +434,8 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   nichts halluzinieren — ein destilliertes Profil wäre Profilbildung mit eigener
   Rechtsgrundlage und ist eine spätere Stufe.
   Drei Grenzen sind Vertrag, nicht Sparmaßnahme:
-  1. **Deckel** 250 Zeichen je Feld, 800 Zeichen gerenderter Inhalt. Der Text
+  1. **Deckel** 250 Zeichen je Kurzfeld und 12.000 Zeichen für `notes`; der
+     gesamte gerenderte Inhalt bleibt auf 13.200 Zeichen begrenzt. Der Text
      geht allen sechs Modellen **identisch** voran und ist damit ein gemeinsamer
      Bias: je mehr davon, desto ähnlicher die Antworten und desto höher der
      Agreement-Score, ohne dass die Modelle sich einiger wären. Dieselbe
@@ -448,13 +453,15 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   (`build_chat_context_system_prompt` legt Kontext nach vorn, Anweisung nach
   hinten). Das Profil steht damit bei der stehenden Anweisung, nicht im
   Datenteil. `use_memory: false` im Request überspringt es für genau einen Lauf.
-  Speicher: `users/{uid}/memory/profile`, Write transaktional hinter
+  Speicher: `users/{uid}/memory/profile` (Schema v2; alte v1-Dokumente ohne
+  `notes` bleiben kompatibel), Write transaktional hinter
   `persistence_guard`, Löschung über `_delete_user_subcollections` (die
   Subcollection `memory` steht dort — fehlt sie, überlebt das Profil das
   gelöschte Konto). `sanitize_profile` ebnet Whitespace ein, kappt je Feld und
   entfernt Prompt-Rahmenmarken (sonst könnte ein Feld den Chat-Kontext-Rahmen
   vorzeitig schließen). `load_profile_text` ist fail-open: ein nicht lesbares
-  Profil loggt und lässt den Lauf ohne Profil weiterlaufen.
+  Profil loggt und lässt den Lauf ohne Profil weiterlaufen. Die vier Kurzfelder
+  werden whitespace-normalisiert; `notes` bewahrt Absatz-/Listenstruktur.
   Endpunkte `GET`/`PUT /api/my/memory` (users.py). Der Schalter speichert immer
   den zuletzt **gespeicherten** Textstand und lässt den Entwurf in den Feldern
   unberührt — sonst committet oder verwirft ein Klick nebenbei einen halb

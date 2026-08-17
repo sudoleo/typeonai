@@ -13,12 +13,13 @@
 (function () {
   "use strict";
 
-  const FIELDS = ["role", "focus", "style", "constraints"];
+  const FIELDS = ["role", "focus", "style", "constraints", "notes"];
   const FIELD_INPUT_IDS = {
     role: "memoryRoleInput",
     focus: "memoryFocusInput",
     style: "memoryStyleInput",
-    constraints: "memoryConstraintsInput"
+    constraints: "memoryConstraintsInput",
+    notes: "memoryNotesInput"
   };
 
   const state = {
@@ -102,8 +103,8 @@
     updateCounts();
   }
 
-  // Ab hier ist die Restlaenge eine Information. Davor waeren vier dauerhafte
-  // "0/250" nur vier Zahlen, die niemand braucht.
+  // Die kurzen Felder zeigen den Zaehler erst nahe ihrer Grenze. Bei der grossen
+  // Notebox ist die Kapazitaet selbst relevante Information und bleibt sichtbar.
   const COUNT_VISIBLE_RATIO = 0.8;
 
   function updateCounts() {
@@ -112,8 +113,9 @@
       if (!input) return;
       const max = Number(input.getAttribute("maxlength")) || 0;
       const used = (input.value || "").length;
-      const near = max > 0 && used >= max * COUNT_VISIBLE_RATIO;
-      node.textContent = near ? `${used}/${max}` : "";
+      const always = node.dataset.alwaysVisible === "true";
+      const near = always || (max > 0 && used >= max * COUNT_VISIBLE_RATIO);
+      node.textContent = near ? `${used.toLocaleString()}/${max.toLocaleString()}` : "";
       node.dataset.near = near ? "true" : "";
       node.dataset.full = max && used >= max ? "true" : "";
     });

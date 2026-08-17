@@ -56,6 +56,15 @@ def test_sanitize_clips_each_field_to_the_documented_limit():
     assert len(profile["style"]) == user_memory.MAX_FIELD_CHARS
 
 
+def test_sanitize_keeps_the_long_note_structure_and_clips_it_separately():
+    note = "Overview\r\n\r\n- First memory\r\n- Second memory"
+    profile = sanitize_profile({"notes": note})
+    assert profile["notes"] == "Overview\n\n- First memory\n- Second memory"
+
+    clipped = sanitize_profile({"notes": "x" * (user_memory.MAX_NOTES_CHARS + 200)})
+    assert len(clipped["notes"]) == user_memory.MAX_NOTES_CHARS
+
+
 def test_sanitize_strips_prompt_frame_markers():
     # Ein Nutzer koennte sonst den Chat-Kontext-Rahmen vorzeitig schliessen und
     # haette einen stillen Defekt, der wie ein Modellfehler aussieht.
@@ -98,13 +107,21 @@ def test_rendered_profile_names_the_fields_and_subordinates_itself_to_evidence()
     assert text.endswith("END OF USER PROFILE.")
 
 
+def test_rendered_profile_includes_the_manual_note_without_an_llm_rewrite():
+    note = "Overview\n\nConsens.io is my main project.\n- Prefer German."
+    text = render_profile({"notes": note})
+    assert "SAVED MEMORIES (a verbatim note the user maintains manually):" in text
+    assert note in text
+
+
 def test_a_multiline_field_stays_one_line_in_the_prompt():
     text = render_profile({"constraints": "First rule.\nSecond rule."})
     assert "- Constraints that always apply: First rule.; Second rule." in text
 
 
 def test_rendered_content_respects_the_profile_budget():
-    full = {field: "y" * user_memory.MAX_FIELD_CHARS for field in user_memory.PROFILE_FIELDS}
+    full = {field: "y" * user_memory.MAX_FIELD_CHARS for field in user_memory.SHORT_PROFILE_FIELDS}
+    full["notes"] = "z" * user_memory.MAX_NOTES_CHARS
     text = render_profile(full)
     body = text.split("it applies to every question they ask):\n", 1)[1]
     body = body.split("\nUse it to shape", 1)[0]
@@ -206,6 +223,16 @@ def test_repository_round_trip_normalizes_on_the_way_in(repository):
     assert repository.get(UID)["role"] == "Doctor"
 
 
+def test_legacy_save_without_notes_preserves_an_existing_long_note(repository):
+    repository.save(UID, {"role": "Doctor", "notes": "Keep this imported memory"})
+    saved = repository.save(UID, {"role": "Senior doctor"})
+    assert saved["role"] == "Senior doctor"
+    assert saved["notes"] == "Keep this imported memory"
+
+    cleared = repository.save(UID, {"role": "Senior doctor", "notes": ""})
+    assert cleared["notes"] == ""
+
+
 def test_repository_write_is_fenced_by_the_account_tombstone(monkeypatch):
     calls = []
 
@@ -279,6 +306,7 @@ def test_put_normalizes_and_returns_the_stored_profile(memory_api):
     body = response.json()
     assert body["memory"]["role"] == "Doctor at a hospital"
     assert body["limits"]["field_chars"] == user_memory.MAX_FIELD_CHARS
+    assert body["limits"]["notes_chars"] == user_memory.MAX_NOTES_CHARS
     assert body["limits"]["profile_chars"] == user_memory.MAX_PROFILE_CHARS
     assert stub.saved[0][0] == UID
 
@@ -293,10 +321,14 @@ def test_put_rejects_unknown_fields(memory_api):
 
 def test_get_returns_the_stored_profile(memory_api):
     client, stub = memory_api
-    stub.profile = sanitize_profile({"style": "Answer in German."})
+    stub.profile = sanitize_profile({
+        "style": "Answer in German.",
+        "notes": "Imported memory summary",
+    })
     response = client.get("/api/my/memory", headers=AUTH)
     assert response.status_code == 200
     assert response.json()["memory"]["style"] == "Answer in German."
+    assert response.json()["memory"]["notes"] == "Imported memory summary"
 
 
 # --- Injektion in den Lauf -------------------------------------------------
@@ -349,6 +381,12 @@ def test_profile_reaches_the_provider_behind_the_base_instruction(monkeypatch):
     # Die Basisanweisung steht davor, das Profil dahinter.
     assert prompt.index("Please answer thoroughly") < prompt.index("ABOUT THE USER")
     assert prompt.endswith("END OF USER PROFILE.")
+
+
+def test_long_manual_note_reaches_the_provider_verbatim(monkeypatch):
+    note = "Overview\n\nI work on consens.io.\nPrefer compact German answers."
+    prompt = run_ask(monkeypatch, {"notes": note})
+    assert note in prompt
 
 
 def test_a_client_system_prompt_keeps_precedence_and_still_gets_the_profile(monkeypatch):
