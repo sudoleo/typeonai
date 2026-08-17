@@ -202,8 +202,8 @@ def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
     # Die Punkte neben den Marken sind seit 2026-08-15 ersatzlos weg
     # (User-Vorgabe); nichts darf sie unbemerkt wieder einfuehren.
     assert ".cx-marker" not in shared
-    assert "components-consensus-visuals.css?v=20260815-claimmark1" in source("static/css/landing.css")
-    assert "components-consensus-visuals.css?v=20260815-claimmark1" in source("static/css/components-consensus-insights.css")
+    assert "components-consensus-visuals.css?v=20260817-graycount1" in source("static/css/landing.css")
+    assert "components-consensus-visuals.css?v=20260817-graycount1" in source("static/css/components-consensus-insights.css")
     all_static = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ROOT / "static").rglob("*")

@@ -1828,10 +1828,17 @@
           };
 
           // --- Differences-Karten --------------------------------------------
-          function renderDifferenceCards(differences, modelCount) {
-            const cards = $("differencesCards");
-            const diffP = document.querySelector("#consensusResponse .consensus-differences p");
-            if (!cards) return;
+          // Baut die Karten in einen beliebigen Container, damit der Live-Fuss
+          // und ein archivierter Turn dieselbe Darstellung teilen. Ein
+          // archivierter Turn bekommt die statische Fassung: seine Sprunglinks
+          // zeigten sonst auf die Antwortboxen des NEUESTEN Laufs, und eine
+          // Resolve-Runde gehoert immer zum aktiven Lauf.
+          function buildDifferenceCards(cards, differences, modelCount, options) {
+            const opts = options || {};
+            const isStatic = !!opts.static;
+            const labelFor = typeof opts.modelLabel === "function"
+              ? opts.modelLabel
+              : modelDisplayName;
             cards.innerHTML = "";
 
             if (!differences.length) {
@@ -1902,7 +1909,7 @@
                   // "Position A (2 models: …)".
                   const label = document.createElement("div");
                   label.className = "diff-position-label";
-                  label.textContent = pos.models.map(modelDisplayName).join(", ");
+                  label.textContent = pos.models.map(labelFor).join(", ");
                   posEl.appendChild(label);
 
                   if (pos.stance) {
@@ -1919,19 +1926,21 @@
                   }
 
                   // Schlichte Textlinks (Modellname) statt Pill-Buttons.
-                  const links = document.createElement("div");
-                  links.className = "diff-position-links";
-                  pos.models.forEach(function (model) {
-                    if (!MODEL_BOX_IDS[model]) return;
-                    const jump = document.createElement("button");
-                    jump.type = "button";
-                    jump.className = "diff-jump-link";
-                    jump.textContent = modelDisplayName(model);
-                    jump.title = "Jump to the full answer from " + modelDisplayName(model);
-                    jump.addEventListener("click", function () { jumpToModelAnswer(model, pos.quote); });
-                    links.appendChild(jump);
-                  });
-                  if (links.childNodes.length) posEl.appendChild(links);
+                  if (!isStatic) {
+                    const links = document.createElement("div");
+                    links.className = "diff-position-links";
+                    pos.models.forEach(function (model) {
+                      if (!MODEL_BOX_IDS[model]) return;
+                      const jump = document.createElement("button");
+                      jump.type = "button";
+                      jump.className = "diff-jump-link";
+                      jump.textContent = labelFor(model);
+                      jump.title = "Jump to the full answer from " + labelFor(model);
+                      jump.addEventListener("click", function () { jumpToModelAnswer(model, pos.quote); });
+                      links.appendChild(jump);
+                    });
+                    if (links.childNodes.length) posEl.appendChild(links);
+                  }
                   body.appendChild(posEl);
                 });
 
@@ -1943,8 +1952,19 @@
                   verify.append(lead, document.createTextNode(diff.verify));
                   body.appendChild(verify);
                 }
-                const resolveSection = buildResolveSection(diff);
-                if (resolveSection) body.appendChild(resolveSection);
+                // Im Archiv nur das PERSISTIERTE Ergebnis, nie der Auslöser:
+                // eine Resolve-Runde laeuft gegen die Modelle des aktiven Laufs.
+                // Deshalb faellt jeder Knopf raus, auch bei einer Resolution
+                // mit unbekanntem Ausgang — die baut sonst wieder den Starter.
+                const resolveSection = (isStatic && !diff.resolution)
+                  ? null
+                  : buildResolveSection(diff);
+                if (resolveSection && isStatic) {
+                  resolveSection.querySelectorAll("button").forEach(b => b.remove());
+                }
+                if (resolveSection && resolveSection.childNodes.length) {
+                  body.appendChild(resolveSection);
+                }
                 card.appendChild(body);
                 cards.appendChild(card);
                 // Persistierte Resolve-Runde (z. B. aus einem Bookmark): Karte
@@ -1952,6 +1972,14 @@
                 if (diff.resolution) markCardResolved(card, diff.resolution.outcome);
               });
             }
+            return cards;
+          }
+
+          function renderDifferenceCards(differences, modelCount) {
+            const cards = $("differencesCards");
+            const diffP = document.querySelector("#consensusResponse .consensus-differences p");
+            if (!cards) return;
+            buildDifferenceCards(cards, differences, modelCount);
 
             cards.hidden = false;
             if (diffP) {
@@ -1960,6 +1988,29 @@
             }
             // Strukturierte Karten liegen ab hier zugeklappt unter der Antwort.
             setPanelState(false, DIFF_SUMMARY_DONE);
+          }
+
+          // Ein archivierter Turn hat dieselben strukturierten Daten wie der
+          // Live-Lauf — bis 2026-08-17 fiel er trotzdem auf den Freitext des
+          // Judges zurueck und zeigte dabei sogar dessen "BestModel:"-Zeile.
+          // Gleiche Daten, gleiche Karten; interaktiv ist nur der aktive Lauf.
+          function renderStoredDifferenceCards(container, differencesData, options) {
+            if (!container || !differencesData || typeof differencesData !== "object") {
+              return false;
+            }
+            if (!Array.isArray(differencesData.differences)) return false;
+            const differences = differencesData.differences.filter(
+              d => d && d.claim && Array.isArray(d.positions) && d.positions.length
+            );
+            const modelCount = (Array.isArray(differencesData.models_compared)
+              && differencesData.models_compared.length)
+              || Number(differencesData.agreement?.model_count)
+              || 0;
+            buildDifferenceCards(container, differences, modelCount, {
+              static: true,
+              modelLabel: options && options.modelLabel
+            });
+            return true;
           }
 
           // --- Reset & Haupteinstieg -----------------------------------------
@@ -2041,6 +2092,7 @@
 
           window.renderConsensusInsights = renderConsensusInsights;
           window.renderStoredConsensusClaims = renderStoredConsensusClaims;
+          window.renderStoredDifferenceCards = renderStoredDifferenceCards;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;
         })();

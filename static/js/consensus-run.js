@@ -50,6 +50,31 @@
     return match ? match[1].trim() : null;
   }
 
+  // "BestModel: Anthropic" ist Buchhaltung fuer die Modell-Wertung, kein Satz
+  // fuer Leser. Im Freitext-Fallback stand sie bisher sichtbar unter der
+  // Analyse.
+  function stripBestModelLine(differencesText) {
+    return String(differencesText || "")
+      .replace(/^[ \t]*\**BestModel:\**[^\n]*$/gim, "")
+      .trim();
+  }
+
+  // Die Karten eines archivierten Turns sollen die Modelle nennen, die DAMALS
+  // geantwortet haben. modelDisplayName in consensus-insights.js liest die
+  // Live-Antwortboxen — die tragen laengst die Auswahl des neuesten Laufs.
+  function storedModelLabeller(modelAnswers) {
+    const labels = {};
+    Object.entries(modelAnswers && typeof modelAnswers === "object" ? modelAnswers : {})
+      .forEach(([provider, item]) => {
+        const key = String(item?.provider || provider || "").toLowerCase();
+        const label = String(item?.model_label || "").trim();
+        if (key && label) labels[key] = label;
+      });
+    return function (model) {
+      return labels[String(model || "").toLowerCase()] || model;
+    };
+  }
+
   // --------- Follow-up-Fragen: Kontext-State ---------
   // Genau eine Kontext-Ebene: das Frage/Konsens-Paar des letzten erfolgreichen
   // Laufs. offer() merkt sich das Paar, consume() liefert den context-Payload
@@ -309,18 +334,36 @@
         panels.appendChild(panel);
       }
 
-      const differencesText = String(turnData.differences || "").trim();
-      if (differencesText) {
-        const storedDifferences = turnData.differences_data?.differences;
+      const differencesText = stripBestModelLine(turnData.differences);
+      const storedDifferences = turnData.differences_data?.differences;
+      const hasStructuredDifferences = Array.isArray(storedDifferences);
+      if (hasStructuredDifferences || differencesText) {
         addDrawer(
           "Review differences",
           "Differences",
-          Array.isArray(storedDifferences) ? storedDifferences.length : 0,
+          hasStructuredDifferences ? storedDifferences.length : 0,
           panel => {
+            // Der Turn traegt dieselben strukturierten Daten wie der Live-Lauf.
+            // Sie hier NICHT zu benutzen hiess: derselbe Befund las sich im
+            // Verlauf als roher Judge-Text, sobald die Antwort nach oben rutschte.
+            const cards = document.createElement("div");
+            cards.className = "differences-cards thread-history-differences";
+            const rendered = window.renderStoredDifferenceCards?.(
+              cards,
+              turnData.differences_data,
+              { modelLabel: storedModelLabeller(turnData.model_answers) }
+            );
+            if (rendered) {
+              panel.appendChild(cards);
+              return;
+            }
             const body = document.createElement("div");
             body.className = "thread-history-detail-body";
+            const markup = window.colorizeCredibility
+              ? window.colorizeCredibility(differencesText)
+              : differencesText;
             if (typeof window.injectMarkdown === "function") {
-              window.injectMarkdown(body, differencesText, turnSources);
+              window.injectMarkdown(body, markup, turnSources);
             } else {
               body.textContent = differencesText;
             }

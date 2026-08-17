@@ -500,9 +500,11 @@ onIdTokenChanged(auth, async (user) => {
       usageOptions.style.display = "block";
     }
 
-    // Account-Bereich (Löschen) in den Settings einblenden
-    const accountSection = document.getElementById("accountSettingsSection");
-    if (accountSection) accountSection.style.display = "block";
+    // Account-Reiter in den Settings einblenden. Seit die Einstellungen
+    // Tabs sind, gehoert die Sichtbarkeit des PANELS allein dem Tab-Controller
+    // (app-ui.js); hier wird nur noch der Reiter selbst freigegeben. Ein
+    // inline gesetztes display wuerde den Controller sonst uebersteuern.
+    window.App?.settingsTabs?.setTabAvailable?.("accountSettingsSection", true);
 
     // View-Switch-Pill ist immer sichtbar (auch ausgeloggt) — hier nichts tun.
     // Auth-Buttons oben rechts sind nur für Gäste.
@@ -634,8 +636,7 @@ onIdTokenChanged(auth, async (user) => {
 
         if (usageOptions) usageOptions.style.display = "none";
 
-        const accountSection = document.getElementById("accountSettingsSection");
-        if (accountSection) accountSection.style.display = "none";
+        window.App?.settingsTabs?.setTabAvailable?.("accountSettingsSection", false);
 
         // A) Badge verstecken (Direkter Zugriff)
         const badge = document.getElementById("proBadge");

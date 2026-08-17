@@ -628,3 +628,51 @@ def test_query_send_shows_the_real_reason_instead_of_a_dead_end_retry():
     assert "chatSession?.lastPersistenceError" in send
     # Der generische Hinweis bleibt der Fallback, nicht die einzige Antwort.
     assert '|| "The conversation turn could not be prepared. Please retry."' in send
+
+
+def test_archived_turns_render_the_same_difference_cards_as_the_live_run():
+    consensus = (ROOT / "static" / "js" / "consensus-run.js").read_text(
+        encoding="utf-8"
+    )
+    insights = (ROOT / "static" / "js" / "consensus-insights.js").read_text(
+        encoding="utf-8"
+    )
+
+    # Ein archivierter Turn traegt dieselben strukturierten Daten wie der
+    # Live-Lauf und muss sie auch benutzen — sonst liest sich derselbe Befund
+    # im Verlauf als roher Judge-Freitext.
+    assert "window.renderStoredDifferenceCards = renderStoredDifferenceCards" in insights
+    assert "window.renderStoredDifferenceCards?.(" in consensus
+    assert "hasStructuredDifferences || differencesText" in consensus
+
+    stored = insights.split("function renderStoredDifferenceCards", 1)[1].split(
+        "\n          }", 1
+    )[0]
+    assert "Array.isArray(differencesData.differences)" in stored
+    assert "static: true" in stored
+
+    # Der Freitext bleibt der Fallback fuer alte Turns ohne strukturierte
+    # Daten — ohne die Buchhaltungszeile des Judges.
+    assert "function stripBestModelLine(differencesText)" in consensus
+    assert "BestModel:" in consensus.split("function stripBestModelLine", 1)[1][:300]
+    assert "const differencesText = stripBestModelLine(turnData.differences)" in consensus
+
+
+def test_archived_difference_cards_carry_no_live_run_controls():
+    insights = (ROOT / "static" / "js" / "consensus-insights.js").read_text(
+        encoding="utf-8"
+    )
+
+    cards = insights.split("function buildDifferenceCards", 1)[1].split(
+        "function renderDifferenceCards", 1
+    )[0]
+    # Sprunglinks zeigten sonst auf die Antwortboxen des NEUESTEN Laufs, und
+    # eine Resolve-Runde laeuft immer gegen die Modelle des aktiven Laufs.
+    assert "if (!isStatic) {" in cards
+    assert "(isStatic && !diff.resolution)" in cards
+    assert 'resolveSection.querySelectorAll("button").forEach' in cards
+    # Die Modellnamen kommen aus dem Turn, nicht aus den Live-Boxen.
+    assert "pos.models.map(labelFor)" in cards
+    assert "function storedModelLabeller(modelAnswers)" in (
+        (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+    )

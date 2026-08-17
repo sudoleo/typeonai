@@ -202,15 +202,20 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+/* Seit 2026-08-17 (User-Vorgabe) ist die Quote IMMER grau - "4/6" sieht aus
+   wie "6/6". Die Farbe trug hier keine eigene Information: dass Modelle
+   abweichen, steht schon in der Zahl selbst und im angestrichenen Satz
+   daneben. Zwei rote Zahlen pro Absatz lasen sich wie eine Warnung, wo nur
+   ein Zaehlstand steht. Die Klasse bleibt als Haken fuer JS/Tests. */
 .claim-badge.has-dissent {
-  color: var(--cx-major-line);
+  color: var(--ink-2);
 }
 
 .claim-badge.has-dissent:hover,
 .claim-badge.has-dissent:focus-visible,
 .claim-badge.has-dissent.is-linked-hover {
-  background: color-mix(in srgb, var(--cx-major-line) 13%, transparent);
-  color: var(--cx-major-line);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  color: var(--text-color);
 }
 
 .claim-ratio {

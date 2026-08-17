@@ -613,8 +613,77 @@
   opacity: 1;
 }
 
+/* Reiter statt einer langen Bahn: links das Inhaltsverzeichnis, rechts genau
+   eine Kategorie. Ab 640px nebeneinander, darunter eine scrollbare Leiste
+   ueber dem Panel. */
+.settings-layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.settings-nav {
+  flex: 0 0 152px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  padding: 12px 8px;
+  /* Dieselbe Linie wie Kopfzeile und Gruppen des Modals -- zwei Linienstaerken
+     in einem Fenster fallen sofort auf. */
+  border-right: 1px solid var(--sidebar-border);
+}
+
+/* Dieselbe Sprache wie die Bookmark-Liste in der Sidebar: flache Zeile,
+   transparent im Ruhezustand, Hover und Auswahl sind ein Tint — kein Rahmen,
+   keine Fuellung, kein Schatten. Die Reiter stehen deshalb auch in der
+   Ausschlussliste des globalen `button`-Selektors (components-input.css);
+   ohne das bekamen sie dessen gefuellte Flaeche und 10/16-Polsterung und
+   sahen aus wie sechs Aktionsknoepfe statt wie eine Navigation. */
+.settings-nav-item {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  box-shadow: none;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-ui);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Die Tints werden aus der Textfarbe gemischt, nicht aus der
+   Oberflaechenskala: im Dark Mode ist `--raise` exakt der Modalhintergrund,
+   ein Hover darauf waere unsichtbar. Aus `--text-color` gemischt kippt der
+   Tint automatisch mit dem Theme mit und bleibt in beiden sichtbar. */
+.settings-nav-item:hover {
+  background: color-mix(in srgb, var(--text-color) 6%, transparent);
+  color: var(--text-color);
+  opacity: 1;
+}
+
+/* Aktiv braucht mehr als den Hover-Tint, sonst ist beim Zeigen nicht mehr
+   erkennbar, wo man steht. */
+.settings-nav-item.is-active {
+  background: color-mix(in srgb, var(--text-color) 11%, transparent);
+  color: var(--text-color);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-nav-item:focus-visible {
+  outline: 2px solid var(--line);
+  outline-offset: -2px;
+}
+
 .settings-body {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -622,22 +691,24 @@
   padding: 18px 20px 20px;
 }
 
+.settings-category[hidden] {
+  display: none;
+}
+
 .settings-category {
   display: block;
 }
 
 .settings-category-heading {
-  margin: 0 2px 9px;
+  margin: 0 2px 12px;
 }
 
 .settings-category-heading h3 {
   margin: 0;
-  color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
+  color: var(--text-color);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-heading);
-  text-transform: uppercase;
 }
 
 .settings-category-heading p {
@@ -700,6 +771,60 @@
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
   line-height: var(--line-height-ui);
+}
+
+/* Eine Einstellung mit mehr als zwei Stufen sitzt in derselben Zeile wie ein
+   Schalter, traegt an seiner Stelle aber ein Auswahlfeld. Der Rahmen ist der
+   des Consensus-Pickers, damit die App nur eine Select-Sprache spricht. */
+.settings-choice-row {
+  cursor: pointer;
+}
+
+.settings-select {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.settings-select select {
+  min-height: 34px;
+  padding: 6px 30px 6px 11px;
+  border: 1px solid color-mix(in srgb, var(--sidebar-border) 68%, transparent);
+  border-radius: var(--radius-sm);
+  appearance: none;
+  background: color-mix(in srgb, var(--input-bg) 92%, var(--sidebar-hover) 8%);
+  color: var(--text-color);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-heading);
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+.settings-select select:hover,
+.settings-select select:focus-visible {
+  border-color: color-mix(in srgb, var(--text-color) 26%, transparent);
+}
+
+.settings-select select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-color) 10%, transparent);
+}
+
+.settings-select::after {
+  content: "";
+  position: absolute;
+  right: 11px;
+  top: 50%;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--sidebar-text-muted);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .settings-collapsible-area {
@@ -770,13 +895,42 @@
   border-color: color-mix(in srgb, #ff9e94 70%, transparent);
 }
 
+.settings-footer {
+  flex-shrink: 0;
+  padding: 8px 20px;
+  border-top: 1px solid var(--sidebar-border);
+  text-align: right;
+}
+
 .settings-version {
-  margin-top: -4px;
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-solid);
-  text-align: center;
   opacity: 0.62;
+}
+
+/* Unter 640px hat eine 168px-Spalte neben dem Panel keinen Platz mehr: die
+   Reiter kippen ueber das Panel und scrollen waagerecht. */
+@media (max-width: 639px) {
+  .settings-layout {
+    flex-direction: column;
+  }
+
+  .settings-nav {
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 2px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 8px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--sidebar-border);
+    scrollbar-width: none;
+  }
+
+  .settings-nav::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @media (max-width: 520px) {
@@ -896,6 +1050,148 @@
   width: 100%;
   margin: 10px 0 0;
   border-radius: var(--radius-xs) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Memory-Panel. Bewusst ohne Sonderbehandlung: seit die Kategorien Reiter sind,
+   ist Prominenz eine Frage der Position (erster Reiter), nicht der Gestaltung.
+   -------------------------------------------------------------------------- */
+.settings-memory-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.settings-memory-field {
+  position: relative;
+}
+
+.settings-memory-field .settings-field-label {
+  margin-bottom: 6px;
+}
+
+.settings-memory-field textarea {
+  min-height: 0;
+}
+
+/* Der Zaehler erscheint erst kurz vor der Grenze (data-near auf dem Element).
+   Vier dauerhaft sichtbare "0/250" waeren vier Zahlen ohne Aussage. */
+.settings-memory-count {
+  display: block;
+  height: 0;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.settings-memory-count[data-near="true"] {
+  height: auto;
+}
+
+.settings-memory-count[data-full="true"] {
+  color: var(--text-color);
+}
+
+.settings-memory-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-memory-actions .save-prompt-btn {
+  width: auto;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.settings-inline-btn {
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--sidebar-text-muted);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+
+.settings-inline-btn:hover:not(:disabled) {
+  background: var(--sidebar-hover);
+  color: var(--text-color);
+}
+
+.settings-memory-status {
+  flex: 1 1 140px;
+  min-width: 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.settings-memory-status[data-tone="ok"] {
+  color: var(--agree);
+}
+
+.settings-memory-status[data-tone="error"] {
+  color: var(--dispute);
+}
+
+/* Die Erklaerung liegt zugeklappt unter dem Panel: sie muss verfuegbar sein,
+   aber sie darf nicht das Erste sein, was man liest. */
+.settings-note {
+  margin-top: 12px;
+}
+
+.settings-note > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-note > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-note > summary::before {
+  content: "▸";
+  font-size: var(--font-size-micro);
+}
+
+.settings-note[open] > summary::before {
+  content: "▾";
+}
+
+.settings-note > summary:hover {
+  color: var(--text-color);
+}
+
+.settings-note p {
+  margin: 8px 2px 0 !important;
+  color: var(--sidebar-text-muted) !important;
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.settings-note strong {
+  color: var(--text-color);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* Ausgeloggt bleibt das Panel sichtbar — das Feature soll erklaert werden,
+   auch wenn es noch nicht bedienbar ist. Die Felder sind dann nativ disabled;
+   der Hinweis steht in der Statuszeile. */
+#memorySettingsSection[data-signed-in="false"] .settings-group {
+  opacity: 0.62;
 }
 
 .feedback {

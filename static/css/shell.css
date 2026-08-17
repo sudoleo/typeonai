@@ -1536,6 +1536,70 @@ body.agreement-score-hidden .verdict-gauge {
   display: none;
 }
 
+/* Stufe "off": der ganze Urteilsbereich geht. Unter der Antwort bleiben nur
+   die Schubladen — Review differences, Compare answers, ggf. Sources. Die
+   Haarlinie ueber dem Urteil geht mit, sonst trennt sie nichts mehr; das ist
+   dieselbe Behandlung wie bei einem Lauf ganz ohne Urteil
+   (.consensus-verdict[hidden]). */
+body.agreement-verdict-hidden .consensus-verdict {
+  display: none;
+}
+
+body.agreement-verdict-hidden .run-provenance::before {
+  display: none;
+}
+
+/* Ohne Urteil blieb in der ersten Zeile nur Share/Watch/Cite am rechten Rand
+   stehen, die Schubladen eine Zeile tiefer links — zwei halbleere Zeilen mit
+   einer Luecke dazwischen, wo vorher das Urteil stand. Ist die Breite da,
+   ruecken sie auf EINE Grundlinie: Schubladen links, Lauf-Fakten in der Mitte,
+   Aktionen rechts.
+
+   Bewusst Flex statt eines dritten Grid-Rasters: ob die drei nebeneinander
+   passen, haengt an der Zahl der Chips ("Verify sources" gibt es nur mit
+   Quellen) und an der Laenge der Lauf-Fakten — das weiss keine Media-Query
+   vorher. Wird es eng, bricht die Aktionsgruppe von selbst in die naechste
+   Zeile um, statt sich in die Chips zu schieben. Das Handy behaelt sein
+   gestapeltes Raster (Block unten), da ist ohnehin kein Platz. */
+@media (min-width: 641px) {
+  body.agreement-verdict-hidden .run-provenance {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: 16px;
+    row-gap: 9px;
+  }
+
+  body.agreement-verdict-hidden .run-provenance > .consensus-footer-tabs {
+    order: 1;
+  }
+
+  /* Nur so breit wie ihr Inhalt: mit flex-grow sog die Fakten-Spalte den
+     ganzen Rest der Zeile auf und trieb die Aktionen selbst dann in einen
+     Umbruch, wenn nebeneinander reichlich Platz war. An den rechten Rand
+     schiebt die Aktionen ihr eigenes margin-left:auto. */
+  body.agreement-verdict-hidden .run-provenance > .consensus-footer-facts {
+    order: 2;
+    flex: 0 1 auto;
+  }
+
+  /* Ein Lauf ohne eigene Fakten (kein Summary, kein "Run again") hinterlaesst
+     eine leere, aber vorhandene Spalte — die kostete eine Luecke von 16px und
+     hat die Aktionen genau daran in den Umbruch gedraengt. :empty greift hier
+     nicht: die Huelle hat Kinder, sie sind nur leer bzw. hidden. */
+  body.agreement-verdict-hidden .run-provenance > .consensus-footer-facts:not(
+    :has(.run-provenance-facts:not(:empty))
+  ):not(:has(.run-replay-btn:not([hidden]))) {
+    display: none;
+  }
+
+  body.agreement-verdict-hidden .run-provenance > .consensus-footer-actions {
+    order: 3;
+    align-self: center;
+    margin-top: 0;
+  }
+}
+
 /* The headline is a headline: one line. It used to chain two truncated
    claim fragments plus "+2 more" into a two-line run-on that was the
    loudest thing in the footer and the hardest to read. One topic, cut with
@@ -2434,14 +2498,18 @@ body:not(.is-hero) .consensus-section::before {
   color: var(--ink-3);
 }
 
-/* Ohne Urteil fehlt die Haarlinie, die den Fuss sonst vom Text abtrennt. */
-.thread-history-footer:not(:has(.thread-history-verdict)) {
+/* Ohne Urteil fehlt die Haarlinie, die den Fuss sonst vom Text abtrennt.
+   Ausgeblendet zaehlt dabei wie nicht vorhanden: bei Stufe "off" steht das
+   Urteil zwar im DOM, traegt aber weder Linie noch Abstand. */
+.thread-history-footer:not(:has(.thread-history-verdict)),
+body.agreement-verdict-hidden .thread-history-footer {
   margin-top: 20px;
   padding-top: 14px;
   border-top: 1px solid var(--line-soft);
 }
 
-.thread-history-footer:not(:has(.consensus-tab)):not(:has(.thread-history-verdict)) {
+.thread-history-footer:not(:has(.consensus-tab)):not(:has(.thread-history-verdict)),
+body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   display: none;
 }
 

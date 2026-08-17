@@ -22,16 +22,48 @@ def test_verdict_color_and_label_follow_the_agreement_score():
     assert 'headline.textContent = "Very low agreement"' in verdict
 
 
-def test_settings_can_hide_the_numeric_agreement_score_persistently():
+def test_settings_offer_three_agreement_display_levels_persistently():
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
     shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
 
-    assert 'id="showAgreementScoreSwitch" checked' in template
-    assert "consensio.showAgreementScore.v1" in init
-    assert 'classList.toggle("agreement-score-hidden", !showScore)' in init
-    assert 'localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) !== "false"' in init
+    assert 'id="agreementDisplaySelect"' in template
+    for value in ("full", "summary", "off"):
+        assert f'<option value="{value}">' in template
+    assert "consensio.agreementDisplay.v1" in init
+    assert 'classList.toggle("agreement-score-hidden", mode === "summary")' in init
+    assert 'classList.toggle("agreement-verdict-hidden", mode === "off")' in init
+    # Nur die Zahl weg: die Worte des Urteils bleiben.
     assert "body.agreement-score-hidden .verdict-gauge" in shell
+    # Alles weg: unter der Antwort bleiben nur die Schubladen.
+    assert "body.agreement-verdict-hidden .consensus-verdict" in shell
+
+
+def test_the_hidden_verdict_lets_drawers_share_the_line_with_the_actions():
+    shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
+
+    merged = shell.split("body.agreement-verdict-hidden .run-provenance::before", 1)[1]
+    merged = merged.split("/* The headline is a headline", 1)[0]
+
+    # Ohne Urteil stand Share/Watch/Cite allein in einer halbleeren Zeile ueber
+    # den Schubladen. Wo die Breite reicht, teilen sie sich eine Grundlinie.
+    assert "@media (min-width: 641px)" in merged
+    assert "flex-wrap: wrap" in merged
+    for area, order in (("tabs", 1), ("facts", 2), ("actions", 3)):
+        block = merged.split(f"consensus-footer-{area} {{", 1)[1].split("}", 1)[0]
+        assert f"order: {order}" in block
+    # Die Fakten duerfen die Zeile weder aufsaugen (flex-grow) noch als leere
+    # Huelle eine Luecke kosten — beides trieb die Aktionen in den Umbruch.
+    assert "flex: 0 1 auto" in merged
+    assert ":has(.run-provenance-facts:not(:empty))" in merged
+    assert ":has(.run-replay-btn:not([hidden]))" in merged
+
+
+def test_the_old_agreement_score_switch_choice_still_applies():
+    init = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
+
+    assert "consensio.showAgreementScore.v1" in init
+    assert 'localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) === "false"' in init
 
 
 def test_public_mockups_use_the_same_score_semantics():

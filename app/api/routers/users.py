@@ -22,11 +22,13 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import persistence_guard
+from app.services import persistence_guard, user_memory
+from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 account_deletion = FirestoreAccountDeletion(db_firestore)
+user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 
 
 class UsageRequest(BaseModel):
@@ -154,6 +156,71 @@ def release_usage_run(request: Request, data: dict = Body(...)):
         "deep_total_limit": result.snapshot.deep_think.limit,
         "utc_date": result.utc_date,
     }
+
+class UserMemoryRequest(BaseModel):
+    """Das selbst geschriebene Profil.
+
+    Die Feldgrenze hier ist reiner Missbrauchsschutz; die verbindliche Laenge
+    setzt ``user_memory.sanitize_profile`` (250 Zeichen je Feld, nach dem
+    Einebnen von Whitespace). Ein grosszuegiger Wert an der API-Grenze verhindert
+    422er fuer eingefuegten Text, der nach der Normalisierung laengst passt.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    role: str = Field(default="", max_length=1000)
+    focus: str = Field(default="", max_length=1000)
+    style: str = Field(default="", max_length=1000)
+    constraints: str = Field(default="", max_length=1000)
+
+
+def _memory_uid(request: Request) -> str:
+    token = extract_id_token(request, {})
+    if not token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        return verify_user_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication failed") from None
+
+
+def _memory_response(profile: dict) -> dict:
+    return {
+        "status": "success",
+        "memory": profile,
+        "limits": {
+            "field_chars": user_memory.MAX_FIELD_CHARS,
+            "profile_chars": user_memory.MAX_PROFILE_CHARS,
+        },
+    }
+
+
+@router.get("/api/my/memory")
+@limiter.limit("30/minute")
+def get_user_memory(request: Request):
+    uid = _memory_uid(request)
+    try:
+        profile = user_memory_repository.get(uid)
+    except Exception as exc:
+        logging.error("user memory read failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Memory is temporarily unavailable.") from None
+    return _memory_response(profile)
+
+
+@router.put("/api/my/memory")
+@limiter.limit("20/minute")
+def put_user_memory(request: Request, payload: UserMemoryRequest):
+    uid = _memory_uid(request)
+    try:
+        profile = user_memory_repository.save(uid, payload.model_dump())
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except Exception as exc:
+        logging.error("user memory write failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
+    return _memory_response(profile)
+
 
 @router.post("/delete_account")
 @limiter.limit("3/minute")

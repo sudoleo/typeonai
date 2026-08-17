@@ -83,6 +83,8 @@ from app.services.chat_context import (
     build_chat_context_system_prompt,
     resolved_context_cache_key,
 )
+from app.services import user_memory
+from app.services.user_memory import FirestoreUserMemoryRepository
 from app.services.differences_stats import record_differences_stats
 from app.services.usage_repository import (
     FirestoreUsageRepository,
@@ -109,6 +111,7 @@ run_usage_repository = FirestoreUsageRepository(db_firestore)
 chat_store = ChatStore(db_firestore)
 chat_context_service = ChatContextService(FirestoreChatContextRepository(db_firestore))
 resolved_context_cache = ResolvedContextCache()
+user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 _CHAT_DOCUMENT_ID_RE = re.compile(r"[0-9a-f]{32}")
 
 
@@ -932,6 +935,24 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     )
     attachments = parse_attachments(data, is_pro_user)
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
+
+    # Das nutzereigene Gedaechtnis. Es haengt an der Basisanweisung, NICHT im
+    # Datenteil: es ist eine stehende Praeferenz des Nutzers, kein
+    # Gespraechsinhalt. Deshalb steht es vor der Chat-Kontext-Umhuellung -- die
+    # legt den Kontext davor und laesst die Anweisung samt Profil zuletzt.
+    #
+    # Ausschliesslich hier, wie beim Follow-up-Kontext: Watch-Reruns, Publisher-
+    # und Topic-Laeufe rufen engines.py direkt und duerfen kein Profil sehen,
+    # sonst driftet eine Watch-Baseline mit dem Profil statt mit der Welt.
+    if uid and parse_boolean_flag(data.get("use_memory", True)):
+        memory_text = user_memory.load_profile_text(user_memory_repository, uid)
+        if memory_text:
+            system_prompt = user_memory.build_user_memory_system_prompt(
+                system_prompt.strip()
+                if isinstance(system_prompt, str) and system_prompt.strip()
+                else get_system_prompt(),
+                memory_text,
+            )
 
     authoritative_context = _resolve_authoritative_chat_context(
         uid, data, question, provider.label

@@ -245,7 +245,14 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
 def test_settings_are_grouped_without_changing_control_ids():
     template = read("templates/index.html")
 
-    for category in ("Experience", "Connections", "Model behavior", "Account"):
+    for category in (
+        "Memory",
+        "Model behavior",
+        "Runs",
+        "Display",
+        "Connections",
+        "Account",
+    ):
         assert f">{category}<" in template
 
     for control_id in (
@@ -259,8 +266,152 @@ def test_settings_are_grouped_without_changing_control_ids():
     ):
         assert f'id="{control_id}"' in template
 
-    assert template.count('class="settings-category"') >= 3
     assert template.count('class="settings-group"') >= 4
+
+
+def test_every_settings_category_is_a_tab_panel_with_a_nav_item():
+    """Sechs Kategorien untereinander waren beim Oeffnen eine Wand. Genau ein
+    Panel ist sichtbar, die Leiste links ist das Inhaltsverzeichnis."""
+    template = read("templates/index.html")
+
+    panels = (
+        "memorySettingsSection",
+        "behaviorSettingsSection",
+        "runsSettingsSection",
+        "displaySettingsSection",
+        "connectionsSettingsSection",
+        "accountSettingsSection",
+    )
+    for panel_id in panels:
+        assert f'id="{panel_id}"' in template
+        assert f'data-settings-tab="{panel_id}"' in template
+        assert f'aria-controls="{panel_id}"' in template
+
+    assert template.count('role="tabpanel"') >= len(panels)
+    assert 'role="tablist"' in template
+
+    # Der Account-Reiter startet versteckt; firebase.js gibt ihn frei. Das
+    # Panel selbst traegt kein u-display-none mehr — sonst kaempften der
+    # Tab-Controller und der Auth-Code um dieselbe Sichtbarkeit.
+    account = template.index('id="settingsTabAccount"')
+    assert "hidden>Account<" in template[account:account + 400]
+    assert 'id="accountSettingsSection" class="settings-category u-display-none"' not in template
+
+
+def test_settings_tabs_read_as_navigation_not_as_buttons():
+    """Die Reiter muessen in der `button:not(...)`-Kette stehen.
+
+    Sonst gewinnt der globale Button-Stil und die sechs Kategorien rendern als
+    sechs grosse gefuellte Aktionsknoepfe — eine Navigation, die aussieht wie
+    ein Formular. Dieselbe Falle wie beim Watch-Nudge-Schliessknopf.
+    """
+    input_css = read("static/css/components-input.css")
+    modals_css = read("static/css/components-modals.css")
+
+    assert ":not(.settings-nav-item)" in input_css
+    assert ":not(.settings-inline-btn)" in input_css
+
+    nav_item = modals_css[modals_css.index(".settings-nav-item {"):]
+    nav_item = nav_item[:nav_item.index(".settings-body {")]
+    assert "background: transparent;" in nav_item
+    assert "border: 0;" in nav_item
+    assert "box-shadow: none;" in nav_item
+
+    # Die Tints werden aus der Textfarbe gemischt: im Dark Mode ist `--raise`
+    # exakt der Modalhintergrund, ein Hover darauf waere unsichtbar.
+    assert "color-mix(in srgb, var(--text-color) 6%, transparent)" in nav_item
+    assert "color-mix(in srgb, var(--text-color) 11%, transparent)" in nav_item
+    assert "var(--raise)" not in nav_item
+
+
+def test_settings_visibility_is_owned_by_the_tab_controller():
+    firebase = read("static/firebase.js")
+    app_ui = read("static/app-ui.js")
+
+    # Ein inline gesetztes display haette den Controller uebersteuert.
+    assert 'getElementById("accountSettingsSection")' not in firebase
+    assert 'setTabAvailable?.("accountSettingsSection", true)' in firebase
+    assert 'setTabAvailable?.("accountSettingsSection", false)' in firebase
+
+    assert "window.App.settingsTabs = settingsTabs;" in app_ui
+    # Beim Oeffnen immer der erste Reiter: Einstellungen findet man ueber einen
+    # festen Ort, nicht ueber den zuletzt benutzten.
+    assert "settingsTabs.reset();" in app_ui
+
+
+def test_memory_is_the_first_settings_category():
+    """Die Reihenfolge ist die Aussage: was die Modelle ueber dich wissen zuerst,
+    Konto zuletzt. Wandert das Gedaechtnis nach unten, ist es wieder eine
+    Nebeneinstellung statt der erklaerten Hauptfunktion."""
+    template = read("templates/index.html")
+
+    # Ueber die Heading-IDs, nicht ueber die Beschriftung: ">Runs<" steht auch
+    # im Kontingent-Panel der Sidebar, lange vor den Einstellungen.
+    positions = {
+        heading: template.index(f'id="{heading}"')
+        for heading in (
+            "settingsMemoryTitle",
+            "settingsBehaviorTitle",
+            "settingsRunsTitle",
+            "settingsDisplayTitle",
+            "settingsConnectionsTitle",
+            "settingsAccountTitle",
+        )
+    }
+    assert list(positions) == sorted(positions, key=positions.get)
+
+    body = template.index('class="settings-body"')
+    assert template.index('id="memorySettingsSection"') > body
+
+    for control_id in (
+        "memoryEnabledSwitch",
+        "memoryRoleInput",
+        "memoryFocusInput",
+        "memoryStyleInput",
+        "memoryConstraintsInput",
+        "saveMemoryBtn",
+        "clearMemoryBtn",
+        "memoryStatus",
+    ):
+        assert f'id="{control_id}"' in template
+
+    # Die Erklaerung gehoert in die UI, nicht nur in die Doku: ohne sie ist ein
+    # unsichtbarer Vorspann vor jeder Frage genau der Vertrauensbruch, den das
+    # Produkt sonst vermeidet. Sie steht aber ZUGEKLAPPT unter dem Panel --
+    # sichtbar war sie eine Textwand vor vier Eingabefeldern.
+    memory_panel = template[
+        template.index('id="memorySettingsSection"') : template.index(
+            'id="behaviorSettingsSection"'
+        )
+    ]
+    assert '<details class="settings-note">' in memory_panel
+    assert "<summary>How it works</summary>" in memory_panel
+    assert "never <strong>what</strong> is true" in memory_panel
+    assert "Nothing is collected" in memory_panel
+
+    # Das Panel selbst bleibt kurz: eine Zeile Erklaerung im Kopf, ein Schalter,
+    # vier Felder. Keine Aufzaehlung und kein Absatz davor.
+    assert "<ul" not in memory_panel
+    assert memory_panel.count("<textarea") == 4
+
+
+def test_the_memory_profile_is_only_fetched_when_the_settings_open():
+    """`consensio:auth-state` feuert bei JEDEM Seitenaufruf eines eingeloggten
+    Kontos. Wird dort geladen, haengt an jedem Aufruf ein Firestore-Read fuer
+    ein Panel, das die meisten Nutzer nie oeffnen -- genau der Read, den der
+    Modal-Oeffner bewusst aufschiebt. Das Ereignis verwirft nur den Stand."""
+    memory = read("static/js/user-memory.js")
+
+    listener = memory.split('window.addEventListener("consensio:auth-state"', 1)[1]
+    listener = listener.split("\n    });", 1)[0]
+    # Geladen wird nur bei offenem Fenster oder beim Logout (dann ohne Netz).
+    assert "if (settingsModalIsOpen() || !uid) {" in listener
+    assert "state.saved = null;" in listener
+
+    # Der einzige Auslöser fuer einen Read im Normalfall.
+    assert 'getElementById("editSystemPromptBtn")?.addEventListener("click", () => load())' in memory
+    # Und er bleibt einmalig: ein zweites Oeffnen liest den gemerkten Stand.
+    assert "if (state.loaded && state.uid === user.uid && !force) {" in memory
 
 
 def test_logout_clears_the_loaded_run_and_aborts_active_streams():

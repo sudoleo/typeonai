@@ -143,33 +143,52 @@
           });
         });
 
-        // Agreement bleibt standardmaessig sichtbar. Wer die numerische
-        // Bewertung beim Lesen nicht sehen moechte, kann sie fuer Live- und
-        // archivierte Consensus-Antworten gemeinsam ausblenden.
+        // Agreement bleibt standardmaessig sichtbar. Wer weniger davon lesen
+        // will, waehlt eine von drei Stufen, die fuer Live- und archivierte
+        // Consensus-Antworten gemeinsam gilt:
+        //   full    — Zahl, Balken und Einordnung
+        //   summary — nur die Worte, keine Zahl (die alte Aus-Stellung)
+        //   off     — gar kein Urteilsbereich, unter der Antwort bleiben nur
+        //             die Schubladen (Differences / Answers / Sources)
+        const AGREEMENT_DISPLAY_STORAGE_KEY = "consensio.agreementDisplay.v1";
+        // Vorgaenger-Schalter: sein "false" ist genau die Stufe "summary".
         const AGREEMENT_SCORE_STORAGE_KEY = "consensio.showAgreementScore.v1";
-        const agreementScoreSwitch = document.getElementById("showAgreementScoreSwitch");
+        const AGREEMENT_DISPLAY_MODES = ["full", "summary", "off"];
+        const agreementDisplaySelect = document.getElementById("agreementDisplaySelect");
 
-        function applyAgreementScorePreference(showScore) {
-          document.body.classList.toggle("agreement-score-hidden", !showScore);
-          if (agreementScoreSwitch) agreementScoreSwitch.checked = showScore;
+        function applyAgreementDisplayPreference(mode) {
+          document.body.classList.toggle("agreement-score-hidden", mode === "summary");
+          document.body.classList.toggle("agreement-verdict-hidden", mode === "off");
+          if (agreementDisplaySelect) agreementDisplaySelect.value = mode;
         }
 
-        function restoreAgreementScorePreference() {
-          applyAgreementScorePreference(
-            localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) !== "false"
-          );
+        function storedAgreementDisplayMode() {
+          const stored = localStorage.getItem(AGREEMENT_DISPLAY_STORAGE_KEY);
+          if (AGREEMENT_DISPLAY_MODES.includes(stored)) return stored;
+          return localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) === "false"
+            ? "summary"
+            : "full";
         }
 
-        restoreAgreementScorePreference();
-        agreementScoreSwitch?.addEventListener("change", function () {
-          localStorage.setItem(AGREEMENT_SCORE_STORAGE_KEY, String(this.checked));
-          applyAgreementScorePreference(this.checked);
+        function restoreAgreementDisplayPreference() {
+          applyAgreementDisplayPreference(storedAgreementDisplayMode());
+        }
+
+        restoreAgreementDisplayPreference();
+        agreementDisplaySelect?.addEventListener("change", function () {
+          const mode = AGREEMENT_DISPLAY_MODES.includes(this.value) ? this.value : "full";
+          localStorage.setItem(AGREEMENT_DISPLAY_STORAGE_KEY, mode);
+          // Den alten Schluessel mitschreiben, damit ein Rollback auf die
+          // Vorgaengerversion nicht ploetzlich wieder Zahlen zeigt.
+          localStorage.setItem(AGREEMENT_SCORE_STORAGE_KEY, String(mode === "full"));
+          applyAgreementDisplayPreference(mode);
           trackAppEvent("app_agreement_score_visibility_changed", {
-            visible: this.checked
+            mode: mode,
+            visible: mode === "full"
           });
         });
 
-        window.addEventListener("pageshow", restoreAgreementScorePreference);
+        window.addEventListener("pageshow", restoreAgreementDisplayPreference);
 
         window.App.consensusLifecycle.initAutoConsensusToggle();
 

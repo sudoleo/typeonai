@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260816-agreementtoggle1">
+  <link rel="stylesheet" href="/static/style.css?v=20260817-graycount1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -49,9 +49,9 @@
        Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260816-bookmarklimit1"></script>
+  <script type="module" src="/static/firebase.js?v=20260817-settingstabs1"></script>
   <script type="module" src="/static/demo.js?v=20260814-directcompare1"></script>
-  <script src="/static/app-ui.js?v=20260811-phase4" defer></script>
+  <script src="/static/app-ui.js?v=20260817-settingstabs1" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
   <script src="/static/js/app-core.js?v=20260815-sentmessage1" defer></script>
   <!-- Model-Picker + Modell-Auswahl (aus index.html ausgelagert) -->
@@ -78,6 +78,8 @@
   <script src="/static/js/watch.js?v=20260812-auditfix" defer></script>
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
+  <!-- Nutzereigenes Gedaechtnis: Einstellungen laden/speichern gegen /api/my/memory. -->
+  <script src="/static/js/user-memory.js?v=20260817-settingstabs1" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
@@ -86,9 +88,9 @@
   <!-- Deterministische Textanker getrennt von Netzwerk/Modal/Rendering. -->
   <script src="/static/js/consensus-anchor.js?v=20260815-claimmark1" defer></script>
   <!-- Consensus-Insights und Credibility-Frames (aus index.html ausgelagert) -->
-  <script src="/static/js/consensus-insights.js?v=20260815-claimmark1" defer></script>
+  <script src="/static/js/consensus-insights.js?v=20260817-historydiffs1" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
-  <script src="/static/js/consensus-run.js?v=20260815-claimrefs" defer></script>
+  <script src="/static/js/consensus-run.js?v=20260817-historydiffs1" defer></script>
   <script src="/static/js/query-send.js?v=20260815-sentmessage1" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
   <script src="/static/js/composer-collapse.js?v=20260814-composergrow2" defer></script>
@@ -814,7 +816,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260816-agreementtoggle1" defer></script>
+  <script src="/static/js/app-init.js?v=20260817-agreementarea1" defer></script>
   <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
@@ -1034,11 +1036,142 @@
           </div>
         </div>
 
-        <div class="settings-body">
-          <section class="settings-category" aria-labelledby="settingsExperienceTitle">
+        <div class="settings-layout">
+          <div class="settings-nav" role="tablist" aria-label="Settings sections">
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabMemory"
+              data-settings-tab="memorySettingsSection" aria-controls="memorySettingsSection">Memory</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabBehavior"
+              data-settings-tab="behaviorSettingsSection" aria-controls="behaviorSettingsSection">Model behavior</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabRuns"
+              data-settings-tab="runsSettingsSection" aria-controls="runsSettingsSection">Runs</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabDisplay"
+              data-settings-tab="displaySettingsSection" aria-controls="displaySettingsSection">Display</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabConnections"
+              data-settings-tab="connectionsSettingsSection" aria-controls="connectionsSettingsSection">Connections</button>
+            <!-- Nur fuer eingeloggte Konten; firebase.js gibt den Reiter frei. -->
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabAccount"
+              data-settings-tab="accountSettingsSection" aria-controls="accountSettingsSection" hidden>Account</button>
+          </div>
+
+          <div class="settings-body">
+          <section id="memorySettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
-              <h3 id="settingsExperienceTitle">Experience</h3>
-              <p>Appearance and how model runs are presented.</p>
+              <h3 id="settingsMemoryTitle">Memory</h3>
+              <p>A short profile about you. Every model gets it before your question, so you don't have to
+                repeat yourself.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label for="memoryEnabledSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Use my memory</strong>
+                    <small>Pause it without deleting it.</small>
+                  </span>
+                  <input type="checkbox" id="memoryEnabledSwitch">
+                </label>
+              </div>
+
+              <div class="settings-section settings-memory-fields">
+                <div class="settings-memory-field">
+                  <label class="settings-field-label" for="memoryRoleInput">Who you are</label>
+                  <textarea id="memoryRoleInput" rows="2" maxlength="250" data-memory-field="role"
+                    placeholder="Anaesthetist at a teaching hospital. Comfortable with primary literature."></textarea>
+                  <span class="settings-memory-count" data-memory-count-for="memoryRoleInput"></span>
+                </div>
+
+                <div class="settings-memory-field">
+                  <label class="settings-field-label" for="memoryFocusInput">What you work on</label>
+                  <textarea id="memoryFocusInput" rows="2" maxlength="250" data-memory-field="focus"
+                    placeholder="Clinical checklists. Mostly guideline conflicts across sources."></textarea>
+                  <span class="settings-memory-count" data-memory-count-for="memoryFocusInput"></span>
+                </div>
+
+                <div class="settings-memory-field">
+                  <label class="settings-field-label" for="memoryStyleInput">How you want answers</label>
+                  <textarea id="memoryStyleInput" rows="2" maxlength="250" data-memory-field="style"
+                    placeholder="In German. Conclusion first, then the reasoning. No bullet-point padding."></textarea>
+                  <span class="settings-memory-count" data-memory-count-for="memoryStyleInput"></span>
+                </div>
+
+                <div class="settings-memory-field">
+                  <label class="settings-field-label" for="memoryConstraintsInput">Things that always apply</label>
+                  <textarea id="memoryConstraintsInput" rows="2" maxlength="250" data-memory-field="constraints"
+                    placeholder="Name the uncertainty. Flag anything specific to German law."></textarea>
+                  <span class="settings-memory-count" data-memory-count-for="memoryConstraintsInput"></span>
+                </div>
+
+                <div class="settings-memory-actions">
+                  <button id="saveMemoryBtn" class="save-prompt-btn" type="button">Save memory</button>
+                  <button id="clearMemoryBtn" class="settings-inline-btn" type="button">Clear all</button>
+                  <span id="memoryStatus" class="settings-memory-status" role="status" aria-live="polite"></span>
+                </div>
+              </div>
+            </div>
+
+            <details class="settings-note">
+              <summary>How it works</summary>
+              <p>It shapes <strong>how</strong> you are answered, never <strong>what</strong> is true — where
+                your profile and the evidence disagree, the evidence wins. Nothing is collected
+                automatically; only what you type here is used. It is stored on your account, reaches every
+                device, and is deleted with your account. Watch reruns never use it.</p>
+              <p>Keep it short: a long profile pulls all six models towards the same wording and makes the
+                agreement score look higher than it is. Please leave out health details, beliefs, or other
+                people's personal data.</p>
+            </details>
+          </section>
+
+          <section id="behaviorSettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsBehaviorTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsBehaviorTitle">Model behavior</h3>
+              <p>The shared instruction sent to every selected model. It applies to the question; your memory
+                applies to you.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label class="settings-field-label" for="systemPromptInput">System prompt</label>
+                <p>Customize how the models respond. Leave empty to use the default.</p>
+                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7"></textarea>
+                <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button>
+              </div>
+            </div>
+          </section>
+
+          <section id="runsSettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsRunsTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsRunsTitle">Runs</h3>
+              <p>What happens after the six models answer.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section">
+                <label for="agentModeSwitch" class="custom-checkbox-label settings-switch-row settings-agent-mode-row">
+                  <span>
+                    <strong>Agent Mode</strong>
+                    <small>Build consensus, differences and claims after the model answers. Turn off for six direct answers only.</small>
+                  </span>
+                  <input type="checkbox" id="agentModeSwitch">
+                </label>
+              </div>
+
+              <div class="settings-section">
+                <label for="autoConsensusToggle" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Auto Consensus</strong>
+                    <small>Follows Agent Mode: on for guided runs, off for direct comparisons.</small>
+                  </span>
+                  <input type="checkbox" id="autoConsensusToggle">
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section id="displaySettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsDisplayTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsDisplayTitle">Display</h3>
+              <p>How the app and its results look.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section settings-theme-section">
@@ -1063,38 +1196,25 @@
               </div>
 
               <div class="settings-section">
-                <label for="agentModeSwitch" class="custom-checkbox-label settings-switch-row settings-agent-mode-row">
+                <label for="agreementDisplaySelect" class="settings-switch-row settings-choice-row">
                   <span>
-                    <strong>Agent Mode</strong>
-                    <small>Build consensus, differences and claims after the model answers. Turn off for six direct answers only.</small>
+                    <strong>Agreement score</strong>
+                    <small>How much of the agreement verdict shows below consensus answers. Hidden leaves only the drawers.</small>
                   </span>
-                  <input type="checkbox" id="agentModeSwitch">
-                </label>
-              </div>
-
-              <div class="settings-section">
-                <label for="autoConsensusToggle" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Auto Consensus</strong>
-                    <small>Follows Agent Mode: on for guided runs, off for direct comparisons.</small>
+                  <span class="settings-select">
+                    <select id="agreementDisplaySelect">
+                      <option value="full">Score and summary</option>
+                      <option value="summary">Summary only</option>
+                      <option value="off">Hidden</option>
+                    </select>
                   </span>
-                  <input type="checkbox" id="autoConsensusToggle">
-                </label>
-              </div>
-
-              <div class="settings-section">
-                <label for="showAgreementScoreSwitch" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Show agreement score</strong>
-                    <small>Show the numeric agreement score below consensus answers.</small>
-                  </span>
-                  <input type="checkbox" id="showAgreementScoreSwitch" checked>
                 </label>
               </div>
             </div>
           </section>
 
-          <section class="settings-category" aria-labelledby="settingsConnectionsTitle">
+          <section id="connectionsSettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsConnectionsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsConnectionsTitle">Connections</h3>
               <p>Run on my quota, or use your own provider keys and pay your own bill.</p>
@@ -1157,22 +1277,8 @@
             </div>
           </section>
 
-          <section class="settings-category" aria-labelledby="settingsBehaviorTitle">
-            <div class="settings-category-heading">
-              <h3 id="settingsBehaviorTitle">Model behavior</h3>
-              <p>Set the shared instruction sent to every selected model.</p>
-            </div>
-            <div class="settings-group">
-              <div class="settings-section">
-                <label class="settings-field-label" for="systemPromptInput">System prompt</label>
-                <p>Customize how the models respond. Leave empty to use the default.</p>
-                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7"></textarea>
-                <button id="saveSystemPromptBtn" class="save-prompt-btn">Save System Prompt</button>
-              </div>
-            </div>
-          </section>
-
-          <section id="accountSettingsSection" class="settings-category u-display-none" aria-labelledby="settingsAccountTitle">
+          <section id="accountSettingsSection" class="settings-category" role="tabpanel"
+            aria-labelledby="settingsAccountTitle">
             <div class="settings-category-heading">
               <h3 id="settingsAccountTitle">Account</h3>
               <p>Manage permanent account actions.</p>
@@ -1188,9 +1294,13 @@
             </div>
           </section>
 
-          <div class="settings-version">
-            v1.11.1
           </div>
+        </div>
+
+        <!-- Die Version gehoert zum Fenster, nicht zu einer Kategorie: im Body
+             stuende sie unter jedem einzelnen Panel. -->
+        <div class="settings-footer">
+          <span class="settings-version">v1.11.1</span>
         </div>
       </div>
 

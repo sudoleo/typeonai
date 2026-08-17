@@ -83,7 +83,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien und eine abstrahierte Route erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` (das selbst geschriebene User-Memory-Profil, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Sämtliche Save-Payloads sind strikt typisiert und größen-/feldbegrenzt; Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Persistenz-/Rate-Limitfehler zeigt der Browser dedupliziert als verständliche Meldung statt nur in der Konsole. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -351,14 +351,62 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Gutters die Contentbreite und halten den Input in der Viewport-Mitte; mobil
   bleibt außerhalb der Sidebar nur der Burger sichtbar. Gast-Login/-Sign-up
   sitzt oben rechts, während der Sidebar-Footer nur für eingeloggte Accounts
-  das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind in
-  Experience, Connections, Model behavior und Account gruppiert; die
-  bestehenden Control-IDs bleiben der JavaScript-Vertrag.
-  Die Experience-Einstellung `#showAgreementScoreSwitch` speichert ihre
-  browserlokale Wahl unter `consensio.showAgreementScore.v1`; bei deaktivierter
-  Anzeige blendet die Body-Klasse `.agreement-score-hidden` nur den numerischen
-  Agreement-Score in Live- und archivierten Consensus-Füßen aus. Qualitative
-  Einordnung und Widerspruchshinweise bleiben sichtbar.
+  das Avatar-Menü mit deckender Light-/Dark-Fläche zeigt. Settings sind seit
+  2026-08-17 **Reiter statt einer langen Bahn**: `.settings-layout` trägt links
+  die Liste `.settings-nav` (ab 640px eine 168px-Spalte, darunter eine
+  waagerecht scrollende Leiste über dem Panel) und rechts `.settings-body` mit
+  genau EINEM sichtbaren `.settings-category[role=tabpanel]`. Sechs
+  aufgeklappte Kategorien untereinander waren beim Öffnen eine Wand — man
+  musste scrollen, um überhaupt zu wissen, was es gibt.
+  Reihenfolge: **Memory, Model behavior, Runs, Display, Connections, Account**
+  (vorher: Experience, Connections, Model behavior, Account) — sie erzählt „was
+  die Modelle über dich wissen → was du ihnen sagst → wie ein Lauf abläuft →
+  wie das Ergebnis aussieht → Technik → Konto". Die bestehenden Control-IDs
+  bleiben der JavaScript-Vertrag; nur die frühere Sammelkategorie Experience
+  ist in Runs (`#agentModeSwitch`, `#autoConsensusToggle`) und Display (Theme,
+  `#agreementDisplaySelect`) aufgeteilt.
+  Die Reiter tragen die Sprache der Sidebar-Listen: flache Zeile, transparent
+  im Ruhezustand, 32 px hoch, Hover und Auswahl sind ein Tint. **`.settings-nav-item`
+  muss in der `button:not(...)`-Kette in `components-input.css` stehen** —
+  ohne den Ausschluss bekommen die Reiter die gefüllte Button-Fläche samt
+  10/16-Polsterung und sehen aus wie sechs Aktionsknöpfe statt wie eine
+  Navigation (dieselbe Falle wie beim Watch-Nudge-Schließknopf). Die Tints
+  werden aus `--text-color` gemischt, **nicht** aus der Oberflächenskala: im
+  Dark Mode ist `--raise` exakt der Modalhintergrund, ein Hover darauf wäre
+  unsichtbar.
+  Der Controller sitzt in `app-ui.js` (`window.App.settingsTabs`), folgt dem
+  WAI-ARIA-Tabs-Muster (genau ein Reiter in der Tab-Reihenfolge, Pfeiltasten +
+  Home/End dazwischen) und öffnet **immer auf dem ersten Reiter** — der zuletzt
+  benutzte wäre clever, aber man findet Einstellungen über einen festen Ort.
+  **Die Panel-Sichtbarkeit gehört ausschließlich diesem Controller.**
+  `firebase.js` hat früher `style.display` direkt auf `#accountSettingsSection`
+  gesetzt; ein Inline-Style hätte den Controller übersteuert. Es ruft jetzt
+  `setTabAvailable("accountSettingsSection", …)` und schaltet damit nur den
+  REITER frei. Verschwindet der aktive Reiter (Logout bei offenem Account-Tab),
+  fällt die Auswahl auf den ersten verfügbaren zurück statt ein leeres Panel zu
+  zeigen. Die Version steht in `.settings-footer` am Fenster, nicht im Body —
+  dort stünde sie unter jedem einzelnen Panel.
+  Die Display-Einstellung `#agreementDisplaySelect` speichert ihre
+  browserlokale Wahl unter `consensio.agreementDisplay.v1` und kennt drei
+  Stufen: `full` (Standard), `summary` — die Body-Klasse
+  `.agreement-score-hidden` nimmt nur die Zahl samt Messbalken, qualitative
+  Einordnung und Widerspruchshinweise bleiben sichtbar — und `off`, wo
+  `.agreement-verdict-hidden` den ganzen Urteilsbereich in Live- und
+  archivierten Consensus-Füßen entfernt, samt Haarlinie darüber; unter der
+  Antwort bleiben dann nur die Schubladen (Differences / Answers / Sources).
+  In dieser Stufe wird der Live-Fuß ab 641px zu einem `flex-wrap`-Streifen
+  (Schubladen `order:1`, Lauf-Fakten `order:2`, Share/Watch/Cite `order:3`),
+  damit die Schubladen neben die Aktionen rücken statt eine Zeile tiefer unter
+  eine halbleere zu wandern. Bewusst kein drittes Grid-Raster mit fester
+  Media-Query: ob die drei nebeneinander passen, hängt an der Zahl der Chips
+  und der Länge der Lauf-Fakten — passt es nicht, bricht die Aktionsgruppe von
+  selbst um. Die Fakten-Hülle bekommt `flex: 0 1 auto` und wird per `:has()`
+  ausgeblendet, wenn sie weder Fakten noch ein sichtbares „Run again" trägt;
+  mit `flex-grow` bzw. als leere Hülle hat sie die Aktionen sonst grundlos in
+  den Umbruch gedrängt. Das Handy behält sein gestapeltes Raster.
+  Der Vorgängerschlüssel `consensio.showAgreementScore.v1` wird weiter gelesen
+  (`false` = `summary`) und mitgeschrieben, damit ein Rollback dieselbe Wahl
+  sieht.
   Die Usage-Gruppe zeigt zusätzlich das aktive Watch-Kontingent aus
   `/api/my/watches`. Es wird nichts verkauft: Gesperrte Features öffnen einen
   reinen Erklärdialog („Warum ist das aus?“ → dieser Lauf kostet ein Vielfaches,
@@ -366,6 +414,57 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Zugangs-Request oder Browser-Alert. Formel ist „nothing to buy **today**“ plus
   offener Hinweis auf eine mögliche spätere Mitgliedschaft — nie „es gibt nichts
   zu kaufen“. Der Sidebar-Link heißt „Why limits?“ und öffnet denselben Dialog.
+- **User Memory (`user-memory.js` + `app/services/user_memory.py`, seit 2026-08-17)** —
+  ein **selbst geschriebenes** Profil (`role`, `focus`, `style`, `constraints`
+  plus Schalter `enabled`), das jedem `/ask_*` vorangeht. Erster Reiter der
+  Einstellungen (`#memorySettingsSection`) — Prominenz kommt aus der Position,
+  nicht aus Sondergestaltung; das Panel hat keine eigene Optik mehr.
+  Im Panel steht nur eine Zeile Erklärung, der Schalter, die vier Felder und
+  die Aktionen; die vollständige Begründung liegt zugeklappt in
+  `<details class="settings-note">` („How it works"). Die erste Fassung hatte
+  Absatz + vier Aufzählungspunkte vor den Eingabefeldern — eine Textwand vor
+  dem eigentlichen Formular. Die Zeichenzähler erscheinen erst ab 80 % der
+  Feldgrenze (`data-near`), vier dauerhafte „0/250" wären vier Zahlen ohne
+  Aussage. Bewusst **ohne** Ableitung aus
+  Antworten: der Autor ist eindeutig, es kostet keinen LLM-Call und es kann
+  nichts halluzinieren — ein destilliertes Profil wäre Profilbildung mit eigener
+  Rechtsgrundlage und ist eine spätere Stufe.
+  Drei Grenzen sind Vertrag, nicht Sparmaßnahme:
+  1. **Deckel** 250 Zeichen je Feld, 800 Zeichen gerenderter Inhalt. Der Text
+     geht allen sechs Modellen **identisch** voran und ist damit ein gemeinsamer
+     Bias: je mehr davon, desto ähnlicher die Antworten und desto höher der
+     Agreement-Score, ohne dass die Modelle sich einiger wären. Dieselbe
+     Überlegung hat `differences_data` aus dem Chat-Kontext entfernt (§
+     `chat_context.py`).
+  2. **Form statt Inhalt.** Der Rahmen (`ABOUT THE USER … END OF USER PROFILE.`)
+     sagt ausdrücklich, dass das Profil beeinflusst, WIE geantwortet wird, nie
+     WAS wahr ist: „the question and the evidence win".
+  3. **Nur im interaktiven Lauf.** Injiziert wird ausschließlich in `handle_ask`
+     (wie der Follow-up-Kontext). Watch-Reruns, Publisher- und Topic-Läufe rufen
+     `engines.py` direkt und sehen das Profil nie — eine Watch-Baseline muss mit
+     der Welt driften, nicht mit dem Profil ihres Besitzers. Judge/Differences
+     und Share-Snapshots bekommen es ebenfalls nicht.
+  Reihenfolge im Prompt: Basisanweisung → Profil → darum herum der Chat-Kontext
+  (`build_chat_context_system_prompt` legt Kontext nach vorn, Anweisung nach
+  hinten). Das Profil steht damit bei der stehenden Anweisung, nicht im
+  Datenteil. `use_memory: false` im Request überspringt es für genau einen Lauf.
+  Speicher: `users/{uid}/memory/profile`, Write transaktional hinter
+  `persistence_guard`, Löschung über `_delete_user_subcollections` (die
+  Subcollection `memory` steht dort — fehlt sie, überlebt das Profil das
+  gelöschte Konto). `sanitize_profile` ebnet Whitespace ein, kappt je Feld und
+  entfernt Prompt-Rahmenmarken (sonst könnte ein Feld den Chat-Kontext-Rahmen
+  vorzeitig schließen). `load_profile_text` ist fail-open: ein nicht lesbares
+  Profil loggt und lässt den Lauf ohne Profil weiterlaufen.
+  Endpunkte `GET`/`PUT /api/my/memory` (users.py). Der Schalter speichert immer
+  den zuletzt **gespeicherten** Textstand und lässt den Entwurf in den Feldern
+  unberührt — sonst committet oder verwirft ein Klick nebenbei einen halb
+  getippten Satz. Kein `localStorage`-Spiegel: das Profil lebt am Konto.
+  Gelesen wird **erst beim Öffnen der Einstellungen**, nicht beim Login:
+  `consensio:auth-state` feuert bei jedem Seitenaufruf eines eingeloggten
+  Kontos und verwirft dort nur den gemerkten Stand (nachgeladen wird sofort,
+  wenn das Fenster gerade offen steht — sonst zeigte es das Profil des vorigen
+  Kontos). Sonst hinge an jedem Seitenaufruf ein Firestore-Read für ein Panel,
+  das die meisten nie öffnen.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
@@ -821,6 +920,20 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   nicht nur beim neuesten Turn Claim-Support zeigt. „View answer“ öffnet dort
   die Answers-Schublade genau dieses archivierten Turns statt der globalen
   Modellbox des neuesten Turns.
+  Dasselbe gilt seit 2026-08-17 für die Differences-Schublade: `buildDifference
+  Cards(container, …)` baut die Karten in einen beliebigen Container, und
+  `window.renderStoredDifferenceCards(container, differences_data, {modelLabel})`
+  gibt einem archivierten Turn die gleiche Darstellung wie dem Live-Lauf.
+  Vorher fiel jeder Turn beim Rutschen in den Verlauf auf den Judge-Freitext
+  zurück — inklusive dessen `BestModel:`-Zeile (User-Befund 2026-08-17).
+  Die Archivfassung ist statisch: keine `.diff-jump-link`s (sie zeigten auf die
+  Antwortboxen des NEUESTEN Laufs) und kein Resolve-Knopf (eine Resolve-Runde
+  läuft gegen die Modelle des aktiven Laufs), ein persistiertes
+  `diff.resolution` bleibt als Ergebnis sichtbar. Die Modellnamen kommen über
+  `storedModelLabeller(turnData.model_answers)` aus dem Turn selbst statt aus
+  den Live-Boxen. Turns ohne `differences_data.differences` (alte Bookmarks)
+  behalten den Freitext-Fallback, jetzt mit Credibility-Badge und ohne die
+  `BestModel:`-Zeile (`stripBestModelLine`).
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
   der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
@@ -2646,7 +2759,7 @@ ersten Check statt eines leeren Consensus-Panels.
 - **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
   `dataset.responseState`, `.excluded`-Klassen sowie die session-lokalen
   `.agent-mode-show-answers`-, `.direct-comparison-active`- und die persistente
-  `.agreement-score-hidden`-Body-Klasse
+  `.agreement-score-hidden`-/`.agreement-verdict-hidden`-Body-Klassen
   u. a. sind echte State-Quellen.
   Vorsicht beim Umbauen von Markup. Alte, nicht vorhandene Control-IDs
   `#consensusButton`, `#toggleAllButton` und `#apiTestArea` sind kein Vertrag mehr.
