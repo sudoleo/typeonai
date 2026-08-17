@@ -26,6 +26,7 @@ from app.core.rate_limit import limiter
 from app.services import user_memory
 from app.services.user_memory import (
     FirestoreUserMemoryRepository,
+    build_interactive_memory_boundary_prompt,
     build_user_memory_system_prompt,
     empty_profile,
     load_profile_text,
@@ -136,6 +137,13 @@ def test_memory_is_appended_to_the_instruction_not_prepended():
     assert combined == "BASE\n\nMEMORY"
     assert build_user_memory_system_prompt("BASE", "") == "BASE"
     assert build_user_memory_system_prompt("", "MEMORY") == "MEMORY"
+
+
+def test_interactive_memory_boundary_forbids_false_persistence_claims_once():
+    combined = build_interactive_memory_boundary_prompt("BASE")
+    assert combined.startswith("BASE\n\nPersistent Memory")
+    assert "Never say or imply that you saved, changed, or will remember" in combined
+    assert build_interactive_memory_boundary_prompt(combined) == combined
 
 
 # --- Repository ------------------------------------------------------------
@@ -283,6 +291,7 @@ def memory_api(monkeypatch):
     stub = StubRepository()
     monkeypatch.setattr(users_router, "user_memory_repository", stub)
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kw: UID)
+    monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(users_router.router)
@@ -380,7 +389,8 @@ def test_profile_reaches_the_provider_behind_the_base_instruction(monkeypatch):
     assert "Who they are: Anaesthetist" in prompt
     # Die Basisanweisung steht davor, das Profil dahinter.
     assert prompt.index("Please answer thoroughly") < prompt.index("ABOUT THE USER")
-    assert prompt.endswith("END OF USER PROFILE.")
+    assert prompt.index("END OF USER PROFILE.") < prompt.index("Persistent Memory")
+    assert prompt.endswith("for future requests.")
 
 
 def test_long_manual_note_reaches_the_provider_verbatim(monkeypatch):
@@ -399,10 +409,13 @@ def test_a_client_system_prompt_keeps_precedence_and_still_gets_the_profile(monk
     assert "Who they are: Anaesthetist" in prompt
 
 
-def test_paused_or_empty_profile_leaves_the_prompt_untouched(monkeypatch):
-    assert "ABOUT THE USER" not in (run_ask(monkeypatch, {}) or "")
+def test_paused_or_empty_profile_still_gets_the_non_persistence_boundary(monkeypatch):
+    empty = run_ask(monkeypatch, {}) or ""
+    assert "ABOUT THE USER" not in empty
+    assert "Persistent Memory is managed only" in empty
     paused = run_ask(monkeypatch, {"role": "Anaesthetist", "enabled": False})
     assert "ABOUT THE USER" not in (paused or "")
+    assert "Persistent Memory is managed only" in paused
 
 
 def test_conversation_context_wraps_around_the_profile(monkeypatch):
@@ -420,12 +433,13 @@ def test_conversation_context_wraps_around_the_profile(monkeypatch):
         },
     )
     assert prompt.index("Previous question") < prompt.index("ABOUT THE USER")
-    assert prompt.endswith("END OF USER PROFILE.")
+    assert prompt.index("END OF USER PROFILE.") < prompt.index("Persistent Memory")
 
 
 def test_use_memory_false_skips_the_profile_for_a_single_run(monkeypatch):
     prompt = run_ask(monkeypatch, {"role": "Anaesthetist"}, {"use_memory": False})
     assert "ABOUT THE USER" not in prompt
+    assert "Never say or imply that you saved, changed, or will remember" in prompt
 
 
 def test_anonymous_runs_never_read_a_profile(monkeypatch):

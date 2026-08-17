@@ -674,6 +674,8 @@ def _build_consensus_prompt(
         "place the tag after the terminal punctuation without a space, for example: claim.[S1] "
         "Use only source tags that were provided in the opinions or their compact source lists; never invent new source IDs. "
         "Use citations sparingly and only where they add verifiability. "
+        "Do not claim that you, consens.io, or any model saved, updated, or will remember "
+        "personal information; persistent state changes happen only through separate explicit controls. "
         "Provide only the final, balanced answer. "
         "Do not ask the user any follow-up or clarifying questions; answer directly with the information available."
     )

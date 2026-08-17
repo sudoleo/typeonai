@@ -223,7 +223,10 @@ def test_ask_with_context_version_loads_authoritative_context_without_compressin
 
     assert response.status_code == 200
     assert "decision=PostgreSQL" in captured["system_prompt"]
-    assert captured["system_prompt"].endswith("BASE PROMPT")
+    assert captured["system_prompt"].index("BASE PROMPT") < captured["system_prompt"].index(
+        "Persistent Memory is managed only"
+    )
+    assert captured["system_prompt"].endswith("for future requests.")
     assert FOLLOWUP_CONTEXT_HEADER not in captured["system_prompt"]
 
 
@@ -271,7 +274,7 @@ def test_ask_rejects_oversized_context_before_provider_call():
         pass
 
 
-def test_ask_without_context_leaves_system_prompt_untouched():
+def test_ask_without_context_only_adds_the_memory_write_boundary():
     client = make_client()
     uid = "uid-followup-none"
     captured = {}
@@ -293,7 +296,10 @@ def test_ask_without_context_leaves_system_prompt_untouched():
                 },
             )
         assert response.status_code == 200
-        assert captured["system_prompt"] == "BASE PROMPT"
+        assert captured["system_prompt"].startswith("BASE PROMPT\n\nPersistent Memory")
+        assert "Never say or imply that you saved, changed, or will remember" in captured[
+            "system_prompt"
+        ]
     finally:
         pass
 

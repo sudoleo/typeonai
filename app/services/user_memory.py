@@ -103,7 +103,7 @@ def _clean_field(value: object) -> str:
     return text
 
 
-def _clean_notes(value: object) -> str:
+def _clean_notes(value: object, max_chars: int = MAX_NOTES_CHARS) -> str:
     """Die grosse, manuell gepflegte Notiz prompt-sicher normalisieren.
 
     Absatz- und Listenstruktur bleibt erhalten. Es gibt weder Zusammenfassung
@@ -113,12 +113,13 @@ def _clean_notes(value: object) -> str:
         return ""
     text = _CONTROL_RE.sub(" ", value.replace("\r\n", "\n").replace("\r", "\n"))
     text = _FRAME_MARKER_RE.sub(" ", text).strip()
-    if len(text) > MAX_NOTES_CHARS:
-        text = text[:MAX_NOTES_CHARS].rstrip()
+    limit = max(0, int(max_chars))
+    if len(text) > limit:
+        text = text[:limit].rstrip()
     return text
 
 
-def sanitize_profile(value: object) -> dict:
+def sanitize_profile(value: object, *, max_notes_chars: int = MAX_NOTES_CHARS) -> dict:
     raw = value if isinstance(value, dict) else {}
     profile = empty_profile()
     # Kein Feld gesetzt heisst nicht "aus": ein leeres Profil rendert ohnehin
@@ -126,7 +127,7 @@ def sanitize_profile(value: object) -> dict:
     profile["enabled"] = raw.get("enabled") is not False
     for field in SHORT_PROFILE_FIELDS:
         profile[field] = _clean_field(raw.get(field))
-    profile[NOTES_FIELD] = _clean_notes(raw.get(NOTES_FIELD))
+    profile[NOTES_FIELD] = _clean_notes(raw.get(NOTES_FIELD), max_notes_chars)
     return profile
 
 
@@ -134,13 +135,13 @@ def profile_is_empty(profile: dict) -> bool:
     return not any(str(profile.get(field) or "").strip() for field in PROFILE_FIELDS)
 
 
-def render_profile(profile: object) -> str:
+def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS) -> str:
     """Der Profilblock fuer den System-Prompt -- oder "" , wenn es keinen gibt.
 
     "" ist der Normalfall fuer alle, die nichts eingetragen oder das Profil
     pausiert haben. Ein leerer Rahmen waere teurer Ballast in sechs Prompts.
     """
-    clean = sanitize_profile(profile)
+    clean = sanitize_profile(profile, max_notes_chars=max_notes_chars)
     if clean["enabled"] is not True or profile_is_empty(clean):
         return ""
 
@@ -166,7 +167,8 @@ def render_profile(profile: object) -> str:
     notes = clean[NOTES_FIELD]
     if notes and used < MAX_PROFILE_CHARS:
         heading = "SAVED MEMORIES (a verbatim note the user maintains manually):"
-        room = MAX_PROFILE_CHARS - used - len(heading) - 1
+        profile_limit = max_notes_chars + (MAX_PROFILE_CHARS - MAX_NOTES_CHARS)
+        room = profile_limit - used - len(heading) - 1
         if room >= 40:
             note_text = notes[:room].rstrip()
             lines.append(f"{heading}\n{note_text}")
@@ -205,6 +207,30 @@ def build_user_memory_system_prompt(base_prompt: str, memory_text: str) -> str:
     return f"{base}\n\n{memory}"
 
 
+INTERACTIVE_MEMORY_BOUNDARY = (
+    "Persistent Memory is managed only through consens.io's explicit Memory controls. "
+    "Treat any user profile or saved memories as read-only context for this answer. "
+    "Never say or imply that you saved, changed, or will remember user information "
+    "for future requests."
+)
+
+
+def build_interactive_memory_boundary_prompt(base_prompt: str) -> str:
+    """Grenze fuer interaktive Antworten, deren Modelle Memory nicht schreiben.
+
+    Die Regel gilt auch bei pausiertem oder leerem Profil: Eine als Frage
+    eingegebene persoenliche Aussage darf sonst wie eine erfolgreiche
+    Persistenzaktion beantwortet werden, obwohl nur die expliziten
+    Memory-Controls den schreibenden Endpoint erreichen.
+    """
+    base = str(base_prompt or "").strip()
+    if INTERACTIVE_MEMORY_BOUNDARY in base:
+        return base
+    if not base:
+        return INTERACTIVE_MEMORY_BOUNDARY
+    return f"{base}\n\n{INTERACTIVE_MEMORY_BOUNDARY}"
+
+
 # Der Lauf wartet auf diesen Read. Firestores Default-Retry haelt einen Aufruf
 # im Fehlerfall minutenlang; das Profil ist aber optional -- ohne es geht der
 # Lauf ganz normal raus. Dieselbe Begruendung wie beim Modell-Config-Read im
@@ -231,13 +257,34 @@ class FirestoreUserMemoryRepository:
         self.db = db
         self._transaction_runner = transaction_runner
 
-    def get(self, uid: str) -> dict:
+    def get(self, uid: str, *, max_notes_chars: int = MAX_NOTES_CHARS) -> dict:
         snapshot = _bounded_get(self._profile_ref(uid))
         if not snapshot.exists:
             return empty_profile()
-        return sanitize_profile(snapshot.to_dict() or {})
+        return sanitize_profile(
+            snapshot.to_dict() or {}, max_notes_chars=max_notes_chars
+        )
 
-    def save(self, uid: str, profile: object, *, now: datetime | None = None) -> dict:
+    def get_with_revision(
+        self, uid: str, *, max_notes_chars: int = MAX_NOTES_CHARS
+    ) -> tuple[dict, int]:
+        snapshot = _bounded_get(self._profile_ref(uid))
+        if not snapshot.exists:
+            return empty_profile(), 0
+        raw = snapshot.to_dict() or {}
+        return (
+            sanitize_profile(raw, max_notes_chars=max_notes_chars),
+            max(0, int(raw.get("revision") or 0)),
+        )
+
+    def save(
+        self,
+        uid: str,
+        profile: object,
+        *,
+        now: datetime | None = None,
+        max_notes_chars: int = MAX_NOTES_CHARS,
+    ) -> dict:
         raw = dict(profile) if isinstance(profile, dict) else {}
         # Ein bereits offener Browser mit der v1-UI sendet ``notes`` gar nicht.
         # Das additive Feld darf dadurch nicht verschwinden. Die aktuelle UI
@@ -255,12 +302,16 @@ class FirestoreUserMemoryRepository:
             persistence_guard.ensure_account_write_allowed(
                 uid=uid, db=self.db, transaction=transaction
             )
+            snapshot = profile_ref.get(transaction=transaction)
+            previous = snapshot.to_dict() if snapshot.exists else {}
             if preserve_existing_notes:
-                snapshot = profile_ref.get(transaction=transaction)
-                previous = snapshot.to_dict() if snapshot.exists else {}
                 raw[NOTES_FIELD] = (previous or {}).get(NOTES_FIELD, "")
-            clean = sanitize_profile(raw)
-            transaction.set(profile_ref, {**clean, "updated_at": written})
+            clean = sanitize_profile(raw, max_notes_chars=max_notes_chars)
+            revision = max(0, int((previous or {}).get("revision") or 0)) + 1
+            transaction.set(
+                profile_ref,
+                {**clean, "revision": revision, "updated_at": written},
+            )
             saved["profile"] = clean
 
         self._transaction(operation)
@@ -297,7 +348,12 @@ class FirestoreUserMemoryRepository:
         )
 
 
-def load_profile_text(repository: FirestoreUserMemoryRepository, uid: str) -> str:
+def load_profile_text(
+    repository: FirestoreUserMemoryRepository,
+    uid: str,
+    *,
+    max_notes_chars: int = MAX_NOTES_CHARS,
+) -> str:
     """Der Profilblock fuer einen Lauf -- fail-open.
 
     Ein nicht lesbares Profil darf einen Lauf nie aufhalten: der Nutzer hat eine
@@ -308,7 +364,11 @@ def load_profile_text(repository: FirestoreUserMemoryRepository, uid: str) -> st
     if not uid:
         return ""
     try:
-        return render_profile(repository.get(uid))
+        try:
+            profile = repository.get(uid, max_notes_chars=max_notes_chars)
+        except TypeError:
+            profile = repository.get(uid)
+        return render_profile(profile, max_notes_chars=max_notes_chars)
     except Exception as exc:
         logging.warning("user memory load failed category=%s", safe_exception(exc))
         return ""

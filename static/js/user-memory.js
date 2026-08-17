@@ -82,7 +82,14 @@
       error.status = response.status;
       throw error;
     }
-    return data.memory || emptyProfile();
+    return data;
+  }
+
+  function applyLimits(limits) {
+    const notes = document.getElementById("memoryNotesInput");
+    const max = Number(limits?.notes_chars);
+    if (notes && Number.isFinite(max) && max > 0) notes.maxLength = max;
+    updateCounts();
   }
 
   function readForm() {
@@ -165,7 +172,9 @@
     setStatus("Loading…", "muted");
     syncControls();
     try {
-      const profile = await api("GET");
+      const result = await api("GET");
+      const profile = result.memory || emptyProfile();
+      applyLimits(result.limits);
       state.saved = profile;
       state.uid = user.uid;
       state.loaded = true;
@@ -184,7 +193,9 @@
     state.saving = true;
     syncControls();
     try {
-      const saved = await api("PUT", profile);
+      const result = await api("PUT", profile);
+      const saved = result.memory || emptyProfile();
+      applyLimits(result.limits);
       state.saved = saved;
       state.loaded = true;
       if (rewriteFields) {

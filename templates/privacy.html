@@ -65,7 +65,13 @@
             manually maintained memory note. It is stored on
             your account in Google Cloud Firestore and is added to the instruction sent to every model you select for a
             run, so those model providers receive it with each question. Nothing is derived, summarized, or rewritten automatically from your
-            questions or from model answers &mdash; only the text you type in that section is stored and used. You can
+            questions or from model answers. If you explicitly select a statement in an interactive question, Consensus, or model answer and submit
+            a &ldquo;Remember&rdquo; or &ldquo;Correct memory&rdquo; action, we send the current Memory (up to your plan limit), the selected statement,
+            your text, and the selected add-or-correct intent to the configured OpenAI model. It may return only one structured replace, append, or delete proposal;
+            our server validates and applies it. A Remember action may append or replace one uniquely matching passage but cannot delete one.
+            We store an idempotency record, persistent usage counters, and the previous Memory revision
+            for the short Undo window. These records and revisions are never used for Watch, Publisher, or Topic runs and are deleted with your account.
+            Only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
             edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled
             Watch reruns and published pages never include it. Please do not enter special-category data (for example
             health, beliefs, or political opinions) or other people&rsquo;s personal data.</li>

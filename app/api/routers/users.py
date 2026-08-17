@@ -1,5 +1,5 @@
 import logging
-from typing import Optional
+from typing import Literal, Optional
 from firebase_admin import auth, firestore
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import JSONResponse
@@ -23,13 +23,15 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import persistence_guard, user_memory
+from app.services import memory_edit, persistence_guard, user_memory
 from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
 run_usage_repository = FirestoreUsageRepository(db_firestore)
 account_deletion = FirestoreAccountDeletion(db_firestore)
 user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
+memory_edit_repository = memory_edit.FirestoreMemoryEditRepository(db_firestore)
+memory_edit_service = memory_edit.MemoryEditService(memory_edit_repository)
 
 
 class UsageRequest(BaseModel):
@@ -175,7 +177,25 @@ class UserMemoryRequest(BaseModel):
     constraints: str = Field(default="", max_length=1000)
     # ``None`` unterscheidet alte Browser, die das additive Feld noch nicht
     # kennen, von einem bewussten Leeren durch die aktuelle UI (``""``).
-    notes: Optional[str] = Field(default=None, max_length=16_000)
+    notes: Optional[str] = Field(default=None, max_length=30_000)
+
+
+class UserMemoryEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    client_request_id: str = Field(min_length=8, max_length=128)
+    source_kind: str = Field(min_length=1, max_length=32)
+    selected_text: str = Field(min_length=1, max_length=memory_edit.MAX_SOURCE_CHARS)
+    intent: Literal["add", "correct"] = "correct"
+    # Das autoritative Limit kommt aus der Admin-Konfiguration; der groessere
+    # Pydantic-Cap verhindert nur unbeschraenkte Request-Bodies.
+    correction: str = Field(min_length=1, max_length=2_000)
+
+
+class UserMemoryUndoRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    revision_id: str = Field(pattern=r"^[0-9a-f]{32}$")
 
 
 def _memory_uid(request: Request) -> str:
@@ -188,14 +208,27 @@ def _memory_uid(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Authentication failed") from None
 
 
-def _memory_response(profile: dict) -> dict:
+def _memory_tier(uid: str) -> bool:
+    try:
+        return is_user_pro(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503,
+            detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
+
+
+def _memory_response(profile: dict, *, is_pro: bool) -> dict:
+    notes_limit = cfg.get_memory_char_limit(is_pro)
     return {
         "status": "success",
         "memory": profile,
         "limits": {
             "field_chars": user_memory.MAX_FIELD_CHARS,
-            "notes_chars": user_memory.MAX_NOTES_CHARS,
-            "profile_chars": user_memory.MAX_PROFILE_CHARS,
+            "notes_chars": notes_limit,
+            "profile_chars": notes_limit + (
+                user_memory.MAX_PROFILE_CHARS - user_memory.MAX_NOTES_CHARS
+            ),
         },
     }
 
@@ -204,26 +237,105 @@ def _memory_response(profile: dict) -> dict:
 @limiter.limit("30/minute")
 def get_user_memory(request: Request):
     uid = _memory_uid(request)
+    is_pro = _memory_tier(uid)
     try:
-        profile = user_memory_repository.get(uid)
+        try:
+            profile = user_memory_repository.get(
+                uid, max_notes_chars=cfg.get_memory_char_limit(is_pro)
+            )
+        except TypeError:
+            profile = user_memory_repository.get(uid)
     except Exception as exc:
         logging.error("user memory read failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory is temporarily unavailable.") from None
-    return _memory_response(profile)
+    return _memory_response(profile, is_pro=is_pro)
 
 
 @router.put("/api/my/memory")
 @limiter.limit("20/minute")
 def put_user_memory(request: Request, payload: UserMemoryRequest):
     uid = _memory_uid(request)
+    is_pro = _memory_tier(uid)
     try:
-        profile = user_memory_repository.save(uid, payload.model_dump())
+        try:
+            profile = user_memory_repository.save(
+                uid,
+                payload.model_dump(),
+                max_notes_chars=cfg.get_memory_char_limit(is_pro),
+            )
+        except TypeError:
+            profile = user_memory_repository.save(uid, payload.model_dump())
     except persistence_guard.AccountDeletionInProgress:
         raise HTTPException(status_code=403, detail="This account is being deleted.") from None
     except Exception as exc:
         logging.error("user memory write failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
-    return _memory_response(profile)
+    return _memory_response(profile, is_pro=is_pro)
+
+
+_MEMORY_EDIT_HTTP_STATUS = {
+    "disabled": 503,
+    "provider_unavailable": 503,
+    "provider_failed": 502,
+    "invalid_model_patch": 502,
+    "daily_limit": 429,
+    "minute_limit": 429,
+    "global_limit": 429,
+    "edit_in_progress": 409,
+    "idempotency_conflict": 409,
+    "revision_conflict": 409,
+    "undo_expired": 409,
+    "revision_not_found": 404,
+}
+
+
+def _raise_memory_edit_error(exc: memory_edit.MemoryEditError):
+    raise HTTPException(
+        status_code=_MEMORY_EDIT_HTTP_STATUS.get(exc.code, 422),
+        detail={"error_code": exc.code, "message": exc.safe_message},
+    ) from None
+
+
+@router.post("/api/my/memory/edit")
+@limiter.limit("10/minute")
+def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
+    uid = _memory_uid(request)
+    is_pro = _memory_tier(uid)
+    try:
+        result = memory_edit_service.edit(
+            uid,
+            is_pro=is_pro,
+            client_request_id=payload.client_request_id,
+            source_kind=payload.source_kind,
+            selected_text=payload.selected_text,
+            correction=payload.correction,
+            intent=payload.intent,
+            config=cfg.get_memory_edit_config(),
+        )
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except memory_edit.MemoryEditError as exc:
+        _raise_memory_edit_error(exc)
+    if result.get("status") == "reserved":
+        return JSONResponse(status_code=202, content={"status": "processing"})
+    return result
+
+
+@router.post("/api/my/memory/undo")
+@limiter.limit("10/minute")
+def undo_user_memory(request: Request, payload: UserMemoryUndoRequest):
+    uid = _memory_uid(request)
+    is_pro = _memory_tier(uid)
+    try:
+        return memory_edit_repository.undo(
+            uid,
+            payload.revision_id,
+            memory_limit=cfg.get_memory_char_limit(is_pro),
+        )
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except memory_edit.MemoryEditError as exc:
+        _raise_memory_edit_error(exc)
 
 
 @router.post("/delete_account")

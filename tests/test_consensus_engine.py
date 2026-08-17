@@ -95,6 +95,10 @@ class ConsensusFollowUpQuestionTests(unittest.TestCase):
 
 
 class ConsensusPromptAnonymizationTests(unittest.TestCase):
+    def test_prompt_forbids_false_memory_persistence_claims(self):
+        prompt = build_prompt()
+        self.assertIn("persistent state changes happen only through separate explicit controls", prompt)
+
     def test_prompt_contains_no_real_model_names(self):
         prompt = build_prompt()
         for name in REAL_MODEL_NAMES:

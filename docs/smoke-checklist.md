@@ -111,12 +111,24 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## User Memory
 - [ ] Einstellungen → Memory zeigt vier kurze „About you“-Felder und darunter
-      „Saved memories“ als große, vertikal vergrößerbare Textarea mit sichtbarem
-      12.000-Zeichen-Zähler.
+      „Saved memories“ als große, vertikal vergrößerbare Textarea mit sichtbarem,
+      serverseitig geliefertem Free-/Pro-Zeichenlimit.
 - [ ] Eine mehrabsätzige Erinnerungszusammenfassung einfügen, speichern,
       Einstellungen schließen/neu öffnen: Absatz- und Listenstruktur bleiben
       erhalten; nach Neuladen und auf einem zweiten Gerät erscheint derselbe
       Kontostand.
+- [ ] Eine Aussage in Frage, Consensus und einer Modellantwort markieren: jeweils
+      erscheint das kompakte Menü „Remember | Correct memory“. „Remember“ öffnet
+      den vorausgefüllten Dialog: ohne verwandten Eintrag wird genau einmal
+      angehängt; bei einem eindeutigen Widerspruch wird nur die kleinste passende
+      Passage aktualisiert und ein nicht widersprochenes Detail darin bleibt erhalten.
+      „Correct memory“ ändert ohne zweite Bestätigung genau den passenden Eintrag.
+      Beide Ergebnisse zeigen den app-nativen Status-Toast mit „Undo“.
+- [ ] Memory-Aktionsmenü, Dialog, Fokusführung, Escape/Backdrop-Schließen und
+      Undo-Toast in hellem/dunklem Theme sowie auf schmalem Viewport prüfen.
+- [ ] Undo innerhalb des sichtbaren Zeitfensters stellt den vorherigen Inhalt
+      exakt wieder her; nach einer zwischenzeitlichen manuellen Memory-Änderung
+      wird Undo verständlich und ohne Überschreiben abgewiesen.
 - [ ] Mit aktivierter Memory enthält jeder ausgewählte `/ask_*`-Request den
       gespeicherten Text; der Schalter pausiert Kurzprofil und Notiz gemeinsam,
       ohne den Text zu löschen. Watch-Reruns verwenden beides weiterhin nicht.

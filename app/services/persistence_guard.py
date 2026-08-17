@@ -358,6 +358,9 @@ def delete_owner_data(uid: str, *, db) -> None:
     """Remove retry-safe quota state and per-run vote markers on deletion."""
     for kind in ("bookmarks", "feedback"):
         db.collection(USAGE_COLLECTION).document(_owner_key(kind, uid)).delete()
+    # Das persistente AI-Memory-Edit-Budget liegt absichtlich ausserhalb des
+    # User-Dokuments, wird bei der Kontoloeschung aber genauso entfernt.
+    db.collection("memory_edit_usage").document(_hash_uid(uid)).delete()
     owner_hash = _hash_uid(uid)
     try:
         query = db.collection(VOTES_COLLECTION).where(

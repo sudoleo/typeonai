@@ -83,7 +83,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien und eine abstrahierte Route erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
-| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` (das selbst geschriebene User-Memory-Profil, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
+| `users.py` | `/user_status`, `/usage`, `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft, Modellantworten je Turn mit **einer** Query) und kostet damit `2 + N` statt `2 + 8N` Firestore-Reads. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Sämtliche Save-Payloads sind strikt typisiert und größen-/feldbegrenzt; Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern. Persistent gelten höchstens 250 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. `DELETE /bookmark` liest die Chat-Bindung **vor** dem Löschen und räumt den gebundenen Chat per `ChatStore.delete_chat` mit ab — best effort, damit eine fehlgeschlagene Kaskade eine bereits erfolgte Löschung nicht in einen Retry verwandelt. Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Persistenz-/Rate-Limitfehler zeigt der Browser dedupliziert als verständliche Meldung statt nur in der Konsole. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares`, `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}`, `sitemap-shares.xml`. |
 | `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History je Watch und autoritativer Plan-/Active-Limit-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook`; außerdem öffentliche, HMAC-signierte `/watch/unsubscribe`- und `/watch/brief/unsubscribe`-Links. |
@@ -95,7 +95,7 @@ Seine identisch in `scripts/publish_consensus.py` und
 `app/services/publisher_config.py` gehaltenen `Search-opportunity requirements`
 wählen dauerhaft nachgefragte, strittige Fragen und schließen News-Zyklen,
 Memes, Leaks und virale Posts ausdrücklich aus.
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
@@ -414,12 +414,15 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Zugangs-Request oder Browser-Alert. Formel ist „nothing to buy **today**“ plus
   offener Hinweis auf eine mögliche spätere Mitgliedschaft — nie „es gibt nichts
   zu kaufen“. Der Sidebar-Link heißt „Why limits?“ und öffnet denselben Dialog.
-- **User Memory (`user-memory.js` + `app/services/user_memory.py`, seit 2026-08-17)** —
+- **User Memory (`user-memory.js`, `memory-edit.js`, `app/services/user_memory.py`,
+  `app/services/memory_edit.py`, seit 2026-08-17)** —
   ein **selbst geschriebener** Kontext aus Kurzprofil (`role`, `focus`, `style`,
   `constraints`), großer Freitext-Notiz `notes` und Schalter `enabled`, der
-  jedem `/ask_*` vorangeht. Die Notiz ist ausdrücklich eine manuell gepflegte
-  Notebox für importierte Erinnerungszusammenfassungen: kein LLM erzeugt,
-  verdichtet oder verändert sie. Erster Reiter der
+  jedem `/ask_*` vorangeht. Die Notiz ist eine nutzerkontrollierte Notebox für
+  importierte Erinnerungszusammenfassungen: sie ändert sich nur durch das
+  Settings-Formular oder eine explizit abgesendete **Remember**-/
+  **Correct memory**-Aktion.
+  Erster Reiter der
   Einstellungen (`#memorySettingsSection`) — Prominenz kommt aus der Position,
   nicht aus Sondergestaltung; das Panel hat keine eigene Optik mehr.
   Im Panel stehen eine Zeile Erklärung, der Schalter, die vier kurzen
@@ -429,13 +432,17 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Absatz + vier Aufzählungspunkte vor den Eingabefeldern — eine Textwand vor
   dem eigentlichen Formular. Die Zeichenzähler erscheinen erst ab 80 % der
   Feldgrenze (`data-near`), vier dauerhafte „0/250" wären vier Zahlen ohne
-  Aussage. Bewusst **ohne** Ableitung aus
-  Antworten: der Autor ist eindeutig, es kostet keinen LLM-Call und es kann
-  nichts halluzinieren — ein destilliertes Profil wäre Profilbildung mit eigener
-  Rechtsgrundlage und ist eine spätere Stufe.
+  Aussage. Es gibt weiterhin **keine automatische Ableitung** aus Antworten;
+  Remember/Correct memory braucht eine markierte Aussage plus ausdrückliche
+  Nutzereingabe; alternativ speichert der dezente Memory-Button neben
+  **Senden** einen nicht leeren Composer-Entwurf direkt, ohne ihn vorher als
+  Frage an die Antwortmodelle zu schicken. „Remember“ speichert einen Fakt neu oder gleicht genau eine
+  eindeutig verwandte bzw. widersprüchliche Passage ab, „Correct memory“ ist
+  der gezielte Korrekturpfad.
   Drei Grenzen sind Vertrag, nicht Sparmaßnahme:
-  1. **Deckel** 250 Zeichen je Kurzfeld und 12.000 Zeichen für `notes`; der
-     gesamte gerenderte Inhalt bleibt auf 13.200 Zeichen begrenzt. Der Text
+  1. **Deckel** 250 Zeichen je Kurzfeld; `notes` ist serverseitig aus
+     `app_config/models.memory_edit` auf 12.000 (Free) bzw. 24.000 (Pro)
+     begrenzt. Der Text
      geht allen sechs Modellen **identisch** voran und ist damit ein gemeinsamer
      Bias: je mehr davon, desto ähnlicher die Antworten und desto höher der
      Agreement-Score, ohne dass die Modelle sich einiger wären. Dieselbe
@@ -453,6 +460,12 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   (`build_chat_context_system_prompt` legt Kontext nach vorn, Anweisung nach
   hinten). Das Profil steht damit bei der stehenden Anweisung, nicht im
   Datenteil. `use_memory: false` im Request überspringt es für genau einen Lauf.
+  Jeder eingeloggte interaktive `/ask_*`-Lauf erhält außerdem unabhängig vom
+  Profil-Schalter eine kurze Read-only-Grenze: Antwortmodelle dürfen weder
+  behaupten noch andeuten, persönliche Informationen gespeichert, geändert
+  oder für künftige Requests vorgemerkt zu haben. Dieselbe Negativregel steht
+  im Consensus-Prompt. Schreiben kann ausschließlich der explizite
+  Memory-Endpoint; Watch, Publisher und Topics bleiben weiterhin außerhalb.
   Speicher: `users/{uid}/memory/profile` (Schema v2; alte v1-Dokumente ohne
   `notes` bleiben kompatibel), Write transaktional hinter
   `persistence_guard`, Löschung über `_delete_user_subcollections` (die
@@ -472,6 +485,40 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   wenn das Fenster gerade offen steht — sonst zeigte es das Profil des vorigen
   Kontos). Sonst hinge an jedem Seitenaufruf ein Firestore-Read für ein Panel,
   das die meisten nie öffnen.
+  `memory-edit.js` bietet neben dem direkten Composer-Shortcut nach einer Textauswahl nur in aktiver/archivierter
+  Frage, Consensus oder Modellantwort das app-native Kontextmenü **Remember |
+  Correct memory** an. Der Dialog besitzt Quellvorschau, Fokusfalle,
+  Escape-/Backdrop-Schließen, zustandsabhängige Copy und einen gemeinsamen
+  Undo-Toast; mobil erscheint er als Bottom-Sheet. `POST /api/my/memory/edit`
+  akzeptiert `client_request_id`, Quelltyp, markierten Text, `intent=add|correct`
+  und höchstens das konfigurierte Feedback-Limit; die explizite Eingabe ist die
+  Freigabe, es gibt keinen zweiten Bestätigungsschritt. Vor dem Luna-Call
+  reserviert `FirestoreMemoryEditRepository` transaktional UID-/UTC-Tag-,
+  Minuten- und globales UTC-Tagesbudget sowie einen exklusiven In-flight-Lease.
+  Der Provider läuft außerhalb der Transaktion, ohne Retry, mit konfiguriertem
+  Timeout, `reasoning.effort=none`, Output-Cap und strikt strukturiertem
+  `{operation,target,replacement}`. Bei `intent=add` darf Luna entweder einen
+  neuen Eintrag anhängen oder die kleinste eindeutig vorkommende, verwandte
+  bzw. widersprüchliche Passage ersetzen. Der Prompt verpflichtet den Replace,
+  alle nicht widersprochenen Details im Target zu erhalten; `delete` weist der
+  Server in diesem Modus ab. Ohne klaren Bezug wird angehängt. Bei
+  `intent=correct` bleibt der sichere Append-Fallback erlaubt, wenn keine
+  eindeutige Passage existiert.
+  Der Server erlaubt insgesamt nur `replace|append|delete`,
+  genau drei Felder, höchstens eine kurze Passage und bei Replace/Delete genau
+  ein Vorkommen von `target` im aktuellen Memory.
+  Die gepinnte OpenAI-SDK-Version `1.63.2` besitzt noch keine `responses`-
+  Resource; `request_memory_patch` nutzt deshalb kompatibel denselben
+  `/v1/responses`-Endpunkt direkt über `httpx`, weiterhin mit hartem Timeout
+  und ohne Transport-Retry. Neuere SDKs laufen über `client.responses.create`.
+  Commit und Account-Deletion-Fence teilen eine Transaktion; eine geänderte
+  Ausgangsrevision ergibt 409.
+  Requests liegen content-frei gehasht in derselben `memory`-Subcollection,
+  Revisionen enthalten den exakten Vorzustand. `POST /api/my/memory/undo` kann
+  ihn innerhalb 60 Sekunden nur ohne zwischenzeitliche Änderung wiederherstellen.
+  Idempotente Wiederholungen rufen Luna nie erneut auf. Provider-begonnene
+  Fehler bleiben budgetiert. Memory-Inhalte erscheinen weder in Logs noch
+  Metriken/Alerts. Watch, Publisher, Topics, Judge und Shares bleiben außerhalb.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
   exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
@@ -2139,7 +2186,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`, `defaults`,
-  `limits`.
+  `limits` sowie die sichere, einzeln normalisierte `memory_edit`-Konfiguration
+  (Kill-Switch, OpenAI-Modell, Free-/Pro-Zeichen- und Tageslimits, Minuten-/
+  Globallimit, Input-/Output- und Timeout-Caps).
   **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
   `config.py`-Fallbacks beim Startup). Providerlisten und `premium` sind dabei
   autoritativ: der Runtime-Loader ergänzt keine versteckten Pflichtmodelle und
@@ -2189,6 +2238,11 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   weder UID noch E-Mail stehen im Dokumentpfad. `model_votes/{sha256(uid:result)}`
   bindet genau einen Vote an Owner, Pending Result und serverseitigen Gewinner.
   Erst derselbe Firestore-Commit erhöht `leaderboard/{provider}`.
+- `memory_edit_usage/{sha256(uid)}` und `global_usage/memory-edit-YYYY-MM-DD` —
+  persistente per-User-/Minuten-/Tages- und globale Tagesreservierungen samt
+  kurzem In-flight-Lease; keine Memory- oder Feedback-Inhalte. Idempotenz- und
+  Revisionsdokumente liegen unter `users/{uid}/memory` und werden mit dem Konto
+  gelöscht.
 - `follow_challenges/{sha256(scope:resource:email)}` — ausschließlich gehashte
   Double-Opt-in-Challenges mit 15-Minuten-Resendfenster, höchstens fünf Sends
   pro Empfänger/UTC-Tag und global höchstens 500/Stunde; kein E-Mail-Klartext.

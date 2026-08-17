@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260817-longmemory1">
+  <link rel="stylesheet" href="/static/style.css?v=20260817-memoryedit5">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -79,7 +79,8 @@
   <!-- Tier-/Pro-UI (aus index.html ausgelagert) -->
   <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
   <!-- Nutzereigenes Gedaechtnis: Einstellungen laden/speichern gegen /api/my/memory. -->
-  <script src="/static/js/user-memory.js?v=20260817-longmemory1" defer></script>
+  <script src="/static/js/user-memory.js?v=20260817-memoryedit1" defer></script>
+  <script src="/static/js/memory-edit.js?v=20260817-memoryedit5" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
@@ -497,6 +498,12 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
+          <button type="button" id="rememberDraftButton" class="memory-draft-action" title="Save to Memory instead of asking" aria-label="Save this draft to Memory instead of asking the models" hidden>
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M12 3.75a6.25 6.25 0 0 0-3.87 11.16L7.5 19.75l4.5-2.5 4.5 2.5-.63-4.84A6.25 6.25 0 0 0 12 3.75Z"></path>
+              <path d="M9.5 10.5h5M12 8v5"></path>
+            </svg>
+          </button>
           <!-- Ein gefuellter Pfeil im gefuellten Kreis (wie im Mockup): der
                Senden-Knopf ist das einzige massive Element im Composer, also
                traegt er auch ein massives Zeichen statt einer Kontur. -->
@@ -1058,7 +1065,7 @@
             aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
               <h3 id="settingsMemoryTitle">Memory</h3>
-              <p>What every model should remember about you. consens.io never creates or rewrites it.</p>
+              <p>What every model should remember about you. Add new memories or correct outdated ones explicitly.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
@@ -1106,8 +1113,8 @@
 
                 <div class="settings-memory-subheading settings-memory-subheading--notes">
                   <h4>Saved memories</h4>
-                  <p>Paste a longer memory summary or keep your own background note here. It is plain text:
-                    no model creates, summarizes, or edits it.</p>
+                  <p>Paste a longer memory summary or keep your own background note here. It is plain text;
+                    Luna may add or patch one passage only when you explicitly submit a Remember or Correct memory action.</p>
                 </div>
                 <div class="settings-memory-field settings-memory-field--notes">
                   <label class="settings-field-label" for="memoryNotesInput">Memory note</label>
@@ -1131,9 +1138,9 @@
               <summary>How it works</summary>
               <p>It shapes <strong>how</strong> you are answered, never <strong>what</strong> is true — where
                 your profile and the evidence disagree, the evidence wins. Nothing is collected
-                automatically; only what you type here is used. It is stored on your account, reaches every
+                automatically; only what you type here or explicitly submit through Remember or Correct memory is used. It is stored on your account, reaches every
                 device, and is deleted with your account. Watch reruns never use it.</p>
-              <p>The four About you fields are intentionally short. Saved memories allows up to 12,000 characters,
+              <p>The four About you fields are intentionally short. The server applies the current Free or Pro limit to Saved memories,
                 but a long shared note can pull all six models towards the same framing and make the agreement score
                 look higher than it is. Please leave out health details, beliefs, or other people's personal data.</p>
             </details>

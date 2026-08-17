@@ -874,6 +874,81 @@ function renderLimits() {
 
         container.appendChild(section);
     });
+
+    const memory = globalModelsData.memory_edit || {};
+    const section = document.createElement('div');
+    section.className = 'admin-section';
+    const title = document.createElement('h3');
+    title.textContent = 'Edit Memory';
+    section.appendChild(title);
+    const hint = document.createElement('p');
+    hint.className = 'section-hint';
+    hint.textContent = 'Server-authoritative Luna patching, plan limits and persistent cost controls.';
+    section.appendChild(hint);
+
+    const enabledRow = document.createElement('div');
+    enabledRow.className = 'limit-row';
+    const enabledLabel = document.createElement('label');
+    enabledLabel.htmlFor = 'memory-edit-enabled';
+    enabledLabel.textContent = 'Feature enabled';
+    const enabled = document.createElement('input');
+    enabled.type = 'checkbox';
+    enabled.id = 'memory-edit-enabled';
+    enabled.dataset.memoryEditKey = 'memory_edit_enabled';
+    enabled.checked = memory.memory_edit_enabled === true;
+    enabledRow.append(enabledLabel, enabled);
+    section.appendChild(enabledRow);
+
+    const modelRow = document.createElement('div');
+    modelRow.className = 'limit-row';
+    const modelLabel = document.createElement('label');
+    modelLabel.htmlFor = 'memory-edit-model';
+    modelLabel.textContent = 'OpenAI model';
+    const modelSelect = document.createElement('select');
+    modelSelect.id = 'memory-edit-model';
+    modelSelect.dataset.memoryEditKey = 'memory_edit_model';
+    const memoryModels = [...(globalModelsData.openai || [])];
+    if (memory.memory_edit_model && !memoryModels.includes(memory.memory_edit_model)) {
+        memoryModels.unshift(memory.memory_edit_model);
+    }
+    memoryModels.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = labelFor(model);
+        modelSelect.appendChild(option);
+    });
+    modelSelect.value = memory.memory_edit_model || '';
+    modelRow.append(modelLabel, modelSelect);
+    section.appendChild(modelRow);
+
+    const fields = [
+        ['memory_free_chars', 'Free Memory note characters'],
+        ['memory_pro_chars', 'Pro Memory note characters'],
+        ['memory_free_ai_edits_daily', 'Free AI edits / UTC day'],
+        ['memory_pro_ai_edits_daily', 'Pro AI edits / UTC day'],
+        ['memory_ai_edits_per_minute', 'AI edits / minute'],
+        ['memory_global_calls_daily', 'Global calls / UTC day'],
+        ['memory_edit_input_chars', 'Correction input characters'],
+        ['memory_edit_output_tokens', 'Patch output tokens'],
+        ['memory_edit_timeout_seconds', 'Provider timeout seconds']
+    ];
+    fields.forEach(([key, labelText]) => {
+        const row = document.createElement('div');
+        row.className = 'limit-row';
+        const label = document.createElement('label');
+        label.htmlFor = `memory-edit-${key}`;
+        label.textContent = labelText;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.step = '1';
+        input.id = `memory-edit-${key}`;
+        input.dataset.memoryEditKey = key;
+        input.value = Number.isFinite(Number(memory[key])) ? memory[key] : 0;
+        row.append(label, input);
+        section.appendChild(row);
+    });
+    container.appendChild(section);
 }
 
 // ==============================
@@ -925,7 +1000,8 @@ async function saveModels() {
         chat_memory_models: currentChatMemoryModels(),
         watch_models: { free: {}, pro: {} },
         defaults: {},
-        limits: {}
+        limits: {},
+        memory_edit: {}
     };
     function addConsensusValue(modelName) {
         if (modelName && !data.consensus.includes(modelName)) {
@@ -935,6 +1011,12 @@ async function saveModels() {
     document.querySelectorAll('[data-limit-key]').forEach(input => {
         const value = parseInt(input.value, 10);
         data.limits[input.dataset.limitKey] = Number.isFinite(value) && value >= 0 ? value : 0;
+    });
+    document.querySelectorAll('[data-memory-edit-key]').forEach(input => {
+        const key = input.dataset.memoryEditKey;
+        if (input.type === 'checkbox') data.memory_edit[key] = input.checked;
+        else if (input.tagName === 'SELECT') data.memory_edit[key] = input.value;
+        else data.memory_edit[key] = Number.parseInt(input.value, 10);
     });
 
     providers.forEach(p => {

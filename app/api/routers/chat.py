@@ -945,7 +945,11 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     # und Topic-Laeufe rufen engines.py direkt und duerfen kein Profil sehen,
     # sonst driftet eine Watch-Baseline mit dem Profil statt mit der Welt.
     if uid and parse_boolean_flag(data.get("use_memory", True)):
-        memory_text = user_memory.load_profile_text(user_memory_repository, uid)
+        memory_text = user_memory.load_profile_text(
+            user_memory_repository,
+            uid,
+            max_notes_chars=cfg.get_memory_char_limit(is_pro_user),
+        )
         if memory_text:
             system_prompt = user_memory.build_user_memory_system_prompt(
                 system_prompt.strip()
@@ -953,6 +957,18 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 else get_system_prompt(),
                 memory_text,
             )
+
+    # Antwortmodelle sehen Memory nur lesend. Die Schreibberechtigung bleibt
+    # beim expliziten /api/my/memory/edit-Flow; dadurch kann eine normale Frage
+    # nie mit einem falschen "ich merke mir das"-Versprechen beantwortet werden.
+    # Nur interaktive, eingeloggte Ask-Laeufe erhalten diese Grenze. Watch,
+    # Publisher und Topics umgehen diesen Router weiterhin vollstaendig.
+    if uid:
+        system_prompt = user_memory.build_interactive_memory_boundary_prompt(
+            system_prompt.strip()
+            if isinstance(system_prompt, str) and system_prompt.strip()
+            else get_system_prompt()
+        )
 
     authoritative_context = _resolve_authoritative_chat_context(
         uid, data, question, provider.label

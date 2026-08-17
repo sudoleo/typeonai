@@ -67,6 +67,25 @@ DEFAULT_LIMITS = {
     "watch_daily_interval_requires_pro": 1,
 }
 
+# Persistente Admin-Konfiguration fuer explizite User-Memory-Edits. Diese
+# Defaults sind absichtlich konservativ und werden fuer jedes fehlende oder
+# ungueltige Firestore-Feld einzeln verwendet.
+DEFAULT_MEMORY_EDIT_CONFIG = {
+    "memory_edit_enabled": True,
+    "memory_edit_model": "gpt-5.6-luna",
+    "memory_free_chars": 12_000,
+    "memory_pro_chars": 24_000,
+    "memory_free_ai_edits_daily": 5,
+    "memory_pro_ai_edits_daily": 30,
+    "memory_ai_edits_per_minute": 5,
+    "memory_edit_input_chars": 500,
+    "memory_edit_output_tokens": 150,
+    "memory_edit_timeout_seconds": 10,
+    "memory_global_calls_daily": 5_000,
+}
+
+MEMORY_EDIT_CONFIG = DEFAULT_MEMORY_EDIT_CONFIG.copy()
+
 LIMITS = DEFAULT_LIMITS.copy()
 _RUNTIME_CONFIG_LOCK = threading.RLock()
 
@@ -1076,6 +1095,56 @@ def get_limits_config() -> dict:
     return dict(LIMITS)
 
 
+_MEMORY_EDIT_INTEGER_RANGES = {
+    "memory_free_chars": (1_000, 12_000),
+    "memory_pro_chars": (1_000, 24_000),
+    "memory_free_ai_edits_daily": (0, 100),
+    "memory_pro_ai_edits_daily": (0, 500),
+    "memory_ai_edits_per_minute": (1, 20),
+    "memory_edit_input_chars": (50, 2_000),
+    "memory_edit_output_tokens": (32, 500),
+    "memory_edit_timeout_seconds": (1, 30),
+    "memory_global_calls_daily": (0, 100_000),
+}
+
+
+def normalize_memory_edit_config(value=None) -> dict:
+    incoming = value if isinstance(value, dict) else {}
+    result = dict(DEFAULT_MEMORY_EDIT_CONFIG)
+    if isinstance(incoming.get("memory_edit_enabled"), bool):
+        result["memory_edit_enabled"] = incoming["memory_edit_enabled"]
+    model = incoming.get("memory_edit_model")
+    if isinstance(model, str) and model.strip() in ALLOWED_OPENAI_MODELS:
+        result["memory_edit_model"] = model.strip()
+    for key, (minimum, maximum) in _MEMORY_EDIT_INTEGER_RANGES.items():
+        raw = incoming.get(key)
+        if isinstance(raw, bool):
+            continue
+        try:
+            parsed = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if minimum <= parsed <= maximum:
+            result[key] = parsed
+    if result["memory_pro_chars"] < result["memory_free_chars"]:
+        result["memory_pro_chars"] = DEFAULT_MEMORY_EDIT_CONFIG["memory_pro_chars"]
+    return result
+
+
+def apply_memory_edit_config(value=None) -> None:
+    MEMORY_EDIT_CONFIG.clear()
+    MEMORY_EDIT_CONFIG.update(normalize_memory_edit_config(value))
+
+
+def get_memory_edit_config() -> dict:
+    return dict(MEMORY_EDIT_CONFIG)
+
+
+def get_memory_char_limit(is_pro: bool) -> int:
+    key = "memory_pro_chars" if is_pro else "memory_free_chars"
+    return int(MEMORY_EDIT_CONFIG[key])
+
+
 def get_consensus_run_limit(is_pro: bool) -> int:
     key = "pro_consensus_run_limit" if is_pro else "free_consensus_run_limit"
     return LIMITS[key]
@@ -1152,6 +1221,7 @@ def _capture_runtime_config() -> dict:
         "defaults": dict(FREE_DEFAULT_MODEL_BY_PROVIDER),
         "watch": {key: dict(value) for key, value in WATCH_MODELS_BY_TIER.items()},
         "limits": dict(LIMITS),
+        "memory_edit_config": dict(MEMORY_EDIT_CONFIG),
     }
 
 
@@ -1185,6 +1255,8 @@ def _restore_runtime_config(state: dict) -> None:
         WATCH_MODELS_BY_TIER[tier].update(state["watch"].get(tier, {}))
     LIMITS.clear()
     LIMITS.update(state["limits"])
+    MEMORY_EDIT_CONFIG.clear()
+    MEMORY_EDIT_CONFIG.update(state["memory_edit_config"])
     _sync_limit_constants()
     ALL_ALLOWED_MODELS = set().union(*_provider_allowed_sets().values())
     rebuild_model_configs()
@@ -1290,6 +1362,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             apply_watch_models(data.get("watch_models"))
 
             apply_limits(data.get("limits"))
+            apply_memory_edit_config(data.get("memory_edit"))
             # Schema-Backfill: neue Limitfelder (z. B. die run-basierten UTC-
             # Tageslimits) nicht nur im Prozess defaulten, sondern im Admin-
             # Dokument persistieren. Bestehende gueltige Adminwerte bleiben
@@ -1298,6 +1371,12 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             if persist_backfill and data.get("limits") != normalized_limits:
                 doc_ref.set(
                     {"limits": normalized_limits}, merge=True,
+                    timeout=5.0, retry=None,
+                )
+            normalized_memory_edit = get_memory_edit_config()
+            if persist_backfill and data.get("memory_edit") != normalized_memory_edit:
+                doc_ref.set(
+                    {"memory_edit": normalized_memory_edit}, merge=True,
                     timeout=5.0, retry=None,
                 )
             # Update ALL_ALLOWED_MODELS
@@ -1327,7 +1406,8 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "watch_models": {
                     tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
                 },
-                "limits": get_limits_config()
+                "limits": get_limits_config(),
+                "memory_edit": get_memory_edit_config(),
             }, timeout=5.0, retry=None)
             rebuild_model_configs()
             logging.info("Created default models configuration in Firestore.")

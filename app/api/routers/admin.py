@@ -1078,6 +1078,9 @@ def get_models(request: Request):
             raw_data = doc.to_dict() or {}
             data = normalize_models_document(raw_data)
             data["limits"] = normalize_limits_config(raw_data.get("limits"))
+            data["memory_edit"] = cfg.normalize_memory_edit_config(
+                raw_data.get("memory_edit")
+            )
             # GET bleibt strikt read-only. Der fruehere komplette doc_ref.set
             # konnte einen kurz zuvor gespeicherten Judge-Family-Wert mit dem
             # veralteten Snapshot eines parallelen Admin-Reads ueberschreiben.
@@ -1104,7 +1107,8 @@ def get_models(request: Request):
                 "judge_models_pro": cfg.get_pro_judge_models(),
                 "judge_families": cfg.get_judge_families(),
                 "chat_memory_models": cfg.get_chat_memory_models(),
-                "limits": get_limits_config()
+                "limits": get_limits_config(),
+                "memory_edit": cfg.get_memory_edit_config(),
             }
         data["meta"] = _admin_meta(data)
         return data
@@ -1123,6 +1127,32 @@ def update_models(request: Request, data: dict = Body(...)):
     try:
         normalized = normalize_models_document(data)
         normalized["limits"] = normalize_limits_config(data.get("limits"))
+        incoming_memory_edit = data.get("memory_edit")
+        # Kompatibilitaet fuer einen bereits offenen Admin-Tab aus der Version
+        # vor Edit Memory: ein fehlendes additives Feld behaelt den aktiven
+        # sicheren Stand. Die aktuelle UI sendet stets das vollstaendige Objekt.
+        if incoming_memory_edit is None:
+            normalized["memory_edit"] = cfg.get_memory_edit_config()
+        elif not isinstance(incoming_memory_edit, dict):
+            raise HTTPException(status_code=400, detail="memory_edit must be a configuration object")
+        else:
+            expected_memory_keys = set(cfg.DEFAULT_MEMORY_EDIT_CONFIG)
+            if set(incoming_memory_edit) != expected_memory_keys:
+                raise HTTPException(status_code=400, detail="memory_edit has missing or unknown fields")
+            memory_model = str(incoming_memory_edit.get("memory_edit_model") or "").strip()
+            if (
+                memory_model not in normalized["openai"]
+                and memory_model != cfg.DEFAULT_MEMORY_EDIT_CONFIG["memory_edit_model"]
+            ):
+                raise HTTPException(status_code=400, detail="Select a configured OpenAI memory-edit model")
+            memory_candidate = dict(incoming_memory_edit)
+            memory_candidate["memory_edit_model"] = cfg.DEFAULT_MEMORY_EDIT_CONFIG["memory_edit_model"]
+            normalized_memory_edit = cfg.normalize_memory_edit_config(memory_candidate)
+            normalized_memory_edit["memory_edit_model"] = memory_model
+            for key in expected_memory_keys - {"memory_edit_model"}:
+                if incoming_memory_edit.get(key) != normalized_memory_edit.get(key):
+                    raise HTTPException(status_code=400, detail=f"Invalid memory-edit setting: {key}")
+            normalized["memory_edit"] = normalized_memory_edit
         _validate_admin_models_input(data, normalized)
         incoming_presets = data.get("preset_models")
         if not isinstance(incoming_presets, dict):
@@ -1182,7 +1212,8 @@ def update_models(request: Request, data: dict = Body(...)):
             "judge_models_pro": normalized["judge_models_pro"],
             "judge_families": normalized["judge_families"],
             "chat_memory_models": normalized["chat_memory_models"],
-            "limits": normalized["limits"]
+            "limits": normalized["limits"],
+            "memory_edit": normalized["memory_edit"],
         }
         _persist_and_activate_models(doc_ref, models_document)
 

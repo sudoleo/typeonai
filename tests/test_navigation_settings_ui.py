@@ -390,14 +390,14 @@ def test_memory_is_the_first_settings_category():
     assert "never <strong>what</strong> is true" in memory_panel
     assert "Nothing is collected" in memory_panel
 
-    # Vier kompakte About-you-Felder plus die grosse, manuell gepflegte Notebox.
-    # Die Kapazitaet und der Verzicht auf automatische LLM-Bearbeitung muessen
-    # direkt am Feld erklaert sein.
+    # Vier kompakte About-you-Felder plus die grosse, nutzerkontrollierte Notebox.
+    # Automatische Ableitung bleibt ausgeschlossen; die expliziten Add-/Correct-
+    # Aktionen werden direkt am Feld erklaert.
     assert "<ul" not in memory_panel
     assert memory_panel.count("<textarea") == 5
     assert 'id="memoryNotesInput" rows="12" maxlength="12000"' in memory_panel
     assert 'data-always-visible="true"' in memory_panel
-    assert "no model creates, summarizes, or edits it" in memory_panel
+    assert "explicitly submit a Remember or Correct memory action" in memory_panel
     assert "this note is sent with your question" in memory_panel
 
 
@@ -413,11 +413,30 @@ def test_the_memory_profile_is_only_fetched_when_the_settings_open():
     # Geladen wird nur bei offenem Fenster oder beim Logout (dann ohne Netz).
     assert "if (settingsModalIsOpen() || !uid) {" in listener
     assert "state.saved = null;" in listener
-
     # Der einzige Auslöser fuer einen Read im Normalfall.
     assert 'getElementById("editSystemPromptBtn")?.addEventListener("click", () => load())' in memory
     # Und er bleibt einmalig: ein zweites Oeffnen liest den gemerkten Stand.
     assert "if (state.loaded && state.uid === user.uid && !force) {" in memory
+
+
+def test_memory_selection_has_explicit_add_and_correct_flows():
+    memory_edit = read("static/js/memory-edit.js")
+    index = read("templates/index.html")
+
+    assert 'data-memory-intent="add"' in memory_edit
+    assert 'data-memory-intent="correct"' in memory_edit
+    assert "Remember this" in memory_edit
+    assert "Correct memory" in memory_edit
+    assert "updates one clearly matching saved passage" in memory_edit
+    assert "intent: state.intent" in memory_edit
+    assert 'state.intent === "add" ? state.selection.text.slice(0, 500) : ""' in memory_edit
+    assert "Firma" not in memory_edit
+    assert "For example: I live in Hanover." in memory_edit
+    assert 'id="rememberDraftButton"' in index
+    assert "Save this draft to Memory instead of asking the models" in index
+    assert 'state.selection = { text, kind: "question", direct: true }' in memory_edit
+    assert 'openDialog("add", document.getElementById("rememberDraftButton"))' in memory_edit
+    assert 'input.dispatchEvent(new Event("input", { bubbles: true }))' in memory_edit
 
 
 def test_logout_clears_the_loaded_run_and_aborts_active_streams():
