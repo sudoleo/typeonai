@@ -108,6 +108,19 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
+- [ ] „Ask about this“ auf einem markierten Abschnitt einer Antwort: das Zitat
+      steht über dem Eingabefeld, der Fokus liegt im Feld, das × entfernt es
+      wieder. Abgeschickt beginnt die Frage im Thread-Kopf, im Seitentitel und
+      im Bookmark-Namen mit dem GETIPPTEN Text, das Zitat folgt darunter — die
+      Zitatfläche ist danach leer. Ein am Kontingent gescheiterter Lauf gibt
+      Entwurf und Zitat unverändert zurück. Light/Dark und mobil prüfen
+      (eingeklappter Composer zeigt das Zitat nicht, klappt aber nicht von
+      selbst zu, solange es steht).
+- [ ] Zitat- und Anhang-Leiste sehen aus wie eine Familie: gleiche Kachel auf
+      `--ground`, gleiche Ecken, gleicher neutraler ×-Knopf, alles linksbündig
+      und exakt bündig mit dem Eingabefeld darunter (Light/Dark, 375 px). Die
+      Dateityp-Plakette ist monochrom; die DeepSeek-Notiz trägt als einzige
+      Fläche Farbe (Ampel-Gelb) und läuft nicht über den Rand hinaus.
 
 ## User Memory
 - [ ] Einstellungen → Memory zeigt vier kurze „About you“-Felder und darunter
@@ -118,7 +131,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       erhalten; nach Neuladen und auf einem zweiten Gerät erscheint derselbe
       Kontostand.
 - [ ] Eine Aussage in Frage, Consensus und einer Modellantwort markieren: jeweils
-      erscheint das kompakte Menü „Remember | Correct memory“. „Remember“ öffnet
+      erscheint das kompakte Menü „Ask about this | Remember | Correct memory“
+      (über der eigenen Frage nur die beiden Memory-Aktionen, ausgeloggt nur
+      „Ask about this“). „Remember“ öffnet
       den vorausgefüllten Dialog: ohne verwandten Eintrag wird genau einmal
       angehängt; bei einem eindeutigen Widerspruch wird nur die kleinste passende
       Passage aktualisiert und ein nicht widersprochenes Detail darin bleibt erhalten.

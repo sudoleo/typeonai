@@ -1,43 +1,5 @@
-/* Contextual, explicit Memory actions. Uses the app surface and type scales. */
-/* Quiet composer shortcut: visible only for a signed-in, non-empty draft. */
-.memory-draft-action {
-  width: 33px;
-  height: 33px;
-  min-width: 33px;
-  min-height: 33px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--ink-2);
-  box-shadow: none;
-  cursor: pointer;
-  transition: color 140ms ease, background-color 140ms ease;
-}
-
-.memory-draft-action[hidden] { display: none; }
-
-.memory-draft-action:hover,
-.memory-draft-action:focus-visible {
-  outline: none;
-  background: var(--ground);
-  color: var(--ink);
-}
-
-.memory-draft-action:focus-visible {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
-}
-
-.memory-draft-action svg {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
+/* Contextual, explicit selection actions (ask about / remember / correct).
+   Uses the app surface and type scales. */
 .memory-selection-menu {
   position: fixed;
   z-index: calc(var(--z-modal) - 100);
@@ -58,6 +20,11 @@
 .memory-selection-menu[hidden],
 .memory-edit-backdrop[hidden],
 .memory-edit-toast[hidden] { display: none; }
+
+/* Gast: nur "Ask about this". Eingeloggt im Frage-Text: nur die Memory-Aktionen.
+   Der Trenner faellt mit der Seite weg, die er sonst abtrennen wuerde. */
+.memory-selection-action[hidden],
+.memory-selection-divider[hidden] { display: none; }
 
 .memory-selection-action {
   display: inline-flex;
@@ -440,12 +407,6 @@ html.memory-edit-open body {
 @keyframes memory-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 560px) {
-  .memory-draft-action {
-    width: 36px;
-    height: 36px;
-    min-width: 36px;
-    min-height: 36px;
-  }
   .memory-edit-backdrop {
     place-items: end center;
     padding: 8px 8px max(8px, env(safe-area-inset-bottom));

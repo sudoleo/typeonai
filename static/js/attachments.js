@@ -262,9 +262,10 @@
         img.src = "data:" + att.mime + ";base64," + att.data;
         chip.appendChild(img);
       } else {
+        // Die Plakette traegt seit 2026-08-17 keine Typfarbe mehr (monochrome
+        // App): der Dateityp steht als Text darin, nicht in einem Farbton.
         const icon = document.createElement("span");
         icon.className = "attachment-chip-icon";
-        if (att.mime.indexOf("image/") === 0) icon.classList.add("is-image");
         icon.textContent = chipIconLabel(att.mime);
         chip.appendChild(icon);
       }

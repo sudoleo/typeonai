@@ -32,7 +32,7 @@
   <script src="/static/js/auth-session-state.js?v=20260811-phase6"></script>
   <script src="/static/js/watch-state.js?v=20260812-auditfix"></script>
   <!-- Google Fonts -->
-  <link rel="stylesheet" href="/static/style.css?v=20260817-memoryedit5">
+  <link rel="stylesheet" href="/static/style.css?v=20260817-quoteask4">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260727-thread12" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260727-thread12" sizes="any" type="image/png">
@@ -49,7 +49,7 @@
        Module nicht importiert werden koennen. Muss vor firebase.js stehen. -->
   <script src="/static/js/auth-bootstrap.js?v=20260811-phase4" defer></script>
   <!-- Firebase-Code wird jetzt ausgelagert -->
-  <script type="module" src="/static/firebase.js?v=20260817-settingstabs1"></script>
+  <script type="module" src="/static/firebase.js?v=20260817-quoteask1"></script>
   <script type="module" src="/static/demo.js?v=20260814-directcompare1"></script>
   <script src="/static/app-ui.js?v=20260817-settingstabs1" defer></script>
   <!-- Geteilte Basis (window.App): zentrale Config + Helfer. MUSS zuerst laden. -->
@@ -63,7 +63,7 @@
   <!-- Quellen-/Evidence-Handling (aus index.html ausgelagert) -->
   <script src="/static/js/sources.js?v=20260815-claimrefs" defer></script>
   <!-- Datei-Anhaenge / Pro-Feature (aus index.html ausgelagert) -->
-  <script src="/static/js/attachments.js?v=20260815-sentmessage1" defer></script>
+  <script src="/static/js/attachments.js?v=20260817-quoteask4" defer></script>
   <!-- Agent Mode (aus index.html ausgelagert) -->
   <script src="/static/js/agent-mode.js?v=20260815-bookmarkview1" defer></script>
   <!-- Gefuehrte Fortschrittsanzeige fuer Agent-Mode-Laeufe. -->
@@ -80,7 +80,10 @@
   <script src="/static/js/user-tier.js?v=20260811-phase6" defer></script>
   <!-- Nutzereigenes Gedaechtnis: Einstellungen laden/speichern gegen /api/my/memory. -->
   <script src="/static/js/user-memory.js?v=20260817-memoryedit1" defer></script>
-  <script src="/static/js/memory-edit.js?v=20260817-memoryedit5" defer></script>
+  <script src="/static/js/memory-edit.js?v=20260817-quoteask1" defer></script>
+  <!-- Zitat im Composer ("Ask about this"); memory-edit.js fuellt es aus der
+       Textauswahl, query-send.js setzt es beim Senden der Frage voran. -->
+  <script src="/static/js/composer-quote.js?v=20260817-quoteask1" defer></script>
   <!-- Kontingent-Ring + Panel im Sidebar-Footer; spiegelt nur #usageDisplay -->
   <script src="/static/js/sidebar-quota.js?v=20260801-quotablock1" defer></script>
   <!-- Aufgebrauchtes Kontingent: Erkennung, Vorab-Pruefung und die bleibende
@@ -92,9 +95,9 @@
   <script src="/static/js/consensus-insights.js?v=20260817-historydiffs1" defer></script>
   <script src="/static/js/chat-session.js?v=20260806-chatlimits1" defer></script>
   <script src="/static/js/consensus-run.js?v=20260817-historydiffs1" defer></script>
-  <script src="/static/js/query-send.js?v=20260815-sentmessage1" defer></script>
+  <script src="/static/js/query-send.js?v=20260817-quoteask1" defer></script>
   <!-- Composer einklappen (Handy): eine Zeile beim Lesen, voll beim Anfassen -->
-  <script src="/static/js/composer-collapse.js?v=20260814-composergrow2" defer></script>
+  <script src="/static/js/composer-collapse.js?v=20260817-quoteask1" defer></script>
   {% include "partials/analytics.html" %}
 </head>
 
@@ -424,6 +427,26 @@
              dazwischen steht hier, was das Abschicken kostet. Gesetzt und
              wieder geleert von consensus-progress.js. -->
         <p id="composerRunNotice" class="composer-run-notice" role="status" hidden></p>
+        <!-- Zitierter Abschnitt aus einer Antwort ("Ask about this"). Er steht
+             sichtbar UEBER dem Feld statt als Text darin: das Zitat bleibt vom
+             Getippten getrennt und ist mit einem Klick wieder weg. Beim Senden
+             geht es als Markdown-Blockzitat der Frage voran (composer-quote.js). -->
+        <figure id="composerQuote" class="composer-quote" hidden>
+          <span class="composer-quote-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M9.25 7.5h9M9.25 12h9M9.25 16.5h5.5"></path>
+              <path d="M5.25 6.5v11"></path>
+            </svg>
+          </span>
+          <figcaption class="composer-quote-label">Quoted</figcaption>
+          <blockquote id="composerQuoteText" class="composer-quote-text"></blockquote>
+          <button type="button" id="composerQuoteRemove" class="composer-quote-remove"
+            title="Remove quote" aria-label="Remove the quoted passage">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m7 7 10 10M17 7 7 17"></path>
+            </svg>
+          </button>
+        </figure>
         <textarea class="input-field" id="questionInput" rows="1" placeholder="Enter your question"></textarea>
         <!-- Attachment-Menü (öffnet über dem Plus-Button) -->
         <div id="attachMenu" class="attach-menu" hidden>
@@ -498,12 +521,6 @@
         </div>
         <!-- Actions bottom right -->
         <div class="input-actions-container">
-          <button type="button" id="rememberDraftButton" class="memory-draft-action" title="Save to Memory instead of asking" aria-label="Save this draft to Memory instead of asking the models" hidden>
-            <svg aria-hidden="true" viewBox="0 0 24 24">
-              <path d="M12 3.75a6.25 6.25 0 0 0-3.87 11.16L7.5 19.75l4.5-2.5 4.5 2.5-.63-4.84A6.25 6.25 0 0 0 12 3.75Z"></path>
-              <path d="M9.5 10.5h5M12 8v5"></path>
-            </svg>
-          </button>
           <!-- Ein gefuellter Pfeil im gefuellten Kreis (wie im Mockup): der
                Senden-Knopf ist das einzige massive Element im Composer, also
                traegt er auch ein massives Zeichen statt einer Kontur. -->
@@ -823,7 +840,7 @@
       </div>
     </div>
 
-  <script src="/static/js/app-init.js?v=20260817-agreementarea1" defer></script>
+  <script src="/static/js/app-init.js?v=20260817-quoteask1" defer></script>
   <script src="/static/js/app-dom-events.js?v=20260811-phase6" defer></script>
   </div>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.

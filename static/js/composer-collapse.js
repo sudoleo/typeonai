@@ -84,6 +84,9 @@
     const attachments = document.getElementById("attachmentBar");
     if (attachments && !attachments.hidden) return true;
 
+    const quote = document.getElementById("composerQuote");
+    if (quote && !quote.hidden) return true;
+
     const notice = document.getElementById("composerRunNotice");
     if (notice && !notice.hidden) return true;
 

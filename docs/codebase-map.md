@@ -289,6 +289,23 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   identische Skala, deshalb sind Landing-/Public-Mockups aus demselben Material
   wie `/app` (Testvertrag: `tests/test_public_design_system.py`). Dark Mode
   überschreibt ausschließlich die fünf Werte + die Ampel.
+- **Kontext am Composer: eine Familie (seit 2026-08-17)** — Zitat
+  (`.composer-quote`) und Anhänge (`.attachment-bar`/`.attachment-chip`) hängen
+  beide an der nächsten Frage und sehen deshalb gleich aus: Kachel auf
+  `--ground` (eine Stufe über dem `--well` des Feldes, dieselbe Bewegung wie
+  (+) und Lauf-Schalter), `--radius-sm`, **keine** Rahmen, Verläufe, Blur oder
+  Schatten, Dateityp-Plakette monochrom auf `--ink`-Wash statt in Rot/Blau.
+  Drei Fallen, die das alte Bild „gebastelt" wirken ließen und Regression-Gefahr
+  bleiben: (1) der Composer-Block ist **zentriert** (Hero-Begrüßung) — jede neue
+  Vollzeilen-Fläche darin braucht `text-align: left`, sonst stehen Labels und
+  Dateinamen mittig; (2) `flex-basis: 100%` ohne `box-sizing: border-box`
+  addiert das Padding **auf** die Zeilenbreite (die DeepSeek-Notiz stand
+  deshalb 20 px über den Rand); (3) Chips an der Nachricht
+  (`.message-attachments`) liegen auf `--ground` statt im Well und heben
+  deshalb in `shell.css` auf `--raise` — dieselbe Kachel, ein anderer Grund.
+  Entfernen (×) ist an beiden Stellen derselbe neutrale Knopf, nie rot: es ist
+  kein Alarm. Der einzige Farbträger ist die DeepSeek-Notiz in der
+  Ampel-Gelbstufe `--partial-bg` (vorher ein eigenes Amber `#f59e0b`).
 - **Sidebar-Rhythmus** — Models liegt in `.sidebar-pinned`, Bookmarks im
   scrollenden `.sidebar-content`. Diese Container-Grenze addiert 14 px (10 px
   Flex-`gap` der Sidebar + 2 × 2 px Scroll-Padding) auf den Sektionsabstand;
@@ -434,9 +451,10 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   Feldgrenze (`data-near`), vier dauerhafte „0/250" wären vier Zahlen ohne
   Aussage. Es gibt weiterhin **keine automatische Ableitung** aus Antworten;
   Remember/Correct memory braucht eine markierte Aussage plus ausdrückliche
-  Nutzereingabe; alternativ speichert der dezente Memory-Button neben
-  **Senden** einen nicht leeren Composer-Entwurf direkt, ohne ihn vorher als
-  Frage an die Antwortmodelle zu schicken. „Remember“ speichert einen Fakt neu oder gleicht genau eine
+  Nutzereingabe. Den früheren Memory-Button neben **Senden** („Save to Memory
+  instead of asking“, `#rememberDraftButton`) gibt es seit 2026-08-17 nicht mehr:
+  ein zweiter Weg ins Gedächtnis am Composer war überflüssig neben der
+  Textauswahl. „Remember“ speichert einen Fakt neu oder gleicht genau eine
   eindeutig verwandte bzw. widersprüchliche Passage ab, „Correct memory“ ist
   der gezielte Korrekturpfad.
   Drei Grenzen sind Vertrag, nicht Sparmaßnahme:
@@ -485,9 +503,11 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   wenn das Fenster gerade offen steht — sonst zeigte es das Profil des vorigen
   Kontos). Sonst hinge an jedem Seitenaufruf ein Firestore-Read für ein Panel,
   das die meisten nie öffnen.
-  `memory-edit.js` bietet neben dem direkten Composer-Shortcut nach einer Textauswahl nur in aktiver/archivierter
-  Frage, Consensus oder Modellantwort das app-native Kontextmenü **Remember |
-  Correct memory** an. Der Dialog besitzt Quellvorschau, Fokusfalle,
+  `memory-edit.js` bietet nach einer Textauswahl in aktiver/archivierter
+  Frage, Consensus oder Modellantwort das app-native Kontextmenü **Ask about
+  this | Remember | Correct memory** an (die erste Aktion gehört
+  `composer-quote.js` und braucht kein Konto; ohne Konto bleiben die beiden
+  Memory-Aktionen samt Trenner weg). Der Dialog besitzt Quellvorschau, Fokusfalle,
   Escape-/Backdrop-Schließen, zustandsabhängige Copy und einen gemeinsamen
   Undo-Toast; mobil erscheint er als Bottom-Sheet. `POST /api/my/memory/edit`
   akzeptiert `client_request_id`, Quelltyp, markierten Text, `intent=add|correct`
@@ -1055,7 +1075,25 @@ Zuletzt — deferred am `</body>` — laufen `app-init.js` und
   beim Absenden (`window.App.composer.collapse()` aus `query-send.js`) und beim
   Scrollen nach unten. Antippen, Fokus oder Hochscrollen holt (+), Lauf-Schalter
   und Fuß zurück; getippter Text wird nie unter den Fingern weggeräumt. Zustand
-  ist allein `body.composer-collapsed`; Desktop ist bewusst ausgenommen.
+  ist allein `body.composer-collapsed`; Desktop ist bewusst ausgenommen. Ein
+  stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
+  und verhindert das automatische Zuklappen.
+- **`composer-quote.js`** (seit 2026-08-17) — **„Ask about this"**: der in einer
+  Antwort markierte Abschnitt wandert als sichtbares Zitat über das Eingabefeld
+  (`#composerQuote`, gefüllt aus dem Auswahlmenü in `memory-edit.js`) und geht
+  beim Senden als Teil der Frage raus. `window.App.quote` =
+  `{set, clear, text, has, compose, focusComposer, element}`; Zitatlänge gedeckelt
+  auf 1200 Zeichen. **`compose(question)` stellt die getippte Frage VORAN** und
+  hängt `Quoted from the previous answer:\n„…"` an — Thread-Kopf, Seitentitel und
+  Bookmark-Name sind reiner, whitespace-eingeebneter Text und würden sonst mit
+  einem fremden Absatz (bzw. einem nirgends gerenderten Markdown-`>`) beginnen.
+  Ab `compose()` ist das Zitat Teil der Frage: Lauf, Chat-Kontext, Bookmark und
+  die sechs Modelle sehen genau EINEN Text, deshalb weiß außer `query-send.js`
+  (Senden) und `app-init.js` (`clearResponseBoxes`) niemand davon. `query-send.js`
+  hält Entwurf und Zitat getrennt in `sentMessage.{draft,quote}`, damit ein
+  geplatzter Lauf beides unverändert zurückgibt. Das Menü zeigt „Ask about this"
+  nur über Consensus-/Modellantworten (die eigene Frage zu zitieren wäre ein
+  Kreis) — anders als Remember/Correct memory **ohne Konto**.
 - **`app-init.js`** — das gesamte `initApp()`: Theme, Usage/Limits + User-Status,
   Response-Box-Toggles, Sidebar/Layout, Modals, Tooltips, Evidence-Rendering,
   API-Key-Test. Bis 768 px erzeugt Enter im Composer immer einen Absatz; nur
@@ -2742,6 +2780,9 @@ ersten Check statt eines leeren Consensus-Panels.
   `app-bootstrap.js` setzt Config, die drei State-Owner laden vor Firebase und
   den Feature-Modulen; `app-core.js` ergänzt den bestehenden `window.App`-Bus;
   `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
+  `composer-quote.js` liegt bei `memory-edit.js` (dessen Auswahlmenü es füllt)
+  und muss vor `query-send.js` stehen, das beim Senden `window.App.quote`
+  abfragt;
   `consensus-anchor.js` muss vor `consensus-insights.js` laufen;
   KaTeX + Auto-Render müssen vor `math-render.js`, dieses wiederum vor
   `markdown-stream.js` geladen werden;

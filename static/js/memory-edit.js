@@ -1,4 +1,4 @@
-/** Explicit add/correct actions for selected question and answer text. */
+/** Explicit ask/add/correct actions for selected question and answer text. */
 (function () {
   "use strict";
 
@@ -9,11 +9,11 @@
     undoTimer: null,
     requestId: null,
     requestFeedback: null,
-    returnFocus: null,
-    directDraft: false
+    returnFocus: null
   };
   const user = () => window.auth?.currentUser?.uid ? window.auth.currentUser : null;
   const icons = {
+    ask: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9.25 7.5h9M9.25 12h9M9.25 16.5h5.5"/><path d="M5.25 6.5v11"/></svg>',
     remember: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M12 3.75a6.25 6.25 0 0 0-3.87 11.16L7.5 19.75l4.5-2.5 4.5 2.5-.63-4.84A6.25 6.25 0 0 0 12 3.75Z"/><path d="M9.5 10.5h5M12 8v5"/></svg>',
     correct: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.75 5.25 4 4L9.5 18.5l-4.75.75.75-4.75 9.25-9.25Z"/><path d="m12.75 7.25 4 4"/></svg>',
     close: '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></svg>',
@@ -29,26 +29,25 @@
   }
 
   function sourceLabel(selection) {
-    if (selection?.direct) return "Draft";
     if (selection?.kind === "consensus") return "Consensus";
     if (selection?.kind === "model_answer") return "Model answer";
     return "Your question";
   }
 
-  function syncDraftAction() {
-    const button = document.getElementById("rememberDraftButton");
-    const input = document.getElementById("questionInput");
-    if (!button || !input) return;
-    button.hidden = !user() || !input.value.trim() || state.busy;
+  // Zitieren geht nur, was eine Antwort GESAGT hat. Die eigene Frage noch
+  // einmal zu zitieren, um sie zu fragen, waere ein Kreis.
+  function canAskAbout(selection) {
+    if (!window.App?.quote || !document.getElementById("questionInput")) return false;
+    return selection?.kind === "consensus" || selection?.kind === "model_answer";
   }
 
-  function openDraftDialog() {
-    const input = document.getElementById("questionInput");
-    const text = input?.value?.trim() || "";
-    if (!user() || !text || text.length > 2000) return;
-    state.selection = { text, kind: "question", direct: true };
-    state.directDraft = true;
-    openDialog("add", document.getElementById("rememberDraftButton"));
+  function askAboutSelection() {
+    if (!state.selection || !canAskAbout(state.selection)) return;
+    hideMenu();
+    window.getSelection?.()?.removeAllRanges?.();
+    window.App.quote.set(state.selection.text);
+    window.App.quote.focusComposer();
+    window.App?.trackAppEvent?.("app_quote_asked", { source: state.selection.kind });
   }
 
   function ensureUi() {
@@ -58,13 +57,19 @@
     menu.className = "memory-selection-menu";
     menu.hidden = true;
     menu.setAttribute("role", "toolbar");
-    menu.setAttribute("aria-label", "Memory actions for selected text");
+    menu.setAttribute("aria-label", "Actions for selected text");
+    // Zuerst die Frage, dann das Gedaechtnis: nach einer Antwort ist
+    // "nachfragen" der haeufigere Griff, und er braucht kein Konto.
     menu.innerHTML = `
-      <button type="button" class="memory-selection-action" data-memory-intent="add">
+      <button type="button" class="memory-selection-action" data-selection-group="ask" data-selection-action="ask">
+        ${icons.ask}<span>Ask about this</span>
+      </button>
+      <span class="memory-selection-divider" data-selection-group="between" aria-hidden="true"></span>
+      <button type="button" class="memory-selection-action" data-selection-group="memory" data-memory-intent="add">
         ${icons.remember}<span>Remember</span>
       </button>
-      <span class="memory-selection-divider" aria-hidden="true"></span>
-      <button type="button" class="memory-selection-action" data-memory-intent="correct">
+      <span class="memory-selection-divider" data-selection-group="memory" aria-hidden="true"></span>
+      <button type="button" class="memory-selection-action" data-selection-group="memory" data-memory-intent="correct">
         ${icons.correct}<span>Correct memory</span>
       </button>`;
 
@@ -109,6 +114,8 @@
     toast.setAttribute("aria-live", "polite");
 
     document.body.append(menu, backdrop, toast);
+    menu.querySelector("[data-selection-action='ask']")
+      ?.addEventListener("click", askAboutSelection);
     menu.querySelectorAll("[data-memory-intent]").forEach(button => {
       button.addEventListener("click", () => openDialog(button.dataset.memoryIntent, button));
     });
@@ -124,7 +131,6 @@
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") submitEdit();
     });
     backdrop.addEventListener("keydown", handleDialogKeys);
-    document.getElementById("rememberDraftButton")?.addEventListener("click", openDraftDialog);
   }
 
   function makeRequestId() {
@@ -138,10 +144,22 @@
   }
 
   function showSelection(text, kind, rect) {
-    if (!user() || !text || text.length > 2000 || !rect) return hideMenu();
-    state.selection = { text, kind, direct: false };
-    state.directDraft = false;
+    if (!text || text.length > 2000 || !rect) return hideMenu();
+    const selection = { text, kind };
+    // Zitieren braucht kein Konto, Memory schon. Bleibt nichts uebrig, bleibt
+    // auch das Menue weg — ein Balken mit einem ausgegrauten Rest ist keine
+    // Auswahl, sondern eine Werbeflaeche.
+    const askable = canAskAbout(selection);
+    const rememberable = !!user();
+    if (!askable && !rememberable) return hideMenu();
+    state.selection = selection;
     const menu = document.getElementById("memorySelectionMenu");
+    menu.querySelectorAll("[data-selection-group]").forEach(node => {
+      const group = node.dataset.selectionGroup;
+      node.hidden = group === "ask" ? !askable
+        : group === "memory" ? !rememberable
+        : !(askable && rememberable);
+    });
     menu.hidden = false;
     menu.style.visibility = "hidden";
     requestAnimationFrame(() => {
@@ -290,7 +308,6 @@
       status.textContent = message;
       status.dataset.kind = busy ? "progress" : "";
     }
-    syncDraftAction();
   }
 
   function showFieldError(message) {
@@ -346,13 +363,6 @@
       document.getElementById("memoryEditBackdrop").hidden = true;
       document.documentElement.classList.remove("memory-edit-open");
       await window.App?.userMemory?.load?.(true);
-      if (state.directDraft && state.intent === "add") {
-        const input = document.getElementById("questionInput");
-        if (input?.value?.trim() === state.selection.text) {
-          input.value = "";
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-        }
-      }
       showUndo(result, state.intent);
       window.App?.trackAppEvent?.("app_memory_ai_edit", { intent: state.intent, status: "updated" });
     } catch (error) {
@@ -411,12 +421,7 @@
     });
     document.addEventListener("scroll", hideMenu, true);
     window.addEventListener("resize", hideMenu);
-    document.getElementById("questionInput")?.addEventListener("input", syncDraftAction);
-    window.addEventListener("consensio:auth-state", () => {
-      hideMenu();
-      syncDraftAction();
-    });
-    syncDraftAction();
+    window.addEventListener("consensio:auth-state", hideMenu);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind);

@@ -2082,10 +2082,12 @@ body:not(.is-hero) .input-section {
     margin-left: 0;
   }
 
-  /* Anhaenge und der Kosten-Hinweis sind volle Zeilen (`flex: 1 1 100%`) und
-     gehoeren UEBER die Eingabezeile — ohne eigenen order-Wert stuenden sie
-     hinter dem (+) und schoeben es allein in eine Zeile darueber. */
+  /* Anhaenge, Zitat und der Kosten-Hinweis sind volle Zeilen
+     (`flex: 1 1 100%`) und gehoeren UEBER die Eingabezeile — ohne eigenen
+     order-Wert stuenden sie hinter dem (+) und schoeben es allein in eine
+     Zeile darueber. */
   body:not(.is-hero) .chat-input-container .attachment-bar,
+  body:not(.is-hero) .chat-input-container .composer-quote,
   body:not(.is-hero) .composer-run-notice {
     order: -2;
   }
@@ -2146,6 +2148,7 @@ body:not(.is-hero) .input-section {
      Aktionsgruppe wie Senden, ist aber ein Onboarding-Anstupser und hat dem
      Feld in der einen Zeile 75 px weggenommen. */
   body.composer-collapsed:not(.is-hero) .chat-input-container .attachment-bar,
+  body.composer-collapsed:not(.is-hero) .chat-input-container .composer-quote,
   body.composer-collapsed:not(.is-hero) .composer-run-notice,
   body.composer-collapsed:not(.is-hero) .consensus-switch-container,
   body.composer-collapsed:not(.is-hero) .demo-chip,
@@ -2330,13 +2333,12 @@ body:not(.is-hero) .consensus-section::before {
   display: none;
 }
 
+/* Eine Stufe ueber der Seite statt ueber dem Composer-Well: hier ist der
+   Grund `--ground`, also traegt der Chip `--raise`. Sonst dieselbe Kachel
+   wie am Eingabefeld (components-input.css). */
 .message-attachments .attachment-chip {
   cursor: default;
   background: var(--raise);
-  border: 0;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
 }
 
 .thread-ask-more {

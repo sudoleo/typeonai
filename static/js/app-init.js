@@ -1797,6 +1797,8 @@
             inputBox.dispatchEvent(new Event("input", { bubbles: true }));
             window.syncDemoChipState?.();
           }
+          // Das Zitat gehoert zu der Antwort, die hier gerade geloescht wird.
+          window.App.quote?.clear?.();
           window.App.setAppTitle();
           window.App.setThreadQuestion?.("");
           window.App.state.set("lastQuestion", "", "run");

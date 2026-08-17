@@ -432,11 +432,44 @@ def test_memory_selection_has_explicit_add_and_correct_flows():
     assert 'state.intent === "add" ? state.selection.text.slice(0, 500) : ""' in memory_edit
     assert "Firma" not in memory_edit
     assert "For example: I live in Hanover." in memory_edit
-    assert 'id="rememberDraftButton"' in index
-    assert "Save this draft to Memory instead of asking the models" in index
-    assert 'state.selection = { text, kind: "question", direct: true }' in memory_edit
-    assert 'openDialog("add", document.getElementById("rememberDraftButton"))' in memory_edit
-    assert 'input.dispatchEvent(new Event("input", { bubbles: true }))' in memory_edit
+    # Der Composer-Shortcut ("Save to Memory instead of asking") ist entfallen:
+    # Memory-Aktionen brauchen eine markierte Aussage, sonst nichts.
+    assert "rememberDraftButton" not in memory_edit
+    assert "rememberDraftButton" not in index
+    assert "memory-draft-action" not in index
+    assert "memory-draft-action" not in read("static/css/components-memory-edit.css")
+
+
+def test_selecting_answer_text_offers_asking_about_it():
+    """ChatGPTs "Ask ChatGPT": der markierte Abschnitt wandert als Zitat in den
+    Composer, die naechste Frage geht MIT ihm raus. Zitiert wird nur, was eine
+    Antwort gesagt hat -- die eigene Frage zu zitieren waere ein Kreis."""
+    memory_edit = read("static/js/memory-edit.js")
+    quote = read("static/js/composer-quote.js")
+    query = read("static/js/query-send.js")
+    index = read("templates/index.html")
+
+    assert 'data-selection-action="ask"' in memory_edit
+    assert "Ask about this" in memory_edit
+    assert 'selection?.kind === "consensus" || selection?.kind === "model_answer"' in memory_edit
+    assert "window.App.quote.set(state.selection.text)" in memory_edit
+    # Ohne Konto bleiben die Memory-Aktionen weg, das Zitieren nicht.
+    assert "if (!askable && !rememberable) return hideMenu();" in memory_edit
+
+    assert 'id="composerQuote"' in index
+    assert '/static/js/composer-quote.js' in index
+
+    # Das Zitat ist beim Senden Teil der Frage -- genau ein Text fuer Thread,
+    # Bookmark, Chat-Kontext und die sechs Modelle. Die getippte Frage steht
+    # vorn: Thread-Kopf, Seitentitel und Bookmark-Name zeigen den Anfang
+    # dieser Zeichenkette als reinen Text.
+    assert "`${typed}\\n\\nQuoted from the previous answer:\\n${passage}`" in quote
+    assert "> ${" not in quote
+    assert "window.App.quote?.compose?.(draftQuestion) ?? draftQuestion" in query
+    # Ein geplatzter Lauf gibt Entwurf UND Zitat unveraendert zurueck.
+    assert "quote: quotedContext" in query
+    assert "input.value = this.draft;" in query
+    assert "window.App.quote?.set?.(this.quote)" in query
 
 
 def test_logout_clears_the_loaded_run_and_aborts_active_streams():

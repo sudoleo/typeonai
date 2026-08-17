@@ -144,6 +144,8 @@
     //               abschickbar ins Feld zurueck.
     const sentMessage = {
       question: "",
+      draft: "",
+      quote: "",
       attachmentsMeta: [],
       pending: false,
       ownsHead: false,
@@ -151,8 +153,12 @@
       // ownsHead: ob der Fragen-Kopf noch uebernommen werden muss. Ein frisches
       // Gespraech setzt ihn direkt (dort steht nichts, das erst archiviert
       // werden muesste); ein Follow-up erst nach dem Archivieren.
-      hold(question, { ownsHead = false } = {}) {
+      // draft/quote: dieselbe Nachricht in ihren zwei Teilen, so wie der
+      // Composer sie zeigt — nur so kann restore() sie wieder auseinanderlegen.
+      hold(question, { ownsHead = false, draft = null, quote = "" } = {}) {
         this.question = String(question || "");
+        this.draft = draft === null ? this.question : String(draft || "");
+        this.quote = String(quote || "");
         this.attachmentsMeta = window.App.attachments?.messageMeta?.() || [];
         this.pending = true;
         this.ownsHead = ownsHead === true;
@@ -166,6 +172,10 @@
           input.dispatchEvent(new Event("input", { bubbles: true }));
           window.syncDemoChipState?.();
         }
+        // Das Zitat ist mit der Nachricht rausgegangen und steht ab jetzt in
+        // ihr — ueber dem leeren Feld saehe es aus wie Kontext der naechsten
+        // Frage (dieselbe Ueberlegung wie bei den Anhaengen).
+        window.App.quote?.clear?.();
         // force: die Frage ist raus, also faellt der Composer auf eine Zeile
         // zusammen — auch dann, wenn der Fokus (und damit die Tastatur) noch im
         // gerade geleerten Feld steht. Tippt man dort weiter, geht er wieder auf.
@@ -196,9 +206,12 @@
         // Wer in der Zwischenzeit schon die naechste Frage getippt hat, behaelt
         // sie: der zurueckgegebene Text ueberschreibt nie einen Entwurf.
         if (input && !input.value.trim()) {
-          input.value = this.question;
+          input.value = this.draft;
           input.dispatchEvent(new Event("input", { bubbles: true }));
           window.syncDemoChipState?.();
+          // Zitat und Entwurf gehoeren zusammen: entweder kommt die Nachricht
+          // ganz zurueck oder gar nicht.
+          if (this.quote && !window.App.quote?.has?.()) window.App.quote?.set?.(this.quote);
         }
       }
     };
@@ -374,7 +387,13 @@
         return;
       }
 
-      const question = document.getElementById("questionInput").value;
+      // Das Zitat aus "Ask about this" ist ab hier Teil der Frage: ein Text
+      // fuer Thread-Kopf, Bookmark, Chat-Kontext und die sechs Modelle. Der
+      // Entwurf ohne Zitat bleibt daneben stehen, damit ein geplatzter Lauf
+      // Feld UND Zitatflaeche wieder so hinterlaesst, wie sie waren.
+      const draftQuestion = document.getElementById("questionInput").value;
+      const quotedContext = window.App.quote?.text?.() || "";
+      const question = window.App.quote?.compose?.(draftQuestion) ?? draftQuestion;
       const agentModeAtStart = isAgentModeEnabled?.() === true;
       // Follow-ups are consensus conversations. A direct comparison is a
       // fresh one-question fan-out and must not create a pending chat turn
@@ -469,7 +488,11 @@
       // gegangen — im laufenden Gespraech dauert er am laengsten, weil dort
       // zusaetzlich der Chat-Kontext gebunden wird.
       if (agentModeAtStart) {
-        sentMessage.hold(question, { ownsHead: followupRequested });
+        sentMessage.hold(question, {
+          ownsHead: followupRequested,
+          draft: draftQuestion,
+          quote: quotedContext
+        });
       }
 
       // clearResponseBoxes();
@@ -1181,11 +1204,14 @@
       // deshalb erst hier ab; im Thread ist das Feld seit sentMessage.hold()
       // leer und dieser Aufruf nur noch die Zusicherung, dass es das bleibt.
       const questionInputEl = document.getElementById("questionInput");
-      if (questionInputEl && questionInputEl.value === question) {
+      if (questionInputEl && questionInputEl.value === draftQuestion) {
         questionInputEl.value = "";
         questionInputEl.dispatchEvent(new Event("input", { bubbles: true }));
         window.syncDemoChipState?.();
       }
+      // Im Thread hat sentMessage.hold() das Zitat schon abgegeben; im
+      // Direktvergleich ist hier die Stelle, an der die Frage rausgeht.
+      window.App.quote?.clear?.();
       // Ein Lauf, der bis hierher gekommen ist, findet statt: was noch
       // schwebt, gehoert jetzt dem aktiven Turn (im Thread laengst erledigt,
       // hier nur die letzte Schranke).

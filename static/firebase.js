@@ -1904,6 +1904,9 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
                 questionInput.dispatchEvent(new Event("input", { bubbles: true }));
                 window.syncDemoChipState?.();
             }
+            // Ein Zitat gehört zu der Antwort, aus der es stammt — auf dem
+            // Schirm steht jetzt eine andere.
+            window.App?.quote?.clear?.();
             // Falls du eine globale Variable für die letzte Frage hast:
             window.App.state.set("lastQuestion", displayQuestion, "run");
         }

@@ -220,7 +220,10 @@ def test_a_run_that_never_happens_gives_the_message_back():
 
     restore_block = query.split("restore() {", 1)[1].split("\n      }", 1)[0]
     assert "window.App.clearPendingThreadQuestion?.();" in restore_block
-    assert "input.value = this.question;" in restore_block
+    # Zurueck kommt der Composer-Stand, aus dem die Nachricht entstanden ist:
+    # das Getippte im Feld, das Zitat wieder darueber.
+    assert "input.value = this.draft;" in restore_block
+    assert "window.App.quote?.set?.(this.quote)" in restore_block
     # Ein inzwischen getippter Entwurf wird nie ueberschrieben.
     assert "!input.value.trim()" in restore_block
 

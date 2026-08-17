@@ -6,7 +6,7 @@
    Buttons & Inputs
    -------------------------------------------------------------------------- */
 .button,
-button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(.sidebar-search-trigger):not(#clearButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.settings-inline-btn):not(.settings-nav-item):not(.sidebar-new-run):not(.sidebar-model-entry):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.run-model-skip-btn):not(.consensus-tab):not(.model-picker-row-toggle):not(.response-answer-more):not(.demo-chip):not(.run-blocked-btn):not(.run-blocked-close):not(.verify-banner-btn):not(.verify-banner-link):not(.watch-nudge-btn):not(.watch-nudge-skip):not(.watch-feature-nudge-close):not(.memory-selection-action):not(.memory-edit-close):not(.memory-edit-cancel):not(.memory-edit-submit):not(.memory-edit-undo):not(.memory-draft-action) {
+button:not(.sidebar-toggle):not(.collapse-btn):not(.bookmark):not(.bookmarks-toggle):not(.sidebar-toggle-btn):not(.sidebar-search-trigger):not(#clearButton):not(.consensus-actions-toggle):not(.consensus-copy-icon-btn):not(.consensus-share-pill):not(.help-button):not(.btn-free):not(.btn-pro):not(.link-btn):not(.input-action-btn-subtle):not(.input-action-btn-primary):not(.auth-primary-action):not(.oauth-button):not(.theme-toggle):not(.model-picker-display):not(.model-picker-option):not(.mode-explainer-trigger):not(.mode-explainer-dismiss):not(.attach-trigger):not(.attach-menu-item):not(.attachment-chip-remove):not(.attachment-viewer-close):not(.claim-badge):not(.claim-jump-link):not(.diff-jump-link):not(.claim-popover-close):not(.diff-resolve-btn):not(.resolve-model-toggle):not(.resolve-prompt-toggle):not(.agent-mode-collapse-btn):not(.agent-mode-answers-toggle):not(.response-code-copy):not(.post-demo-login-action):not(.exclude-btn):not(.delete-bookmark):not(#editSystemPromptBtn):not(.share-primary-btn):not(.share-secondary-btn):not(.share-danger-btn):not(.share-link-btn):not(.watch-page-back):not(.view-switch-btn):not(.watch-filter):not(.watch-example-chip):not(.watch-limit-upgrade):not(.watch-setup-edit):not(.watch-setup-chip):not(.watch-card-toggle):not(.sidebar-rail-btn):not(.auth-top-login):not(.auth-top-signup):not(.settings-danger-btn):not(.settings-inline-btn):not(.settings-nav-item):not(.sidebar-new-run):not(.sidebar-model-entry):not(.quota-trigger):not(.run-replay-btn):not(.thread-ask-more):not(.run-model-skip-btn):not(.consensus-tab):not(.model-picker-row-toggle):not(.response-answer-more):not(.demo-chip):not(.run-blocked-btn):not(.run-blocked-close):not(.verify-banner-btn):not(.verify-banner-link):not(.watch-nudge-btn):not(.watch-nudge-skip):not(.watch-feature-nudge-close):not(.memory-selection-action):not(.memory-edit-close):not(.memory-edit-cancel):not(.memory-edit-submit):not(.memory-edit-undo):not(.composer-quote-remove) {
   padding: 10px 16px;
   font-size: var(--font-size-base);
   background:
@@ -1026,27 +1026,119 @@ body:not(.dark-mode) .chat-input-container::before {
     color-mix(in srgb, var(--glass-bg-strong) 84%, transparent);
 }
 
+/* ==========================================================================
+   Kontext am Composer: Zitat ("Ask about this") und Anhaenge
+   ==========================================================================
+   Beides haengt an der naechsten Frage, also sieht beides gleich aus: eine
+   Kachel auf `--ground`, also eine Stufe ueber dem `--well` des Feldes —
+   dieselbe Bewegung, die (+) und Lauf-Schalter im Composer schon machen
+   (shell.css). Keine Rahmen, keine Verlaeufe, kein Blur: in der rahmenlosen
+   Shell traegt der Ton die Tiefe, ein Schatten gehoert nur wirklich
+   schwebenden Ebenen. Farbe traegt hier nichts bei — die Kachel sagt „hier
+   haengt etwas", der Text sagt was; die frueheren roten/blauen Dateitypen-
+   Plaketten waren Dekoration in einer sonst monochromen App.
+   -------------------------------------------------------------------------- */
+
+/* `text-align: left` ist Pflicht, nicht Geschmack: der Composer-Block ist
+   zentriert (Hero-Begruessung), und ohne diese Zeile stehen Label, Zitat und
+   Dateinamen mittig — die Ursache dafuer, dass die Leisten „gebastelt"
+   aussahen. */
+/* Volle Breite, buendig mit dem Eingabefeld darunter: die Leisten sind
+   Zeilen desselben Composers, keine eingerueckten Einschuebe. */
+.composer-quote,
 .attachment-bar {
   flex: 1 1 100%;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px 2px;
+  box-sizing: border-box;
+  margin: 0;
+  text-align: left;
 }
 
+.composer-quote {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 24px;
+  column-gap: 9px;
+  row-gap: 1px;
+  margin-bottom: 4px;
+  padding: 8px;
+  border-radius: var(--radius-sm);
+  background: var(--ground);
+}
+
+.composer-quote[hidden],
 .attachment-bar[hidden] {
   display: none;
 }
 
+/* Dieselbe Kachel wie am Dateianhang und dasselbe Zeichen wie im
+   Auswahlmenue: was man dort angeklickt hat, liegt hier. */
+.composer-quote-icon {
+  grid-area: 1 / 1 / span 2 / auto;
+  align-self: start;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-2);
+}
+
+.composer-quote-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.composer-quote-label {
+  grid-area: 1 / 2;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.composer-quote-text {
+  grid-area: 2 / 2 / auto / span 2;
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-style: normal;
+  line-height: var(--line-height-ui);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.attachment-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+
+/* Der einzige Farbträger hier: die Ampel-Gelbstufe des Systems, nicht ein
+   eigenes Amber. */
 .attachment-provider-notice {
   flex: 1 0 100%;
-  margin: 2px 2px 0;
-  padding: 7px 9px;
-  border: 1px solid color-mix(in srgb, #f59e0b 24%, var(--glass-border));
-  border-radius: 9px;
-  background: color-mix(in srgb, #f59e0b 7%, var(--glass-bg-strong));
-  color: color-mix(in srgb, var(--text-color) 82%, #92400e 18%);
+  box-sizing: border-box;
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--partial-bg);
+  color: color-mix(in srgb, var(--partial) 62%, var(--ink));
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-medium);
   line-height: var(--line-height-ui);
@@ -1055,46 +1147,38 @@ body:not(.dark-mode) .chat-input-container::before {
 .attachment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   max-width: min(100%, 260px);
-  padding: 5px 6px 5px 5px;
-  border: 1px solid var(--chip-border);
+  padding: 6px 8px;
+  border: 0;
   border-radius: var(--radius-sm);
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--glass-highlight) 42%, transparent), transparent 55%),
-    var(--chip-bg);
-  box-shadow: var(--chip-shadow);
-  backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.12);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 0.45)) saturate(1.12);
+  background: var(--ground);
+  box-shadow: none;
+  transition: background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .attachment-chip-thumb {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
-  border-radius: 7px;
+  border-radius: var(--radius-xs);
   object-fit: cover;
-  border: 1px solid color-mix(in srgb, var(--glass-border) 64%, transparent);
 }
 
 .attachment-chip-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
-  border-radius: 7px;
-  background: color-mix(in srgb, #dc2626 14%, transparent);
-  border: 1px solid color-mix(in srgb, #dc2626 30%, transparent);
-  color: color-mix(in srgb, #b91c1c 80%, var(--text-color) 20%);
-  font-size: var(--font-size-micro);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink-2);
+  font-size: 9px;
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-wide);
-}
-
-.dark-mode .attachment-chip-icon {
-  color: color-mix(in srgb, #fca5a5 82%, var(--text-color) 18%);
 }
 
 .attachment-chip-meta {
@@ -1109,65 +1193,83 @@ body:not(.dark-mode) .chat-input-container::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-color);
+  color: var(--ink);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
+  line-height: 1.35;
 }
 
 .attachment-chip-size {
-  color: var(--sidebar-text-muted);
+  color: var(--ink-3);
   font-size: var(--font-size-micro);
-  line-height: var(--line-height-heading);
+  line-height: 1.35;
 }
 
+/* Ein Griff, zwei Stellen: das × am Zitat und das × am Anhang sind
+   derselbe Knopf. Rot war er nie — Entfernen ist hier kein Alarm. */
+.composer-quote-remove,
 .attachment-chip-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
   padding: 0;
-  border: none;
-  border-radius: 50%;
+  border: 0;
+  border-radius: var(--radius-xs);
   background: transparent;
-  color: var(--sidebar-text-muted);
+  color: var(--ink-3);
+  box-shadow: none;
+  cursor: pointer;
   font-size: var(--font-size-micro);
   line-height: var(--line-height-solid);
-  cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 140ms ease, color 140ms ease;
 }
 
-.attachment-chip-remove:hover {
-  background: color-mix(in srgb, var(--clear-button-bg) 80%, transparent);
-  color: var(--clear-button-text);
+.composer-quote-remove {
+  grid-area: 1 / 3;
+  align-self: start;
+  margin: -1px -2px 0 0;
+}
+
+.composer-quote-remove:hover,
+.composer-quote-remove:focus-visible,
+.attachment-chip-remove:hover,
+.attachment-chip-remove:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  color: var(--ink);
+  opacity: 1;
+}
+
+.composer-quote-remove svg {
+  width: 13px;
+  height: 13px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
 }
 
 .attachment-chip[role="button"] {
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.attachment-chip[role="button"]:hover,
+.attachment-chip[role="button"]:hover {
+  background: color-mix(in srgb, var(--ink) 6%, var(--ground));
+}
+
 .attachment-chip[role="button"]:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 36%, var(--chip-border));
-  box-shadow: var(--chip-shadow-active);
   outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 24%, transparent);
 }
 
+/* Nur der Name eines Anhangs aus einem gespeicherten Chat: die Datei selbst
+   ist nicht mehr da, also ist die Kachel eine leere Huelle. */
 .attachment-chip.is-preview-only {
-  opacity: 0.82;
-  border-style: dashed;
-}
-
-.attachment-chip-icon.is-image {
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 32%, transparent);
-  color: color-mix(in srgb, var(--accent-contrast) 78%, var(--text-color) 22%);
-}
-
-.dark-mode .attachment-chip-icon.is-image {
-  color: color-mix(in srgb, var(--accent) 84%, var(--text-color) 16%);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 
