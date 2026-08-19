@@ -78,7 +78,10 @@
     try { data = await response.json(); } catch (_) { /* empty body */ }
     if (window.auth?.currentUser?.uid !== uid) throw new Error("Authentication changed.");
     if (!response.ok) {
-      const error = new Error(data.detail || data.error || ("HTTP " + response.status));
+      // FastAPI meldet Schema-Fehler als Liste von Objekten. Als Fehlertext
+      // stand dort sonst "[object Object]" im Statusstreifen.
+      const detail = [data.detail, data.error].find(value => typeof value === "string" && value.trim());
+      const error = new Error(detail || ("HTTP " + response.status));
       error.status = response.status;
       throw error;
     }
@@ -90,6 +93,19 @@
     const max = Number(limits?.notes_chars);
     if (notes && Number.isFinite(max) && max > 0) notes.maxLength = max;
     updateCounts();
+  }
+
+  // Der Server antwortet mit dem GESPEICHERTEN Profil, und das traegt neben den
+  // Feldern auch seine `schema_version`. Die PUT-Schnittstelle verbietet
+  // unbekannte Felder (extra="forbid"), also darf eine Serverantwort nie
+  // ungefiltert zurueckgeschickt werden -- genau das liess den Schalter mit 422
+  // scheitern und die Checkbox zurueckspringen.
+  function requestBody(profile) {
+    const body = { enabled: profile?.enabled !== false };
+    FIELDS.forEach(field => {
+      body[field] = typeof profile?.[field] === "string" ? profile[field] : "";
+    });
+    return body;
   }
 
   function readForm() {
@@ -193,7 +209,7 @@
     state.saving = true;
     syncControls();
     try {
-      const result = await api("PUT", profile);
+      const result = await api("PUT", requestBody(profile));
       const saved = result.memory || emptyProfile();
       applyLimits(result.limits);
       state.saved = saved;
@@ -239,13 +255,23 @@
       setStatus("Please log in first.", "error");
       return;
     }
-    const next = { ...(state.saved || emptyProfile()), enabled: enabled.checked };
+    // Der Schalter schreibt den gespeicherten Textstand mit. Ist der (noch)
+    // nicht geladen, erst nachladen -- sonst wuerde ein Klick auf den Schalter
+    // das vorhandene Profil mit lauter leeren Feldern ueberschreiben. load()
+    // schreibt das Formular neu, deshalb steht der Wunsch des Nutzers vorher
+    // fest und wird danach wieder gesetzt.
+    const wanted = enabled.checked;
+    if (!state.loaded) {
+      await load();
+      enabled.checked = wanted;
+    }
+    const next = { ...(state.saved || emptyProfile()), enabled: wanted };
     const ok = await persist(
       next,
-      enabled.checked ? "Memory is on again." : "Memory paused. Runs go out without it.",
+      wanted ? "Memory is on again." : "Memory paused. Runs go out without it.",
       { rewriteFields: false }
     );
-    if (!ok) enabled.checked = !enabled.checked;
+    if (!ok) enabled.checked = !wanted;
   }
 
   function clearFields() {

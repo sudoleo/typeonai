@@ -4,6 +4,7 @@ import re
 import base64
 import json
 import logging
+import unicodedata
 from typing import Literal
 from firebase_admin import firestore
 from fastapi import APIRouter, Request, Body, HTTPException, Query
@@ -226,6 +227,20 @@ def _authoritative_consensus_payload(uid: str, result_id: str, chat_binding: dic
 
 def _chat_store():
     return ChatStore(db_firestore)
+
+
+def _same_question(stored, requested) -> bool:
+    """Compare the run's question with the one the browser sends to save it.
+
+    A chat turn stores the NFKC-normalized question (``chat_store``), while the
+    pending share result keeps the raw text. Comparing the two forms literally
+    rejected perfectly valid saves -- one non-breaking space in a follow-up was
+    enough to make the answer appear while its bookmark failed.
+    """
+    def normalized(value):
+        return unicodedata.normalize("NFKC", str(value or "")).strip()
+
+    return normalized(stored) == normalized(requested)
 
 
 def _sanitize_previous_turn(raw):
@@ -568,7 +583,7 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
         raise HTTPException(status_code=401, detail="Authentication failed")
 
     authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
-    if authoritative["question"].strip() != question.strip():
+    if not _same_question(authoritative["question"], question):
         raise HTTPException(status_code=409, detail="Bookmark question does not match the completed run.")
     consensusText = authoritative["consensus"][:100_000]
     differencesText = authoritative["differences"][:50_000]

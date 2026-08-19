@@ -1215,6 +1215,7 @@
         // differences_data und speichert das Bookmark damit erneut.
         window.lastConsensusBookmarkPayload = {
           question: question,
+          resultId: data.result_id || null,
           previousQuestion: bookmarkPreviousQuestion,
           previousTurn: bookmarkPreviousTurn,
           consensusText: data.consensus_response,
@@ -1223,9 +1224,14 @@
           conversation: bookmarkConversation
         };
         if (!completedReplay && window.auth?.currentUser) {
+          // Auch ein Follow-up schickt die result_id seines eigenen Laufs mit.
+          // Sonst war der Chat-Turn der EINZIGE Beleg fuer "dieser Lauf gehoert
+          // dir" -- und jeder Lauf ohne persistierten Turn endete mit sichtbarer
+          // Antwort und der Meldung, das Bookmark liesse sich nicht speichern.
+          // Der Server setzt share_result_id bei einem Follow-up ohnehin leer.
           window.saveBookmarkConsensus(
             question, data.consensus_response, data.differences, data.differences_data,
-            bookmarkPreviousQuestion ? null : data.result_id,
+            data.result_id || null,
             consensus_model, shareModelLabels, bookmarkPreviousQuestion,
             bookmarkPreviousTurn, bookmarkConversation
           );

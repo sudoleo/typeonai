@@ -1,3 +1,4 @@
+import unicodedata
 from pathlib import Path
 from unittest.mock import patch
 
@@ -404,6 +405,129 @@ def test_bookmark_name_stays_the_first_question_of_the_conversation():
 def test_a_legacy_bookmark_without_a_title_falls_back_to_its_question():
     meta = bookmarks_router._bookmark_meta("legacy_id", {"query": "Only question"})
     assert meta["title"] == "Only question"
+
+
+def test_a_follow_up_saves_although_the_turn_stored_a_normalized_question():
+    """Der Chat-Turn speichert NFKC-normalisiert, der Browser schickt den Rohtext.
+
+    Ein einziges geschuetztes Leerzeichen in einer Folgefrage liess den Lauf
+    sichtbar durchlaufen, waehrend sein Bookmark mit 409 scheiterte.
+    """
+    raw_question = "Und was kostet das?"
+    stored_question = unicodedata.normalize("NFKC", raw_question)
+    assert raw_question != stored_question
+
+    chat_id = "c" * 32
+    turn_id = "2" * 32
+
+    class FakeChatStore:
+        def get_turn(self, uid, requested_chat_id, requested_turn_id):
+            return {
+                "status": "completed",
+                "question": stored_question,
+                "consensus": "Antwort",
+                "differences": "",
+                "differences_data": None,
+                "sources": [],
+                "model_answers": {"OpenAI": {"answer": "a", "model_label": "GPT"}},
+                "included_models": ["OpenAI: GPT"],
+                "consensus_model": "gpt-5",
+                "result_id": "",
+            }
+
+        def get_chat(self, uid, requested_chat_id):
+            return {"id": requested_chat_id, "title": "Erste Frage"}
+
+    bookmark_ref = FakeBookmarkRef("stable_chat_bookmark", {"responses": {}})
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router, "_chat_store", return_value=FakeChatStore()),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": "stable_chat_bookmark",
+                "chatId": chat_id,
+                "turnId": turn_id,
+                "question": raw_question,
+                "previousQuestion": "Erste Frage",
+                "consensusText": "Antwort",
+                "differencesText": "",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["bookmark"]["query"] == raw_question
+
+
+def test_a_follow_up_bookmark_may_rest_on_its_own_run_snapshot():
+    """Ohne persistierten Chat-Turn ist die result_id der einzige Beleg.
+
+    Der Browser schickt sie deshalb auch bei einer Folgefrage mit. Der
+    Share-Verweis bleibt trotzdem leer -- ein Follow-up-Share wird spaeter
+    serverseitig neu gebaut.
+    """
+    result_id = "R" * 16
+    bookmark_ref = FakeBookmarkRef("followup_on_result", {"responses": {}})
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(
+            bookmarks_router.share_snapshots,
+            "get_pending_result",
+            return_value={
+                "question": "Zweite Frage",
+                "consensus_md": "Zweiter Konsens",
+                "differences_text": "",
+                "differences_data": None,
+                "sources": [],
+                "included_models": ["OpenAI: GPT"],
+                "consensus_model": "gpt-5",
+                "model_responses": {"OpenAI": "a"},
+                "vote_subject_id": result_id,
+            },
+        ),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": "followup_on_result",
+                "resultId": result_id,
+                "question": "Zweite Frage",
+                "previousQuestion": "Erste Frage",
+                "consensusText": "Zweiter Konsens",
+                "differencesText": "",
+            },
+        )
+
+    assert response.status_code == 200
+    bookmark = response.json()["bookmark"]
+    assert bookmark["responses"]["consensus"] == "Zweiter Konsens"
+    assert bookmark["previous_question"] == "Erste Frage"
+    assert bookmark["share_result_id"] == ""
+
+
+def test_the_browser_sends_the_run_snapshot_with_every_consensus_bookmark():
+    consensus_run = (
+        Path(__file__).resolve().parents[1] / "static" / "js" / "consensus-run.js"
+    ).read_text(encoding="utf-8")
+    assert "data.result_id || null," in consensus_run
+    assert "bookmarkPreviousQuestion ? null : data.result_id" not in consensus_run
 
 
 def test_a_consensus_bookmark_without_a_completed_run_is_rejected():

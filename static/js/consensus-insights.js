@@ -1606,7 +1606,7 @@
               payload.consensusText,
               payload.differencesText,
               payload.differencesData,
-              null,
+              payload.resultId || null,
               "",
               null,
               payload.previousQuestion || "",
