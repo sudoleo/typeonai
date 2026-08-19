@@ -144,7 +144,11 @@ geleert und erst danach beginnen Fortschrittsanzeige und Modell-Spinner. Seit
 2026-08-14 ist das Szenario die Prüfung einer heiklen Nachricht („Wir
 verschieben den Launch um zwei Wochen — kann ich das so an die Kundin
 schicken?"): Die Frage wird getippt, der Nachrichtenentwurf danach in einem Zug
-eingefügt. Der Lauf hat drei strittige Stellen (kritischer Widerspruch zur
+eingefügt. Seit 2026-08-18 bleibt der Demo-Lauf bis zum Abschluss aller sechs
+Antworten sichtbar und führt danach über die getrennten Zustände „Writing the
+consensus" und „Checking for contradictions" zum Ergebnis; die lokale synchrone
+Widerspruchsauswertung hält ihren angekündigten Zustand dafür 1,1 Sekunden. Der
+Lauf hat drei strittige Stellen (kritischer Widerspruch zur
 Schlusszeile, kleiner zur Ursachenbenennung, eine abweichende Gewichtung zur
 Entschuldigung) und sechs Claims; der Score 52/100 ist nicht gegriffen, sondern
 die Rechnung aus `consensus_scoring.py` auf genau diese Daten. Quellen gibt es

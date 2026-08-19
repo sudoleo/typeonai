@@ -58,8 +58,9 @@ incorporate the owner's feedback and apply to every future draft.
 ## Product video
 
 The demo video is generated, not hand-edited. Pipeline and flags:
-`recording/README.md` (local tooling, gitignored). Rules that apply to every
-cut:
+`recording/README.md` (local tooling, gitignored); the current cut is
+documented beat by beat in `docs/linkedin-demo-the-split.md`. Rules that apply
+to every cut:
 
 - Record the running app, never a rebuild of it. The recorder drives the real
   interface through the app's own demo scenario (`static/demo.js`); the shell,
@@ -67,11 +68,30 @@ cut:
   product's own DOM.
 - Every scene reacts to real DOM state instead of a guessed duration, so a
   product change shows up in the next render rather than drifting out of sync.
-- Default output: 1080 × 1350 (4:5), ~50–55 s, 30 fps, dark theme. A 1920 × 1080
+- Default output: 1080 × 1350 (4:5), 40–45 s, 30 fps, dark theme, with sound. A 1920 × 1080
   landscape master is available for the site and YouTube.
 - One idea per cut, six captions at most. A caption names what the product is
   doing in the moment it does it; it never claims something the frame does not
-  show.
+  show. No numbered kickers — a launch does not number its arguments.
+- **The first line states the promise.** A feed decides in about a second
+  whether second ten happens, so the cut opens on a short card that says what
+  it is going to show — and then shows it. Opening cold on the payoff itself
+  was tried and reads as a film with its beginning missing.
+- The opening product shot must be motivated by the card before it. A composer
+  never simply appears: establish the human decision first, then reveal the
+  field sharply and at readable scale. Do not dissolve a title card through a
+  heavy spotlight or blur into the input.
+- Product proof comes before mechanism. A diagram is omitted unless the viewer
+  genuinely needs it after seeing the result; if it survives, it uses the
+  product's visual language, explains one transition only, and stays under
+  roughly three seconds. Never ask the viewer to parse the architecture while
+  they are still learning what the product does.
+- A launch cut must include the continuation value, not only the first answer:
+  show that a follow-up keeps conversation context. Treat it as a second,
+  understated product reveal rather than a feature-list caption.
+- Any number on screen is read out of the product at render time, never typed
+  into the storyboard, and any claim about the product's output is checked
+  against the DOM before the frame is written.
 - Framing: the product's reading column sets the zoom, then the camera settles.
   Never crop words. Move attention with a spotlight (dim everything but one
   element) and with copy, not with constant zooming.
@@ -80,7 +100,14 @@ cut:
 - Disclose the setup on the end card (`Demo scenario · real interface`). The
   interface is real; the model answers in the demo scenario are canned, and
   that difference is never blurred.
-- Silent by default. Feed video is watched muted; captions carry it.
+- The master carries a score; a silent copy is rendered beside it. Feed video
+  is watched muted and the captions have to carry the film on their own, but a
+  demo that is silent when somebody turns the volume up reads as unfinished.
+  Nothing is published with sound before it has been listened to, on headphones
+  and on a phone. A launch or introduction video needs to read unmistakably as
+  music: tempo, harmonic progression and a coherent instrumental phrase. Do
+  not substitute a noise bed, isolated tones, sweeps or a collection of UI
+  effects for a soundtrack.
 
 ## Fact and visual QA
 

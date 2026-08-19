@@ -297,6 +297,10 @@ const DEMO_PHASES = {
 
 const DEMO_CONSENSUS_DELAY_MS = 4200;
 const DEMO_CONSENSUS_JITTER_MS = 600;
+// The structured contradiction check is synchronous in the local demo. Give
+// its announced UI phase one deliberate beat so "Checking for contradictions"
+// does not flash and disappear between two paints.
+const DEMO_DIFFERENCES_REVIEW_MS = 1100;
 const DEMO_DELAY_BOOST_MS = 1800;
 
 Object.keys(DEMO_DATA.delays).forEach(key => {
@@ -473,6 +477,8 @@ async function renderDemoConsensus(mainP, diffP) {
 
   // Konsenstext steht: ab hier prueft die Auswertung auf Widersprueche.
   window.App?.consensusPipeline?.onDifferencesStart?.();
+  await sleep(DEMO_DIFFERENCES_REVIEW_MS);
+  if (runId !== demoRunId) return;
 
   // Differences exakt wie bei echten Queries: strukturierte Auswertung mit
   // Verdict-Header, Agreement-Badges und Contradiction-Karten. Nur wenn die
