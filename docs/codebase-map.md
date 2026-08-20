@@ -1138,7 +1138,13 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   Vollinhalte kommen erst beim Öffnen über `GET /bookmarks/{id}` und nur das
   aktuell geöffnete Detail bleibt im Cache. Suche lädt bei Bedarf weitere
   Metadatenseiten, nicht deren Antworten. Saves reduzieren das serverseitige
-  Merge-Ergebnis sofort wieder auf Listenmetadaten. Beim Restore stammen die
+  Merge-Ergebnis sofort wieder auf Listenmetadaten. Modell- und Consensus-Saves
+  derselben Bookmark-ID laufen browserseitig in Aufrufreihenfolge durch eine
+  gemeinsame Queue; der Consensus-Write kommt dadurch sicher nach den bis zu
+  sechs Modell-Writes und repariert als autoritativer Vollsnapshot auch einen
+  fehlgeschlagenen Modell-Write. Die Firestore-Transaktion behält zusätzlich
+  ein erhöhtes Konflikt-Retry-Budget für alte, noch parallel schreibende Clients.
+  Beim Restore stammen die
   sichtbaren Namen der Einzelantworten und die Citation-Metadaten aus den
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
   bleiben unverändert und werden erst für einen neuen Lauf wieder in die UI

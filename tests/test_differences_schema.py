@@ -754,6 +754,32 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
         )
         self.assertEqual(len(sentences), 1)
 
+    def test_currency_abbreviations_do_not_break_markdown_claims(self):
+        """Mrd./Mio. stehen vor dem Waehrungszeichen, nicht am Satzende.
+
+        Ein Split an dieser Stelle erzeugt Fragmente mit verwaisten **, die in
+        der Key-Claims-Liste als rohe Markdown-Zeichen sichtbar werden.
+        """
+        _numbered, sentences = self.sentences(
+            "**+18 % QoQ** = Anstieg von **5,7 Mrd. $ in Q1** gegenueber "
+            "**6,7 Mrd. $ in Q2**. Die **40 Mio. EUR ARR** sind annualisiert."
+        )
+        self.assertEqual(sentences, [
+            "**+18 % QoQ** = Anstieg von **5,7 Mrd. $ in Q1** gegenueber "
+            "**6,7 Mrd. $ in Q2**.",
+            "Die **40 Mio. EUR ARR** sind annualisiert.",
+        ])
+
+    def test_quantity_abbreviation_can_still_end_a_sentence(self):
+        """Die Waehrungs-Sonderregel darf echte Satzenden nicht verschlucken."""
+        _numbered, sentences = self.sentences(
+            "Der Quartalsumsatz liegt bei 40 Mio. Danach steigt die Prognose weiter."
+        )
+        self.assertEqual(sentences, [
+            "Der Quartalsumsatz liegt bei 40 Mio.",
+            "Danach steigt die Prognose weiter.",
+        ])
+
     def test_headings_tables_and_code_are_not_numbered(self):
         text = (
             "# Titel\n\n"

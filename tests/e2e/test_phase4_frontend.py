@@ -740,3 +740,130 @@ def test_template_visibility_classes_remain_overridable_by_ui_controls(
         expect(page.locator("#apiSettingsArea")).to_be_visible()
     finally:
         context.close()
+
+
+def test_key_claim_fallback_cleans_orphan_markdown_and_renders_math(
+    browser, phase4_server
+):
+    """Legacy-Anker mit einem Split in **fett** bleiben lesbar; LaTeX nutzt
+    auch in der Fallback-Liste denselben KaTeX-Pfad wie der Konsenstext."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.evaluate(
+            """(anchors) => {
+              // Der browser-only Lauf laedt bewusst keine externen CDN-Skripte.
+              // Der Stub prueft deterministisch, dass der echte gemeinsame
+              // ConsensusMath-Pfad das vorbereitete Inline-LaTeX weiterreicht.
+              window.__claimMathInputs = [];
+              window.marked = {
+                parseInline: (source) => {
+                  if (source === "**40 Mrd. $ ARR**") return "<strong>40 Mrd. $ ARR</strong>";
+                  if (source.includes("literal")) return "**literal**";
+                  if (source === "`value ** 2`") return "<code>value ** 2</code>";
+                  if (source.startsWith("Die **mehr als")) {
+                    return "Die <strong>mehr als 40 Mrd. $ ARR</strong> sind das annualisierte aktuelle Umsatztempo im spaeteren Zeitraum.";
+                  }
+                  if (source.includes("approx")) return anchors.math;
+                  return source;
+                }
+              };
+              window.DOMPurify = {sanitize: (html) => html};
+              window.renderMathInElement = (root) => {
+                window.__claimMathInputs.push(root.textContent);
+                if (!root.textContent.includes("\\(")) return;
+                const rendered = document.createElement("span");
+                rendered.className = "katex";
+                rendered.textContent = "17,5 %";
+                root.replaceChildren(rendered);
+              };
+              window.revealConsensusOutput?.();
+              document.getElementById("consensusAnswerBody").innerHTML =
+                "<p>Something else entirely.</p>";
+              window.renderConsensusInsights({
+                claims: [
+                  {anchor: anchors.validBold, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.markdown, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.escapedStars, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.code, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.literalStar, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.longText, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.math, agree: [{model: "OpenAI"}], dissent: []}
+                ],
+                differences: [],
+                models_compared: ["OpenAI"]
+              }, 1);
+            }""",
+            {
+                "validBold": "**40 Mrd. $ ARR**",
+                "markdown": "$ in Q1** gegenueber **6,7 Mrd.",
+                "escapedStars": r"\*\*literal\*\*",
+                "code": "`value ** 2`",
+                "literalStar": "Preis * Menge = Umsatz",
+                "longText": (
+                    "Die **mehr als 40 Mrd. $ ARR** sind das annualisierte "
+                    "aktuelle Umsatztempo im spaeteren Zeitraum."
+                ),
+                "math": r"\(\frac{6{,}7}{5{,}7} - 1 \approx 17{,}5\%\)",
+            },
+        )
+
+        fallback = page.locator("#consensusClaimsFallback")
+        rows = fallback.locator(".claims-fallback-row")
+        expect(rows).to_have_count(7)
+        expect(rows.nth(0).locator("strong")).to_have_text("40 Mrd. $ ARR")
+        assert "**" not in rows.nth(1).inner_text()
+        expect(rows.nth(2).locator(".claims-fallback-text")).to_have_text("**literal**")
+        expect(rows.nth(3).locator("code")).to_have_text("value ** 2")
+        expect(rows.nth(4).locator(".claims-fallback-text")).to_have_text(
+            "Preis * Menge = Umsatz"
+        )
+        expect(rows.nth(5).locator("strong")).to_have_text("mehr als 40 Mrd. $ ARR")
+        assert page.evaluate("() => window.__claimMathInputs.at(-1)") == (
+            r"\(\frac{6{,}7}{5{,}7} - 1 \approx 17{,}5\%\)"
+        )
+        expect(
+            rows.nth(6).locator(".katex")
+        ).to_have_count(1)
+        assert r"\approx" not in fallback.inner_text()
+        layout = page.evaluate(
+            """() => {
+              const box = document.getElementById("consensusClaimsFallback");
+              const bounds = box.getBoundingClientRect();
+              return {
+                scrollWidth: box.scrollWidth,
+                clientWidth: box.clientWidth,
+                badgesInside: Array.from(box.querySelectorAll(".claim-badge"))
+                  .every(badge => badge.getBoundingClientRect().right <= bounds.right + 1)
+              };
+            }"""
+        )
+        assert layout["scrollWidth"] <= layout["clientWidth"] + 1
+        assert layout["badgesInside"] is True
+
+        # Derselbe sichtbare Schutz greift auch dann, wenn marked/DOMPurify
+        # nicht vom CDN geladen werden konnten.
+        page.evaluate(
+            """(anchors) => {
+              window.marked = undefined;
+              window.DOMPurify = undefined;
+              window.renderConsensusInsights({
+                claims: [
+                  {anchor: anchors.markdown, agree: [{model: "OpenAI"}], dissent: []},
+                  {anchor: anchors.math, agree: [{model: "OpenAI"}], dissent: []}
+                ],
+                differences: [],
+                models_compared: ["OpenAI"]
+              }, 1);
+            }""",
+            {
+                "markdown": "$ in Q1** gegenueber **6,7 Mrd.",
+                "math": r"\(\frac{6{,}7}{5{,}7} - 1 \approx 17{,}5\%\)",
+            },
+        )
+        rows = fallback.locator(".claims-fallback-row")
+        expect(rows).to_have_count(2)
+        assert "**" not in rows.nth(0).inner_text()
+        expect(rows.nth(1).locator(".katex")).to_have_count(1)
+    finally:
+        context.close()

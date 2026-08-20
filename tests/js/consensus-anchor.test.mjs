@@ -174,3 +174,32 @@ describe("consensusAnchor.locateAnchor", () => {
     expect(anchor.locateAnchor(root, "A claim that was never made.")).toBeNull();
   });
 });
+
+describe("consensusAnchor.sentenceBounds", () => {
+  it("does not treat currency abbreviations as sentence endings", () => {
+    const { anchor } = boot();
+    const text =
+      "Der Umsatz stieg von 5,7 Mrd. $ in Q1 auf 6,7 Mrd. $ in Q2. Danach blieb er stabil.";
+    const start = text.indexOf("$ in Q1");
+    const end = text.indexOf("Mrd. $ in Q2") + "Mrd.".length;
+
+    const bounds = anchor.sentenceBounds(text, start, end);
+
+    expect(text.slice(bounds.start, bounds.end)).toBe(
+      "Der Umsatz stieg von 5,7 Mrd. $ in Q1 auf 6,7 Mrd. $ in Q2."
+    );
+  });
+
+  it("still recognizes a quantity abbreviation at a real sentence end", () => {
+    const { anchor } = boot();
+    const text = "Der Umsatz liegt bei 40 Mio. Danach steigt die Prognose weiter.";
+    const start = text.indexOf("Umsatz");
+    const end = text.indexOf("Mio.") + "Mio.".length;
+
+    const bounds = anchor.sentenceBounds(text, start, end);
+
+    expect(text.slice(bounds.start, bounds.end)).toBe(
+      "Der Umsatz liegt bei 40 Mio."
+    );
+  });
+});

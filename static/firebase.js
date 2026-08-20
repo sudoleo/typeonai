@@ -1294,6 +1294,26 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
 }
 
 let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
+const bookmarkWriteChains = new Map();
+
+function enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, operation) {
+  const queueKey = `${requestGeneration}:${requestUid}:${bookmarkId}`;
+  const previous = bookmarkWriteChains.get(queueKey) || Promise.resolve();
+  const current = previous
+    // A failed model snapshot must not prevent the authoritative consensus
+    // snapshot behind it from repairing/completing the same bookmark.
+    .catch(() => undefined)
+    .then(() => {
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      return operation();
+    });
+  bookmarkWriteChains.set(queueKey, current);
+  return current.finally(() => {
+    if (bookmarkWriteChains.get(queueKey) === current) {
+      bookmarkWriteChains.delete(queueKey);
+    }
+  });
+}
 
 function showBookmarkSaveError(status, detail, scope = "") {
   const normalizedDetail = String(detail || "").trim();
@@ -1326,56 +1346,58 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
   const requestGeneration = authState.generation;
   const bookmarkId = window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
-  const id_token = await requestUser.getIdToken(false);
-  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+  return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
+    const id_token = await requestUser.getIdToken(false);
+    if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
-  // HIER: Quellen holen
-  const sources = window.currentEvidenceSources || [];
+    // HIER: Quellen holen
+    const sources = window.currentEvidenceSources || [];
 
-  // Anhänge der zuletzt gesendeten Frage: nur Metadaten (Name/Typ/Größe),
-  // die Dateidaten selbst werden bewusst NICHT in Firestore gespeichert.
-  const attachmentsMeta = window.lastQuestionAttachmentsMeta || [];
+    // Anhänge der zuletzt gesendeten Frage: nur Metadaten (Name/Typ/Größe),
+    // die Dateidaten selbst werden bewusst NICHT in Firestore gespeichert.
+    const attachmentsMeta = window.lastQuestionAttachmentsMeta || [];
 
-  try {
-    const res = await fetch("/bookmark", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      // HIER: sources hinzufügen
-      body: JSON.stringify({
-        id_token,
-        question,
-        response,
-        modelName,
-        mode,
-        bookmarkId: bookmarkId || null,
-        previousQuestion,
-        sources: sources,
-        attachments: attachmentsMeta
-      })
-    });
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-    const data = await res.json();
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+    try {
+      const res = await fetch("/bookmark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // HIER: sources hinzufügen
+        body: JSON.stringify({
+          id_token,
+          question,
+          response,
+          modelName,
+          mode,
+          bookmarkId: bookmarkId || null,
+          previousQuestion,
+          sources: sources,
+          attachments: attachmentsMeta
+        })
+      });
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      const data = await res.json();
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
-    if (!res.ok) {
-      console.error("Error saving bookmark:", data.detail);
-      showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
-      return;
+      if (!res.ok) {
+        console.error("Error saving bookmark:", data.detail);
+        showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        return;
+      }
+
+      if (data.bookmark) {
+          window.App.bookmarkSession?.restore?.(data.bookmark.id);
+          upsertBookmarkMeta(data.bookmark);
+          if (openedBookmarkId === data.bookmark.id) {
+            bookmarkDetailCache.clear();
+            bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
+          }
+          trackAppEvent("app_bookmark_saved", { type: "model", mode });
+      }
+
+    } catch (error) {
+      console.error("Error in saveBookmark:", error);
     }
-
-    if (data.bookmark) {
-        window.App.bookmarkSession?.restore?.(data.bookmark.id);
-        upsertBookmarkMeta(data.bookmark);
-        if (openedBookmarkId === data.bookmark.id) {
-          bookmarkDetailCache.clear();
-          bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
-        }
-        trackAppEvent("app_bookmark_saved", { type: "model", mode });
-    }
-
-  } catch (error) {
-    console.error("Error in saveBookmark:", error);
-  }
+  });
 }
 
 window.saveBookmark = saveBookmark;
@@ -1391,56 +1413,58 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
   const bookmarkId = conversation?.bookmarkId
     || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
-  const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
-  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+  return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
+    const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
+    if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
-  // HIER: Quellen holen
-  const sources = window.currentEvidenceSources || [];
+    // HIER: Quellen holen
+    const sources = window.currentEvidenceSources || [];
 
-  try {
-    const res = await fetch("/bookmark/consensus", {
-       method: "POST",
-       headers: { "Content-Type": "application/json" },
-       body: JSON.stringify({
-         id_token: id_token,
-         question: question,
-         consensusText: consensusText,
-         differencesText: differencesText,
-         // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
-         // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
-         differencesData: differencesData || null,
-         sources: sources,
-         resultId: resultId || null,
-         consensusModel: consensusModel || "",
-         modelLabels: modelLabels || null,
-         modelResponses: conversation?.modelResponses || null,
-         bookmarkId: bookmarkId || null,
-         chatId: conversation?.chatId || null,
-         turnId: conversation?.turnId || null,
-         previousQuestion: previousQuestion || "",
-         previousTurn: previousTurn || null
-       })
-    });
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-    const data = await res.json();
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-    if (!res.ok) {
-      console.error("Error saving consensus bookmark:", data.detail);
-      showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
-      return;
-    }
-    if (data.bookmark) {
-      window.App.bookmarkSession?.restore?.(data.bookmark.id);
-      upsertBookmarkMeta(data.bookmark);
-      if (openedBookmarkId === data.bookmark.id) {
-        bookmarkDetailCache.clear();
-        bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
+    try {
+      const res = await fetch("/bookmark/consensus", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           id_token: id_token,
+           question: question,
+           consensusText: consensusText,
+           differencesText: differencesText,
+           // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
+           // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
+           differencesData: differencesData || null,
+           sources: sources,
+           resultId: resultId || null,
+           consensusModel: consensusModel || "",
+           modelLabels: modelLabels || null,
+           modelResponses: conversation?.modelResponses || null,
+           bookmarkId: bookmarkId || null,
+           chatId: conversation?.chatId || null,
+           turnId: conversation?.turnId || null,
+           previousQuestion: previousQuestion || "",
+           previousTurn: previousTurn || null
+         })
+      });
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      const data = await res.json();
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      if (!res.ok) {
+        console.error("Error saving consensus bookmark:", data.detail);
+        showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        return;
       }
+      if (data.bookmark) {
+        window.App.bookmarkSession?.restore?.(data.bookmark.id);
+        upsertBookmarkMeta(data.bookmark);
+        if (openedBookmarkId === data.bookmark.id) {
+          bookmarkDetailCache.clear();
+          bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
+        }
+      }
+      trackAppEvent("app_bookmark_saved", { type: "consensus" });
+    } catch (error) {
+      console.error("Error in saveBookmarkConsensus:", error);
     }
-    trackAppEvent("app_bookmark_saved", { type: "consensus" });
-  } catch (error) {
-    console.error("Error in saveBookmarkConsensus:", error);
-  }
+  });
 }
 window.saveBookmarkConsensus = saveBookmarkConsensus;
 

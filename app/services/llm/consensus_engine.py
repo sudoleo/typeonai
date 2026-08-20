@@ -840,11 +840,16 @@ _SENTENCE_ABBREVIATIONS = {
     "mr", "mrs", "ms", "st", "vs", "approx", "e.g", "i.e", "cf", "fig",
     "no", "inc", "ltd", "co", "al", "jr", "sr", "ph.d",
 }
+_QUANTITY_ABBREVIATIONS = {"tsd", "mio", "mill", "mrd", "bn", "bln"}
+_CURRENCY_AFTER_QUANTITY_RE = re.compile(
+    r"^(?:[$€£¥₹₽₩₺₫₴₦₱₪]|(?:USD|EUR|GBP|CHF|JPY|CNY|RMB|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF|INR)\b)",
+    re.IGNORECASE,
+)
 
 _SENTENCE_TAIL_TOKEN_RE = re.compile(r"[^\s]+$")
 
 
-def _continues_after_dot(fragment: str) -> bool:
+def _continues_after_dot(fragment: str, following: str = "") -> bool:
     """True, wenn der Punkt am Ende des Fragments kein Satzende ist -
     Abkuerzung ("ca.") oder Initial ("J. R. R.").
 
@@ -863,7 +868,16 @@ def _continues_after_dot(fragment: str) -> bool:
         return False
     if len(token) == 1 and token.isalpha():
         return True
-    return token.strip(".") in _SENTENCE_ABBREVIATIONS
+    normalized = token.strip(".")
+    if normalized in _SENTENCE_ABBREVIATIONS:
+        return True
+    # Mengenabkuerzungen sind kontextabhaengig: "6,7 Mrd. $ in Q1" ist ein
+    # Satz, "Der Umsatz liegt bei 6,7 Mrd. Danach ..." sind zwei. Nur ein
+    # direkt folgendes Waehrungszeichen/-kuerzel hebt deshalb die Grenze auf.
+    return (
+        normalized in _QUANTITY_ABBREVIATIONS
+        and bool(_CURRENCY_AFTER_QUANTITY_RE.match(str(following or "").lstrip()))
+    )
 
 
 def _sentence_spans(text: str) -> list:
@@ -887,7 +901,7 @@ def _sentence_spans(text: str) -> list:
             previous = text[spans[-1][0]:spans[-1][1]]
             fragment = text[span[0]:span[1]].strip()
             # Abkuerzungspunkt oder Stummel: gehoert zum Satz davor.
-            if _continues_after_dot(previous) or len(fragment.split()) < MIN_SENTENCE_WORDS:
+            if _continues_after_dot(previous, text[span[0]:]) or len(fragment.split()) < MIN_SENTENCE_WORDS:
                 spans[-1] = (spans[-1][0], span[1])
                 continue
         spans.append(span)

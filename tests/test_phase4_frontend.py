@@ -71,6 +71,25 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
     assert 'showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`)' in consensus_save
 
 
+def test_bookmark_model_and_consensus_writes_are_serialized_per_saved_run():
+    firebase = read("static/firebase.js")
+    queue = section(
+        firebase,
+        "function enqueueBookmarkWrite(",
+        "function showBookmarkSaveError(",
+    )
+    model_save = section(firebase, "async function saveBookmark(", "window.saveBookmark =")
+    consensus_save = section(
+        firebase, "async function saveBookmarkConsensus(", "window.saveBookmarkConsensus ="
+    )
+
+    assert "bookmarkWriteChains.get(queueKey) || Promise.resolve()" in queue
+    assert ".catch(() => undefined)" in queue
+    assert "bookmarkWriteChains.delete(queueKey)" in queue
+    assert "return enqueueBookmarkWrite(" in model_save
+    assert "return enqueueBookmarkWrite(" in consensus_save
+
+
 def test_share_requests_use_auth_snapshots_abort_controllers_and_view_epochs():
     share = read("static/js/share-dialog.js")
 

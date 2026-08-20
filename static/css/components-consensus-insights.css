@@ -59,6 +59,19 @@
   overflow-wrap: anywhere;
 }
 
+.claims-fallback-row .claim-badge {
+  flex-shrink: 0;
+}
+
+/* Das Badge steht rechtsbuendig. Seine zentrierte 44px-Touchflaeche ragte
+   deshalb auf schmalen Displays ueber den Container hinaus. Die gleiche
+   Trefferbreite bleibt erhalten, waechst hier aber nur nach innen. */
+.claims-fallback-row .claim-badge::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-50%);
+}
+
 /* --- Popover / Bottom Sheet ---------------------------------------------- */
 .claim-sheet-backdrop {
   position: fixed;

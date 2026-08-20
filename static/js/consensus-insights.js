@@ -181,15 +181,43 @@
 
             if (source && window.marked?.parseInline && window.DOMPurify?.sanitize) {
               const content = document.createElement("span");
+              const hasEscapedLiteralStar = /\\\*/.test(source);
+              const prepared = window.ConsensusMath?.prepareMarkdown
+                ? window.ConsensusMath.prepareMarkdown(source)
+                : source;
               content.innerHTML = window.DOMPurify.sanitize(
-                window.marked.parseInline(source),
+                window.marked.parseInline(prepared),
                 { ALLOWED_TAGS: ["strong", "em", "del", "code", "br"], ALLOWED_ATTR: [] }
               );
+
+              // Bereits gespeicherte Anker koennen aus einem Satz stammen, der
+              // an einer Abkuerzung mitten in **fett** getrennt wurde. Marked
+              // laesst die dadurch verwaisten Delimiter absichtlich als Text
+              // stehen. In der reinen Anzeige sind sie aber nur kaputtes
+              // Markdown; vollstaendige Sternchen-Paare wurden zu diesem
+              // Zeitpunkt bereits in <strong>/<em> umgewandelt. Unterstriche
+              // bleiben bewusst unangetastet (z. B. ein literales __init__).
+              const textWalker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+              let textNode;
+              while ((textNode = textWalker.nextNode())) {
+                if (textNode.parentElement?.closest("code")) continue;
+                // Ein explizit escaptes \* ist sichtbarer Inhalt, kein kaputter
+                // Markdown-Delimiter. In diesem seltenen Fall greift die
+                // Bereinigung fuer den ganzen kurzen Inline-Wert nicht.
+                if (!hasEscapedLiteralStar) {
+                  textNode.nodeValue = textNode.nodeValue.replace(/\*{2,3}/g, "");
+                }
+              }
+
               element.appendChild(content);
             } else {
               element.appendChild(document.createTextNode(stripMarkdown(source)));
             }
             if (after) element.appendChild(document.createTextNode(after));
+            // Math ist nicht von marked/DOMPurify abhaengig. Auch wenn eine
+            // dieser CDN-Libraries fehlt und oben der Plaintext-Pfad greift,
+            // bleiben \(...\)/\[...\] echte KaTeX-Ausdruecke.
+            window.ConsensusMath?.render?.(element);
           }
 
           // --- Textsuche: Whitespace kollabieren, Anführungszeichen vereinheitlichen

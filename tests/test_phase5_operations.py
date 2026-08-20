@@ -190,6 +190,28 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
         )
 
 
+def test_persistence_transactions_have_a_contention_retry_budget(monkeypatch):
+    transaction_options = []
+    transaction = object()
+
+    class TransactionOnlyDatabase:
+        def transaction(self, **kwargs):
+            transaction_options.append(kwargs)
+            return transaction
+
+    def fake_transactional(operation):
+        return lambda received: operation(received)
+
+    monkeypatch.setattr(persistence_guard.firestore, "transactional", fake_transactional)
+
+    result = persistence_guard._run_transaction(
+        TransactionOnlyDatabase(), lambda received: received
+    )
+
+    assert result is transaction
+    assert transaction_options == [{"max_attempts": 12}]
+
+
 def test_bookmark_quota_accepts_legacy_owner_above_the_old_cap():
     db = Database()
     usage_ref = db.collection(persistence_guard.USAGE_COLLECTION).document(

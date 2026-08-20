@@ -108,7 +108,11 @@ def _run_transaction(db, operation):
     if not hasattr(db, "transaction"):
         # Lightweight unit fakes from older suites have no transaction API.
         return operation(None)
-    transaction = db.transaction()
+    # One completed browser run can enqueue six model snapshots followed by
+    # the authoritative consensus snapshot. They all touch the same bookmark
+    # and owner quota document, so the Firestore default retry budget is too
+    # small when older clients still issue those writes concurrently.
+    transaction = db.transaction(max_attempts=12)
 
     @firestore.transactional
     def run(tx):

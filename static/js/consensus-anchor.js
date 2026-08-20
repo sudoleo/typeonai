@@ -130,11 +130,19 @@
       "mr", "mrs", "ms", "st", "vs", "approx", "e.g", "i.e", "cf", "fig",
       "no", "inc", "ltd", "co", "al", "jr", "sr", "ph.d"
     ];
+    const QUANTITY_ABBREVIATIONS = ["tsd", "mio", "mill", "mrd", "bn", "bln"];
+    const CURRENCY_AFTER_QUANTITY = /^(?:[$€£¥₹₽₩₺₫₴₦₱₪]|(?:USD|EUR|GBP|CHF|JPY|CNY|RMB|CAD|AUD|NZD|SEK|NOK|DKK|PLN|CZK|HUF|INR)\b)/i;
     
-    function isAbbreviationBefore(text, dotIndex) {
+    function wordBeforeDot(text, dotIndex) {
       const before = text.slice(Math.max(0, dotIndex - 12), dotIndex).toLowerCase();
-      const word = (before.match(/[a-zäöüß.]+$/) || [""])[0];
-      return ABBREVIATIONS.includes(word);
+      return (before.match(/[a-zäöüß.]+$/) || [""])[0];
+    }
+
+    function isAbbreviationBefore(text, dotIndex) {
+      const word = wordBeforeDot(text, dotIndex);
+      if (ABBREVIATIONS.includes(word)) return true;
+      if (!QUANTITY_ABBREVIATIONS.includes(word)) return false;
+      return CURRENCY_AFTER_QUANTITY.test(text.slice(dotIndex + 1).trimStart());
     }
     
     // Ist text[i] ("." / "!" / "?") ein echtes Satzende?
@@ -281,4 +289,3 @@
 
   window.App.consensusAnchor = Object.freeze({ create });
 })();
-
