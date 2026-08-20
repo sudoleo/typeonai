@@ -555,7 +555,19 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Metriken/Alerts. Watch, Publisher, Topics, Judge und Shares bleiben außerhalb.
 - **`math-render.js`** — gemeinsame KaTeX-Brücke für App und öffentliche
   Share-/Watch-Seiten. Bewahrt `\[...\]`/`\(...\)` durch den Markdown-Pass und
-  exponiert `window.ConsensusMath.{prepareMarkdown,render}`.
+  exponiert `window.ConsensusMath.{prepareMarkdown,stripMath,render}`.
+  Innerhalb einer Formel ist Markdown Notation, kein Markup: Backslashes und
+  `*_`~` werden geschützt, sonst verschluckt `17{,}5\%` → `17{,}5%` als
+  TeX-Kommentar das Ergebnis. `$...$` wird nur dann als Formel gelesen, wenn
+  der Inhalt ohne Leerzeichen an beiden Dollarzeichen liegt, in einer Zeile
+  bleibt und ein LaTeX-Signal trägt — „6,7 Mrd. $ in Q1“ bleibt Betrag.
+  `stripMath()` liefert die formelfreie Fassung eines Satzes; die Ankersuche
+  braucht sie, weil eine gerenderte Formel im DOM ein übersprungener
+  `.katex`-Block ist, der Anker aber den LaTeX-Quelltext trägt.
+  `wrapBareLatex()` repariert die Anzeige gespeicherter Anker aus älteren
+  Läufen, in denen die Zeile *zwischen* den `$$` als eigener „Satz" landete:
+  nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
+  gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`) + SSE-Helfer
   (`createStreamRenderer`, `streamSSERequest`); setzt LaTeX nach jedem
   gedrosselten Streaming-Render über `window.ConsensusMath`. Fehlt `marked`
@@ -1495,8 +1507,9 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Karte".
   **Satz-Index (seit 2026-08-07):** Der Judge schreibt Anker nicht mehr ab.
   `_enumerate_consensus_sentences` nummeriert die prüfbaren Sätze der
-  Konsensantwort (Überschriften, Tabellen, Code bleiben außen vor, Listenzähler
-  und `[S1]`-Tags gehören nicht zum Satz) und stellt jedem ein `[n] ` voran;
+  Konsensantwort (Überschriften, Tabellen, Code und **abgesetzte Formeln**
+  — `$$…$$`, `\[…\]` — bleiben außen vor, Listenzähler und `[S1]`-Tags gehören
+  nicht zum Satz) und stellt jedem ein `[n] ` voran;
   der Judge liefert nur noch `claims[].s` bzw. `differences[].s` (`0` = der
   Konsens sagt dazu nichts), der Server setzt daraus den exakten Originalsatz
   in `anchor`/`consensus_anchor` ein. Der Anker ist damit per Konstruktion

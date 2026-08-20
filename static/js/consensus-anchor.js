@@ -83,6 +83,15 @@
         const cleaned = withoutSourceTags(candidate);
         if (cleaned) candidates.push(cleaned);
       });
+      // Eine gerenderte Formel ist ein .katex-Block: ihr Text wird beim
+      // Markieren uebersprungen und steht in der flachen Sicht gar nicht.
+      // Der Anker traegt aber den LaTeX-Quelltext. Die formelfreie Fassung
+      // ist die einzige, die auf beides passt - und steht deshalb ganz
+      // hinten, hinter jeder woertlichen Variante.
+      candidates.slice().forEach(function (candidate) {
+        const withoutMath = window.ConsensusMath?.stripMath?.(candidate);
+        if (withoutMath) candidates.push(withoutMath);
+      });
       candidates.forEach(function (candidate) {
         const norm = normalizeForSearch(candidate)
           .replace(/^(\.{3}|…)\s*/, "").replace(/\s*(\.{3}|…)$/, "");

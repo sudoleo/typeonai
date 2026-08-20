@@ -17,8 +17,11 @@ const stripMarkdown = (value) =>
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/[*_`]/g, "");
 
-function boot() {
-  const { window, document } = loadScripts(["static/js/consensus-anchor.js"]);
+function boot(extraScripts = []) {
+  const { window, document } = loadScripts([
+    "static/js/consensus-anchor.js",
+    ...extraScripts
+  ]);
   return { window, document, anchor: window.App.consensusAnchor.create(stripMarkdown) };
 }
 
@@ -163,6 +166,28 @@ describe("consensusAnchor.locateAnchor", () => {
     );
     expect(hit.block.tagName).toBe("P");
     expect(window.App.consensusAnchor).toBeDefined();
+  });
+
+  it("finds a sentence whose formula is already rendered by KaTeX", () => {
+    // The stored anchor carries the LaTeX SOURCE, the answer shows a .katex
+    // block whose text the flat view skips. Without a formula-free variant
+    // such a claim can never be marked -- it lands in the Key claims list
+    // with its raw LaTeX on display.
+    const { document, anchor } = boot(["static/js/math-render.js"]);
+    const root = document.createElement("div");
+    root.innerHTML =
+      "<p>Der Zuwachs betraegt <span class=\"katex\">17,5 %</span> gegenueber Q1.</p>";
+    document.body.appendChild(root);
+
+    const hit = anchor.locateAnchor(
+      root,
+      String.raw`Der Zuwachs betraegt \(17{,}5\%\) gegenueber Q1.`
+    );
+
+    expect(hit).not.toBeNull();
+    expect(hit.flat.slice(hit.start, hit.end)).toBe(
+      "Der Zuwachs betraegt  gegenueber Q1."
+    );
   });
 
   it("returns null rather than guessing when the passage is absent", () => {

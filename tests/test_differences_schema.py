@@ -780,6 +780,53 @@ class ConsensusSentenceSplitTests(unittest.TestCase):
             "Danach steigt die Prognose weiter.",
         ])
 
+    def test_display_math_blocks_are_not_numbered(self):
+        """Eine abgesetzte Formel ist kein Satz.
+
+        Als Anker waere sie im gerenderten Konsens unauffindbar - dort ist sie
+        ein KaTeX-Block - und landete deshalb samt LaTeX-Quelltext
+        ("6{,}7 / 5{,}7 - 1 \\approx 17{,}5%") in der Key-claims-Liste. Ein
+        "[n] " zwischen ihren Zeilen wuerde sie zusaetzlich zerschneiden.
+        """
+        text = (
+            "Zur Einordnung der beiden Zahlen:\n\n"
+            "$$\n"
+            "6{,}7 / 5{,}7 - 1 \\approx 17{,}5\\%\n"
+            "$$\n\n"
+            "Der durchschnittliche Monatsumsatz lag bei 2,23 Mrd. $ im Quartal."
+        )
+        numbered, sentences = self.sentences(text)
+        self.assertEqual(sentences, [
+            "Zur Einordnung der beiden Zahlen:",
+            "Der durchschnittliche Monatsumsatz lag bei 2,23 Mrd. $ im Quartal.",
+        ])
+        self.assertIn("$$\n6{,}7 / 5{,}7 - 1 \\approx 17{,}5\\%\n$$", numbered)
+
+    def test_single_line_display_math_does_not_swallow_the_next_paragraph(self):
+        """"$$...$$" auf einer Zeile ist bereits geschlossen - alles danach
+        bleibt normaler Fliesstext."""
+        text = (
+            "$$6{,}7 / 5{,}7 - 1 \\approx 17{,}5\\%$$\n\n"
+            "Das entspricht rund 18 Prozent Wachstum.\n\n"
+            "\\[ \\det(DF) \\equiv -2 \\]\n\n"
+            "Die Determinante bleibt dabei konstant."
+        )
+        _numbered, sentences = self.sentences(text)
+        self.assertEqual(sentences, [
+            "Das entspricht rund 18 Prozent Wachstum.",
+            "Die Determinante bleibt dabei konstant.",
+        ])
+
+    def test_inline_math_stays_part_of_its_sentence(self):
+        """Nur ABGESETZTE Formeln fallen weg. Eine Formel im Satz gehoert zum
+        Satz - der Anker traegt sie mit."""
+        _numbered, sentences = self.sentences(
+            "Der Zuwachs betraegt $17{,}5\\%$ gegenueber dem Vorquartal."
+        )
+        self.assertEqual(sentences, [
+            "Der Zuwachs betraegt $17{,}5\\%$ gegenueber dem Vorquartal.",
+        ])
+
     def test_headings_tables_and_code_are_not_numbered(self):
         text = (
             "# Titel\n\n"

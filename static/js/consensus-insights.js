@@ -174,7 +174,11 @@
 
           function renderInlineMarkdown(element, value, prefix, suffix) {
             if (!element) return;
-            const source = inlineMarkdownSource(value);
+            // Anker aus aelteren Laeufen koennen eine abgesetzte Formel ohne
+            // ihre "$$"-Zeilen enthalten. Ohne Trennzeichen bleibt sie
+            // Quelltext; die Erkennung greift nur bei reinem LaTeX.
+            const raw = inlineMarkdownSource(value);
+            const source = window.ConsensusMath?.wrapBareLatex?.(raw) || raw;
             const before = prefix || "";
             const after = suffix || "";
             element.textContent = before;

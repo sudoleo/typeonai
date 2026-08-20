@@ -821,6 +821,13 @@ _SENTENCE_SPLIT_RE = re.compile(
     r"(?<=[.!?…])(?P<close>[\"'”’»)\]]*)(?:\[S?\d+(?:\s*,\s*S?\d+)*\])*[ \t]+"
 )
 _THEMATIC_BREAK_RE = re.compile(r"^[-*_\s]{3,}$")
+# Abgesetzte Formeln ("$$" / "\[ ... \]") stehen als eigener Block zwischen den
+# Absaetzen. Ihre Zeilen sind KEINE Saetze: die reine Formel ist als Anker im
+# gerenderten Text unauffindbar (dort ist sie ein KaTeX-Block) und landete
+# deshalb mitsamt LaTeX-Quelltext in der Key-claims-Liste. Ein "[n] " zwischen
+# den Zeilen wuerde die Formel ausserdem fuer den Judge zerschneiden.
+_MATH_BLOCK_OPEN_RE = re.compile(r"^(?:\$\$|\\\[)")
+_MATH_BLOCK_CLOSE_RE = re.compile(r"(?:\$\$|\\\])[ \t]*$")
 _SENTENCE_SOURCE_TAG_RE = re.compile(r"\[S?\d+(?:\s*,\s*S?\d+)*\]", re.IGNORECASE)
 _INLINE_MARKDOWN_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 _INLINE_MARKDOWN_DECORATION_RE = re.compile(r"\*\*\*|\*\*|___|__|~~|`")
@@ -920,6 +927,7 @@ def _enumerate_consensus_sentences(consensus_answer: str):
     sentences = []
     marks = []
     in_fence = False
+    in_math = False
     pos = 0
 
     for line in text.split("\n"):
@@ -928,6 +936,14 @@ def _enumerate_consensus_sentences(consensus_answer: str):
         stripped = line.strip()
         if stripped.startswith("```") or stripped.startswith("~~~"):
             in_fence = not in_fence
+            continue
+        if in_math:
+            if _MATH_BLOCK_CLOSE_RE.search(stripped):
+                in_math = False
+            continue
+        if not in_fence and _MATH_BLOCK_OPEN_RE.match(stripped):
+            # Eine einzeilige Formel ("$$...$$") ist bereits geschlossen.
+            in_math = not _MATH_BLOCK_CLOSE_RE.search(stripped[2:])
             continue
         # Ueberschriften und Tabellenzeilen tragen keine pruefbare Aussage,
         # Code darf nicht angefasst werden, und eine Tabellenzeile waere im

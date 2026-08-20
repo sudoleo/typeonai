@@ -615,6 +615,39 @@ def test_latex_is_typeset_after_markdown_rendering(app_page):
     assert "KaTeX" in result["fontFamily"]
 
 
+def test_dollar_math_is_typeset_without_losing_the_result(app_page):
+    """Die Modelle schreiben Inline-Math meist als "$...$" - und im selben
+    Satz steht "$" als Waehrung. Beides muss durch Markdown UND KaTeX
+    kommen: die Formel getypt (samt Prozentzeichen, das als roher
+    TeX-Kommentar den Rest der Zeile verschluckt haette), der Betrag als
+    Text."""
+    result = app_page.evaluate(
+        r"""() => {
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          window.injectMarkdown(
+            host,
+            String.raw`Von 5,7 Mrd. $ in Q1 auf 6,7 Mrd. $ in Q2, also $6{,}7 / 5{,}7 - 1 \approx 17{,}5\%$.`
+          );
+          const result = {
+            expressions: host.querySelectorAll(".katex").length,
+            errors: host.querySelectorAll(".katex-error").length,
+            typeset: Array.from(host.querySelectorAll(".katex-html"))
+              .map(node => node.textContent),
+            plain: host.querySelector("p")?.firstChild?.textContent || "",
+          };
+          host.remove();
+          return result;
+        }"""
+    )
+    assert result["expressions"] == 1
+    assert result["errors"] == 0
+    assert "17,5%" in result["typeset"][0].replace(chr(0x2009), "").replace(" ", "")
+    # Der Betrag bleibt Text - er darf nicht zur Formel zwischen zwei
+    # Dollarzeichen werden.
+    assert result["plain"].startswith("Von 5,7 Mrd. $ in Q1 auf 6,7 Mrd. $ in Q2, also ")
+
+
 def test_consensus_citations_follow_terminal_punctuation(app_page):
     result = app_page.evaluate(
         """() => {
