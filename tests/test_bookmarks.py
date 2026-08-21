@@ -141,6 +141,68 @@ class FakeBookmarkDatabase:
         return FakeUsersCollection(self)
 
 
+def test_bookmark_write_budget_is_scoped_to_the_authenticated_uid():
+    with patch.object(bookmarks_router.api_uid_limiter, "check") as check:
+        bookmarks_router._enforce_bookmark_uid_rate_limit("owner-1", "model_save")
+        bookmarks_router._enforce_bookmark_uid_rate_limit("owner-2", "consensus_save")
+
+    assert check.call_args_list[0].args == (
+        "owner-1", "bookmark:model_save", 120,
+    )
+    assert check.call_args_list[1].args == (
+        "owner-2", "bookmark:consensus_save", 60,
+    )
+
+
+def test_bookmark_uid_throttle_remains_a_429():
+    with patch.object(
+        bookmarks_router.api_uid_limiter,
+        "check",
+        side_effect=bookmarks_router.ApiUidRateLimitExceeded("full"),
+    ):
+        try:
+            bookmarks_router._enforce_bookmark_uid_rate_limit("owner-1", "model_save")
+        except bookmarks_router.HTTPException as exc:
+            assert exc.status_code == 429
+            assert exc.detail == "Too many bookmark saves. Please slow down."
+        else:
+            raise AssertionError("Expected the bookmark UID budget to reject the write")
+
+
+def test_last_grok_model_write_is_persisted_under_the_owner_budget():
+    bookmark_id = "stable_grok_bookmark"
+    bookmark_ref = FakeBookmarkRef(
+        bookmark_id,
+        {"query": "Why?", "responses": {}},
+    )
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router.firestore, "SERVER_TIMESTAMP", "server-time"),
+        patch.object(bookmarks_router.api_uid_limiter, "check") as check_budget,
+    ):
+        response = TestClient(app).post(
+            "/bookmark",
+            json={
+                "id_token": "token",
+                "question": "Why?",
+                "response": "Grok finished last.",
+                "modelName": "Grok",
+                "mode": "Standard",
+                "bookmarkId": bookmark_id,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["bookmark"]["responses"]["Grok"] == "Grok finished last."
+    check_budget.assert_called_once_with("uid-1", "bookmark:model_save", 120)
+
+
 def test_consensus_save_returns_complete_merged_bookmark():
     bookmark_id = "V2h5Pw__"
     bookmark_ref = FakeBookmarkRef(

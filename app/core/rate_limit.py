@@ -15,17 +15,18 @@ def client_ip_key(request):
     Dashboard, nicht im Repo), daher wäre request.client.host immer die
     Proxy-IP und alle IP-Limits würden global statt pro Besucher greifen.
 
-    Render hängt die tatsächliche Verbindungs-IP als letzten Eintrag an
-    X-Forwarded-For an. Genau ein vertrauenswürdiger Proxy => der letzte
-    Eintrag ist die echte Client-IP und kann – anders als der erste – nicht
-    durch einen mitgeschickten Header gefälscht werden. Lokal (kein Proxy,
-    kein Header) fällt es auf request.client.host zurück.
+    Render setzt die tatsächliche Client-IP als ERSTEN Eintrag von
+    X-Forwarded-For. Hinter vorgeschalteten Hops (z. B. Cloudflare) stehen
+    deren Adressen dahinter. Der letzte Eintrag wäre deshalb eine geteilte
+    Proxy-/Edge-IP und würde fremde Besucher in denselben Limiter-Bucket
+    stecken. Lokal (kein Proxy, kein Header) fällt es auf
+    request.client.host zurück.
     """
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
-        last_hop = forwarded.split(",")[-1].strip()
-        if last_hop:
-            return last_hop
+        client_ip = forwarded.split(",", 1)[0].strip()
+        if client_ip:
+            return client_ip
     return get_remote_address(request)
 
 

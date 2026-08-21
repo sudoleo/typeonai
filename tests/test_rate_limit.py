@@ -37,13 +37,22 @@ class ClientIpKeyTests(unittest.TestCase):
         request = make_request(headers={"X-Forwarded-For": "198.51.100.23"})
         self.assertEqual(client_ip_key(request), "198.51.100.23")
 
-    def test_spoofed_forwarded_entries_are_ignored(self):
-        # Der Client schickt selbst ein X-Forwarded-For mit; Render hängt die
-        # echte Verbindungs-IP hinten an – nur die zählt.
+    def test_render_proxy_chain_uses_first_client_ip(self):
+        # Render setzt die echte Client-IP an den Anfang; weitere Proxy-Hops
+        # (z. B. Cloudflare) folgen dahinter.
         request = make_request(
-            headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8, 198.51.100.23"}
+            headers={"X-Forwarded-For": "198.51.100.23, 5.6.7.8, 1.2.3.4"}
         )
         self.assertEqual(client_ip_key(request), "198.51.100.23")
+
+    def test_visitors_behind_the_same_proxy_get_distinct_buckets(self):
+        first = make_request(
+            headers={"X-Forwarded-For": "198.51.100.23, 172.16.0.9"}
+        )
+        second = make_request(
+            headers={"X-Forwarded-For": "203.0.113.44, 172.16.0.9"}
+        )
+        self.assertNotEqual(client_ip_key(first), client_ip_key(second))
 
     def test_empty_header_falls_back(self):
         request = make_request(headers={"X-Forwarded-For": "  "},

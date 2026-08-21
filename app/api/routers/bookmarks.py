@@ -12,7 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
-from app.core.rate_limit import limiter
+from app.core.rate_limit import (
+    ApiUidRateLimitExceeded,
+    api_uid_limiter,
+    limiter,
+)
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
 from app.services import persistence_guard, share_snapshots
@@ -32,6 +36,18 @@ BOOKMARK_PAGE_SIZE = 35
 BOOKMARK_PAGE_SIZE_MAX = 50
 BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
 CHAT_ID_RE = re.compile(r"[0-9a-f]{32}")
+
+# Bookmark-Persistenz ist ein interner Fan-out des Produkt-Flows: Ein Lauf
+# schreibt je nach Preset bis zu sechs Modell-Snapshots plus einen
+# autoritativen Consensus-Snapshot. Das vorgelagerte slowapi-Limit bleibt als
+# grosszuegiger Schutz gegen unautorisierte Request-Fluten bestehen; nach der
+# Token-Pruefung begrenzt dieses Budget den tatsaechlichen Kontoinhaber. So
+# sperren weder ein gemeinsamer Proxy/NAT noch andere Nutzer einen laufenden
+# Daily-, Balanced- oder High-Quality-Save mitten im Snapshot.
+BOOKMARK_UID_RATE_LIMITS = {
+    "model_save": 120,
+    "consensus_save": 60,
+}
 
 
 class BookmarkModelRequest(BaseModel):
@@ -79,6 +95,17 @@ class BookmarkDeleteRequest(BaseModel):
 
 def _clean_previous_question(value):
     return str(value or "").strip()[:cfg.get_followup_question_char_limit()]
+
+
+def _enforce_bookmark_uid_rate_limit(uid: str, operation: str) -> None:
+    limit = BOOKMARK_UID_RATE_LIMITS[operation]
+    try:
+        api_uid_limiter.check(uid, f"bookmark:{operation}", limit)
+    except ApiUidRateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many bookmark saves. Please slow down.",
+        ) from exc
 
 
 def _bookmark_display_question(data):
@@ -485,7 +512,7 @@ def load_bookmark_conversation(
 
 
 @router.post("/bookmark")
-@limiter.limit("20/minute")
+@limiter.limit("300/minute")
 def save_bookmark(request: Request, payload: BookmarkModelRequest):
     data = payload.model_dump()
     id_token     = data.get("id_token")
@@ -505,6 +532,7 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
         uid = verify_user_token(id_token)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
+    _enforce_bookmark_uid_rate_limit(uid, "model_save")
     
     doc_id = _bookmark_document_id(question, data.get("bookmarkId"))
     
@@ -561,7 +589,7 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
 
 
 @router.post("/bookmark/consensus")
-@limiter.limit("3/minute")
+@limiter.limit("120/minute")
 def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest):
     data = payload.model_dump()
     id_token = extract_id_token(request, data)
@@ -581,6 +609,7 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
         uid = verify_user_token(id_token)
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
+    _enforce_bookmark_uid_rate_limit(uid, "consensus_save")
 
     authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
     if not _same_question(authoritative["question"], question):
