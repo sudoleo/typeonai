@@ -455,7 +455,9 @@
         exchange.turn || { question: exchange.question, consensus: exchange.consensus }
       );
       // Die sichtbaren Anhaenge gehoeren zu genau diesem Turn und wandern mit
-      // ihm in den Verlauf; der Server-Turn kennt sie nicht.
+      // ihm in den Verlauf. Der gespeicherte Turn kennt sie inzwischen selbst;
+      // der sichtbare Stand bleibt die Rueckfalllinie, wenn die Turn-Anlage
+      // fuer diesen Lauf nicht zustande gekommen ist.
       if (!Array.isArray(turnData.attachments) || !turnData.attachments.length) {
         turnData.attachments = window.App.getThreadAttachments?.() || [];
       }

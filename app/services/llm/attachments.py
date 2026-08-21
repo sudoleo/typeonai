@@ -39,6 +39,54 @@ IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp"}
 
 ATTACHMENT_TYPES_LABEL = "PDF, Word (.docx), text (.txt/.md/.csv), PNG, JPG, WebP"
 
+# Der Browser meldet für dieselbe Textdatei je nach Betriebssystem
+# "text/markdown", "text/csv" oder gar nichts. Der Lauf selbst stört sich nicht
+# daran (dort entscheiden die BYTES, siehe _sniff_mime), die Metadaten kommen
+# aber als Client-Angabe an. Ohne diese Tabelle fiel eine .csv still aus dem
+# Bookmark heraus, obwohl der Lauf mit ihr funktioniert hat.
+ATTACHMENT_MIME_ALIASES = {
+    "text/markdown": TEXT_MIME,
+    "text/x-markdown": TEXT_MIME,
+    "text/csv": TEXT_MIME,
+    "application/csv": TEXT_MIME,
+    "image/jpg": "image/jpeg",
+}
+
+
+def normalize_attachment_mime(raw) -> str | None:
+    """Client-MIME auf einen der erlaubten Typen bringen (sonst None)."""
+    mime = str(raw or "").split(";", 1)[0].strip().lower()
+    mime = ATTACHMENT_MIME_ALIASES.get(mime, mime)
+    return mime if mime in ALLOWED_ATTACHMENT_MIMES else None
+
+
+def normalize_attachment_meta(raw) -> list[dict]:
+    """Anhang-Angaben auf reine Metadaten reduzieren (Name/Typ/Größe).
+
+    Dateidaten werden bewusst verworfen: in Firestore landen nie Datei-Bytes
+    (Dokument-Limit 1 MiB, Kosten). Was bleibt, ist das, was eine gespeicherte
+    Frage über ihre Anhänge erzählen können muss.
+    """
+    if not isinstance(raw, list):
+        return []
+
+    normalized = []
+    for item in raw:
+        if len(normalized) >= MAX_ATTACHMENTS:
+            break
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()[:200]
+        mime = normalize_attachment_mime(item.get("mime"))
+        if not name or not mime:
+            continue
+        try:
+            size = max(0, int(item.get("size") or 0))
+        except (TypeError, ValueError):
+            size = 0
+        normalized.append({"name": name, "mime": mime, "size": size})
+    return normalized
+
 # Provider, die Bilder bzw. PDFs nativ als Content-Block verarbeiten können.
 # Alle anderen erhalten einen Text-Fallback (PDF-Extraktion bzw. Hinweis).
 PROVIDER_IMAGE_SUPPORT = {"openai", "anthropic", "gemini", "grok"}

@@ -26,6 +26,7 @@ from google.cloud.firestore_v1.field_path import FieldPath
 
 import app.core.config as cfg
 from app.services import persistence_guard
+from app.services.llm.attachments import normalize_attachment_meta
 from app.services.share_snapshots import (
     MAX_CONSENSUS_CHARS,
     MAX_DIFFERENCES_TEXT_CHARS,
@@ -452,6 +453,13 @@ def turn_metadata(turn_id: object, data: object) -> dict:
         "created_at": source.get("created_at"),
         "updated_at": source.get("updated_at"),
     }
+    # Die Anhänge der Frage. Sie gehören zu DIESEM Turn: eine Folgefrage ohne
+    # Datei darf die Dateien der vorigen nicht mehr wegräumen, und ein Turn im
+    # Verlauf muss weiterhin zeigen können, dass eine Datei dabei war. Nur
+    # Metadaten – die Dateien selbst werden nie gespeichert.
+    attachments = normalize_attachment_meta(source.get("attachments"))
+    if attachments:
+        result["attachments"] = attachments
     client_request_id = source.get("client_request_id")
     if isinstance(client_request_id, str) and client_request_id:
         result["client_request_id"] = client_request_id
@@ -722,12 +730,14 @@ class ChatStore:
         selected_models: list[str],
         consensus_model: str,
         client_request_id: str | None = None,
+        attachments: object = None,
     ) -> dict:
         question = normalize_question(question)
         mode = normalize_mode(mode)
         if not isinstance(deep_search, bool):
             raise ValueError("deep_search must be a boolean")
         selected_models = normalize_selected_models(selected_models)
+        attachments = normalize_attachment_meta(attachments)
         consensus_model = normalize_model_name(
             consensus_model, field_name="consensus_model"
         )
@@ -796,6 +806,8 @@ class ChatStore:
                 "created_at": firestore.SERVER_TIMESTAMP,
                 "updated_at": firestore.SERVER_TIMESTAMP,
             }
+            if attachments:
+                turn_document["attachments"] = attachments
             if client_request_id:
                 turn_document["client_request_id"] = client_request_id
 

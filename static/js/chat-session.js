@@ -25,6 +25,27 @@
     return typeof value === "string" ? value.trim() : "";
   }
 
+  // Anhaenge einer Frage als reine Metadaten. Sie reisen mit dem Turn, nicht
+  // mit dem Bookmark-Dokument: eine Folgefrage ohne Datei raeumte sonst die
+  // Datei der vorigen Frage mit weg. Der Server normalisiert noch einmal
+  // (MIME-Allowlist, Obergrenze) — hier geht es nur darum, nichts Fremdes
+  // mitzuschicken.
+  function cleanAttachments(value) {
+    if (!Array.isArray(value)) return [];
+    return value.reduce((items, item) => {
+      const name = cleanString(item?.name);
+      const mime = cleanString(item?.mime);
+      if (!name || !mime || items.length >= 2) return items;
+      const size = Number(item?.size);
+      items.push({
+        name: name,
+        mime: mime,
+        size: Number.isFinite(size) && size > 0 ? Math.floor(size) : 0
+      });
+      return items;
+    }, []);
+  }
+
   function cleanModels(value) {
     if (!Array.isArray(value)) return [];
     const seen = new Set();
@@ -167,7 +188,8 @@
       isFollowup,
       prepareSucceeded,
       useOwnKeys,
-      usageRunKey
+      usageRunKey,
+      attachments
     }) {
       const followup = isFollowup === true;
       const nextRun = {
@@ -178,7 +200,11 @@
         consensusModel: cleanString(consensusModel),
         isFollowup: followup,
         useOwnKeys: useOwnKeys === true,
-        prepareSucceeded: prepareSucceeded === true
+        prepareSucceeded: prepareSucceeded === true,
+        // Bewusst NICHT Teil von sameLogicalRun: derselbe Lauf schickt beim
+        // zweiten Versuch dieselben Dateien mit, und ein Wiederholungsversuch
+        // darf daran nicht scheitern.
+        attachments: cleanAttachments(attachments)
       };
       const retryingPendingTurn = Boolean(
         ID_RE.test(this.pendingChatId || "")
@@ -313,7 +339,8 @@
         deep_search: run.deepSearch,
         selected_models: run.selectedModels,
         consensus_model: run.consensusModel,
-        client_request_id: this.pendingClientRequestId
+        client_request_id: this.pendingClientRequestId,
+        attachments: run.attachments || []
       };
       try {
         const response = await fetch(`/chats/${chatId}/turns`, {

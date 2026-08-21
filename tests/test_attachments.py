@@ -295,6 +295,22 @@ class BookmarkAttachmentMetaTests(unittest.TestCase):
         self.assertEqual(len(self.sanitize(many)), 2)
         self.assertEqual(self.sanitize("garbage"), [])
 
+    def test_browser_type_variants_survive_as_their_canonical_type(self):
+        """Der Lauf entscheidet nach den BYTES, die Metadaten kamen als Angabe.
+
+        Chrome meldet dieselbe Textdatei je nach System als "text/markdown"
+        oder "text/csv". Beides fiel aus der Allowlist heraus - die Datei ging
+        also mit der Frage raus, tauchte im gespeicherten Chat aber nie auf.
+        """
+        result = self.sanitize([
+            {"name": "rows.csv", "mime": "text/csv", "size": 900},
+            {"name": "notes.md", "mime": "text/markdown; charset=utf-8", "size": 12},
+        ])
+        self.assertEqual(result, [
+            {"name": "rows.csv", "mime": TEXT_MIME, "size": 900},
+            {"name": "notes.md", "mime": TEXT_MIME, "size": 12},
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

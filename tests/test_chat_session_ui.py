@@ -49,6 +49,7 @@ const run = (overrides = {{}}) => session.beginRun({{
   isFollowup: false,
   prepareSucceeded: true,
   api_key: "must-not-survive",
+  attachments: [{{ name: "chart.png", mime: "image/png", size: 2048, data: "must-not-survive" }}],
   ...overrides
 }});
 
@@ -62,9 +63,15 @@ const run = (overrides = {{}}) => session.beginRun({{
   assert.strictEqual(calls.length, 2);
   const firstTurnPayload = JSON.parse(calls[1].options.body);
   assert.deepStrictEqual(Object.keys(firstTurnPayload).sort(), [
-    "client_request_id", "consensus_model", "deep_search", "mode", "question", "selected_models"
+    "attachments", "client_request_id", "consensus_model", "deep_search", "mode", "question",
+    "selected_models"
   ].sort());
   assert.strictEqual(firstTurnPayload.client_request_id, stableId);
+  // Der Anhang reist als reine Metadaten mit: der Turn muss erzaehlen koennen,
+  // dass eine Datei an dieser Frage hing — die Datei selbst wird nie gespeichert.
+  assert.deepStrictEqual(firstTurnPayload.attachments, [
+    {{ name: "chart.png", mime: "image/png", size: 2048 }}
+  ]);
   assert.ok(!JSON.stringify(firstTurnPayload).includes("must-not-survive"));
   assert.ok(!JSON.stringify(firstTurnPayload).includes("token"));
 

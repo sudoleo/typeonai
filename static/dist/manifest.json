@@ -1,5 +1,5 @@
 {
-  "sources": "5f816046a34f",
+  "sources": "06c394b3cb90",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -84,7 +84,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.da80d81aca8b.js",
+      "src": "/static/dist/firebase.2ce8706fb895.js",
       "module": true,
       "defer": false
     },
@@ -96,12 +96,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.84410d8d03b9.js",
+      "src": "/static/dist/app.458af9b89604.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.3b77253d96d3.css"
+    "app": "/static/dist/app.044f20dddeeb.css"
   }
 }

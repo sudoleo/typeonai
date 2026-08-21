@@ -1121,7 +1121,11 @@
         isFollowup: !!followupContext,
         prepareSucceeded,
         useOwnKeys,
-        usageRunKey: usageRun.key
+        usageRunKey: usageRun.key,
+        // Die Anhaenge gehoeren zu DIESER Frage und wandern deshalb mit in
+        // ihren Turn. Nur Metadaten — die Dateien selbst gehen an die Modelle
+        // und werden nirgends gespeichert.
+        attachments: window.lastQuestionAttachmentsMeta || []
       });
       let authoritativeContextBinding = null;
       try {

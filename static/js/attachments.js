@@ -22,7 +22,10 @@
   const ATTACH_MAX_FILES = 2;
   const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
   const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  const ATTACH_ALLOWED_MIMES = ["application/pdf", DOCX_MIME, "text/plain", "text/markdown", "text/csv", "image/png", "image/jpeg", "image/webp"];
+  // Die kanonischen Typen, die auch der Server kennt. Was der Browser sonst
+  // noch meldet (text/markdown, text/csv, ...), fuehrt canonicalMime hierher
+  // zurueck — der `accept`-Filter des Datei-Feldes ist weiterhin grosszuegiger.
+  const ATTACH_ALLOWED_MIMES = ["application/pdf", DOCX_MIME, "text/plain", "image/png", "image/jpeg", "image/webp"];
   const ATTACH_TYPES_LABEL = "PDF, Word (.docx), TXT, MD, CSV, PNG, JPG, WebP";
   const DEEPSEEK_ATTACHMENT_MESSAGE = "DeepSeek is paused for this question because its API cannot read attachments. Remove the files to use DeepSeek again.";
   window.pendingAttachments = [];
@@ -408,8 +411,27 @@
       renderAttachmentChips();
     };
 
+    // Was der Browser als Typ meldet, ist je nach Betriebssystem verschieden:
+    // dieselbe .md kommt als "text/markdown", "text/plain" oder ganz ohne Typ.
+    // Der Server kennt nur die kanonischen Typen — ohne diese Tabelle fiel eine
+    // .csv still aus dem gespeicherten Chat heraus, obwohl der Lauf mit ihr
+    // funktioniert hat (dort entscheiden die Bytes, nicht die Client-Angabe).
+    const ATTACH_MIME_ALIASES = {
+      "text/markdown": "text/plain",
+      "text/x-markdown": "text/plain",
+      "text/csv": "text/plain",
+      "application/csv": "text/plain",
+      "image/jpg": "image/jpeg"
+    };
+
+    function canonicalMime(mime) {
+      const normalized = String(mime || "").split(";")[0].trim().toLowerCase();
+      return ATTACH_MIME_ALIASES[normalized] || normalized;
+    }
+
     function inferMime(file) {
-      if (ATTACH_ALLOWED_MIMES.indexOf(file.type) !== -1) return file.type;
+      const declared = canonicalMime(file.type);
+      if (ATTACH_ALLOWED_MIMES.indexOf(declared) !== -1) return declared;
       const name = (file.name || "").toLowerCase();
       if (name.endsWith(".pdf")) return "application/pdf";
       if (name.endsWith(".docx")) return DOCX_MIME;

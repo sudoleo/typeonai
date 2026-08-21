@@ -18,7 +18,7 @@ from app.core.rate_limit import (
     limiter,
 )
 from app.core.security import verify_user_token, extract_id_token, db_firestore
-from app.services.llm.attachments import ALLOWED_ATTACHMENT_MIMES, MAX_ATTACHMENTS
+from app.services.llm.attachments import normalize_attachment_meta
 from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import (
     TURN_PAGE_SIZE,
@@ -336,33 +336,15 @@ def _decode_bookmark_cursor(cursor):
 
 
 def sanitize_attachment_meta(raw):
-    """Reduziert Attachment-Angaben auf reine Metadaten (Name/Typ/Größe).
+    """Wie normalize_attachment_meta, aber mit einem dritten Zustand.
 
-    Dateidaten werden bewusst verworfen – in Firestore landen nie Datei-Bytes
-    (Dokument-Limit 1 MiB, Kosten). Gibt None zurück, wenn das Feld fehlt,
-    damit bestehende Bookmarks beim Merge unangetastet bleiben.
+    None heißt "das Feld war nicht dabei" – dann bleiben die gespeicherten
+    Anhänge beim Merge unangetastet. Die eigentliche Normalisierung (inkl. der
+    MIME-Aliasse für .md/.csv) liegt bei den Anhängen selbst.
     """
     if raw is None:
         return None
-    if not isinstance(raw, list):
-        return []
-
-    sanitized = []
-    for item in raw:
-        if len(sanitized) >= MAX_ATTACHMENTS:
-            break
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or "").strip()[:200]
-        mime = str(item.get("mime") or "")
-        if not name or mime not in ALLOWED_ATTACHMENT_MIMES:
-            continue
-        try:
-            size = max(0, int(item.get("size") or 0))
-        except (TypeError, ValueError):
-            size = 0
-        sanitized.append({"name": name, "mime": mime, "size": size})
-    return sanitized
+    return normalize_attachment_meta(raw)
 
 @router.get("/bookmarks")
 @limiter.limit("20/minute")

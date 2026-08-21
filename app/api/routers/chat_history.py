@@ -4,7 +4,7 @@ import logging
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from app.core import config as cfg
 from app.core.observability import safe_exception
@@ -44,6 +44,7 @@ from app.services.chat_context import (
     ChatMemoryCompressor,
     FirestoreChatContextRepository,
 )
+from app.services.llm.attachments import normalize_attachment_meta
 from app.services.llm.consensus_engine import resolve_consensus_engine_model
 from app.services.llm.credentials import (
     enable_gemini_adc,
@@ -86,6 +87,18 @@ class TurnCreateRequest(BaseModel):
     selected_models: list[str]
     consensus_model: str
     client_request_id: str | None = None
+    # Nur Metadaten (Name/Typ/Größe). Die Dateien selbst gehen mit dem Lauf an
+    # die Modelle und werden nirgends gespeichert; was bleibt, ist die
+    # Information, dass an DIESER Frage eine Datei hing.
+    # max_length ist nur die Absurditaetsgrenze; auf die tatsaechlich erlaubte
+    # Anzahl kuerzt die Normalisierung. Ein Anhang zu viel darf die Anlage des
+    # Turns nicht scheitern lassen - der Lauf haengt daran.
+    attachments: list[dict] | None = Field(default=None, max_length=10)
+
+    @field_validator("attachments")
+    @classmethod
+    def validate_attachments(cls, value):
+        return normalize_attachment_meta(value)
 
     @field_validator("question")
     @classmethod

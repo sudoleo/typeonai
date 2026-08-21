@@ -1697,6 +1697,7 @@ function bookmarkFallbackTurn(bookmark) {
     turn_id: String(bookmark?.turn_id || ""),
     status: "completed",
     question,
+    attachments: Array.isArray(bookmark?.attachments) ? bookmark.attachments : [],
     mode: String(bookmark?.mode || ""),
     consensus_model: String(bookmark?.consensus_model || ""),
     consensus,
@@ -1738,6 +1739,15 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
       ...bookmark,
       query: currentTurn.question,
       mode: currentTurn.mode || bookmark.mode || "",
+      // Die Anhaenge des Turns schlagen die des Dokuments: das Dokument kennt
+      // nur die zuletzt gespeicherte Frage, der Turn kennt seine eigene. Ohne
+      // diese Reihenfolge zeigte ein Chat, dessen letzte Frage ohne Datei
+      // auskam, die Datei der vorigen Frage — oder gar keine. Chats von VOR
+      // dieser Aenderung haben nichts am Turn stehen; fuer sie bleibt das
+      // Dokument die einzige Quelle, und es beschreibt genau diese Frage.
+      attachments: (Array.isArray(currentTurn.attachments) && currentTurn.attachments.length)
+        ? currentTurn.attachments
+        : (Array.isArray(bookmark.attachments) ? bookmark.attachments : []),
       responses,
       sources: Array.isArray(currentTurn.sources) ? currentTurn.sources : [],
       consensus_model: currentTurn.consensus_model || bookmark.consensus_model || "",
@@ -2361,18 +2371,14 @@ function ensurePendingBookmarkDOM(pending) {
   row.title = "Bookmark is being created and will be available when the run is complete.";
   row.replaceChildren();
 
-  const icon = document.createElement("span");
-  icon.className = "bookmark-pending-icon";
-  icon.setAttribute("aria-hidden", "true");
-  icon.innerHTML = '<svg viewBox="0 0 20 22" fill="none"><path d="M4.25 2.75c0-.83.67-1.5 1.5-1.5h8.5c.83 0 1.5.67 1.5 1.5v16.8L10 16.1l-5.75 3.45V2.75Z"/></svg><span class="bookmark-pending-spinner"></span>';
-
   const label = document.createElement("p");
   label.textContent = truncateText(pending.question || "New comparison");
-  const status = document.createElement("span");
-  status.className = "bookmark-pending-status";
-  status.textContent = "Saving";
-  status.setAttribute("aria-hidden", "true");
-  row.append(icon, label, status);
+
+  const spinner = document.createElement("span");
+  spinner.className = "bookmark-pending-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+
+  row.append(label, spinner);
 }
 
 function replacePendingBookmarkWithReady(bookmark) {

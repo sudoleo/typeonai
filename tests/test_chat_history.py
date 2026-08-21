@@ -1778,3 +1778,105 @@ def test_a_failing_sweep_never_blocks_turn_creation(chat_api, monkeypatch):
     turn = create_turn(client, chat["id"])
 
     assert database.turns("owner-uid", chat["id"])[turn["id"]]["status"] == "pending"
+
+
+def test_turn_keeps_the_attachment_meta_of_its_own_question(chat_api):
+    """Ein Anhang gehoert zu der Frage, mit der er rausgegangen ist.
+
+    Vorher hing er am Bookmark-Dokument, das nur EINE Fassung kennt: die
+    naechste Frage ohne Datei ueberschrieb sie und der Anhang war aus dem
+    gespeicherten Chat verschwunden. Am Turn ueberlebt er jede Folgefrage.
+    """
+    client, database = chat_api
+    chat = create_chat(client)
+
+    with_file = create_turn(
+        client,
+        chat["id"],
+        {
+            **TURN_PAYLOAD,
+            "question": "What does this chart show?",
+            "attachments": [
+                # Der Browser meldet .csv je nach System unterschiedlich; der
+                # Server kennt nur den kanonischen Typ.
+                {"name": "chart.png", "mime": "image/png", "size": 2048},
+                {"name": "rows.csv", "mime": "text/csv", "size": 900},
+            ],
+        },
+    )
+    without_file = create_turn(
+        client, chat["id"], {**TURN_PAYLOAD, "question": "And in euros?"}
+    )
+
+    assert with_file["attachments"] == [
+        {"name": "chart.png", "mime": "image/png", "size": 2048},
+        {"name": "rows.csv", "mime": "text/plain", "size": 900},
+    ]
+    # Die Folgefrage sagt nichts ueber die Datei der vorigen aus - und raeumt
+    # sie auch nicht weg.
+    assert "attachments" not in without_file
+    stored = database.turns("owner-uid", chat["id"])
+    assert stored[with_file["id"]]["attachments"][0]["name"] == "chart.png"
+    assert "attachments" not in stored[without_file["id"]]
+
+    page = client.get(f"/chats/{chat['id']}/turns", headers=AUTH_OWNER)
+    listed = {turn["id"]: turn for turn in page.json()["turns"]}
+    assert listed[with_file["id"]]["attachments"][1]["mime"] == "text/plain"
+
+
+def test_turn_attachments_never_carry_file_data_or_unknown_types(chat_api):
+    """Datei-Bytes gehoeren an die Modelle, nicht nach Firestore."""
+    client, database = chat_api
+    chat = create_chat(client)
+
+    turn = create_turn(
+        client,
+        chat["id"],
+        {
+            **TURN_PAYLOAD,
+            "attachments": [
+                {
+                    "name": "secret.png",
+                    "mime": "image/png",
+                    "size": 10,
+                    "data": "must-not-survive",
+                },
+                {"name": "payload.exe", "mime": "application/x-msdownload", "size": 5},
+                {"name": "", "mime": "image/png", "size": 5},
+            ],
+        },
+    )
+
+    assert turn["attachments"] == [
+        {"name": "secret.png", "mime": "image/png", "size": 10}
+    ]
+    stored = database.turns("owner-uid", chat["id"])[turn["id"]]
+    assert "must-not-survive" not in repr(stored)
+
+
+def test_turn_attachment_meta_survives_completion(chat_api):
+    """Die Antwort ueberschreibt die Frage nicht.
+
+    complete_turn schreibt in dasselbe Dokument; ein set() statt update()
+    haette den Anhang der Frage still mitgeloescht.
+    """
+    client, database = chat_api
+    chat = create_chat(client)
+    turn = create_turn(
+        client,
+        chat["id"],
+        {
+            **TURN_PAYLOAD,
+            "attachments": [{"name": "chart.png", "mime": "image/png", "size": 2048}],
+        },
+    )
+    chat_store.ChatStore(database).complete_turn(
+        "owner-uid", chat["id"], turn["id"], **completion_payload()
+    )
+
+    detail = client.get(
+        f"/chats/{chat['id']}/turns/{turn['id']}", headers=AUTH_OWNER
+    ).json()["turn"]
+    assert detail["attachments"] == [
+        {"name": "chart.png", "mime": "image/png", "size": 2048}
+    ]
