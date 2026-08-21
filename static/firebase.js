@@ -1219,6 +1219,7 @@ function bookmarkIdForQuestion(question) {
 window.App = window.App || {};
 window.App.bookmarkSession = {
   activeId: null,
+  pending: null,
 
   begin(question, { followup = false } = {}) {
     if (!followup || !this.activeId) {
@@ -1237,7 +1238,93 @@ window.App.bookmarkSession = {
     return this.activeId;
   },
 
+  // A run gets a local sidebar row immediately. It deliberately stays out of
+  // bookmarksData until the server returns real metadata: the outline is a
+  // promise that a bookmark is being created, not a usable saved result.
+  setRunActive(isActive, question = "") {
+    if (isActive) {
+      if (!auth.currentUser) return;
+      if (!this.activeId) this.begin(question);
+      const bookmarkId = this.activeId;
+      if (!bookmarkId) return;
+
+      if (!this.pending || this.pending.id !== bookmarkId) {
+        const initialMeta = window.bookmarksData?.find(item => item.id === bookmarkId) || null;
+        if (this.pending?.finishTimer) clearTimeout(this.pending.finishTimer);
+        this.pending = {
+          id: bookmarkId,
+          question: bookmarkDisplayTitle(initialMeta) || String(question || "").trim(),
+          initialMeta,
+          latestMeta: null,
+          runActive: true,
+          writes: 0,
+          finishTimer: null
+        };
+      } else {
+        this.pending.runActive = true;
+        if (this.pending.finishTimer) clearTimeout(this.pending.finishTimer);
+        this.pending.finishTimer = null;
+      }
+      ensurePendingBookmarkDOM(this.pending);
+      return;
+    }
+
+    if (!this.pending) return;
+    this.pending.runActive = false;
+    this.schedulePendingFinish();
+  },
+
+  noteWriteStarted(bookmarkId) {
+    if (this.pending?.id !== bookmarkId) return;
+    this.pending.writes += 1;
+    if (this.pending.finishTimer) clearTimeout(this.pending.finishTimer);
+    this.pending.finishTimer = null;
+  },
+
+  noteWriteFinished(bookmarkId) {
+    if (this.pending?.id !== bookmarkId) return;
+    this.pending.writes = Math.max(0, this.pending.writes - 1);
+    this.schedulePendingFinish();
+  },
+
+  noteSavedMeta(meta) {
+    if (!meta?.id || this.pending?.id !== meta.id) return false;
+    this.pending.latestMeta = meta;
+    this.pending.question = bookmarkDisplayTitle(meta) || this.pending.question;
+    ensurePendingBookmarkDOM(this.pending);
+    return true;
+  },
+
+  // Model fan-out hands directly into auto-consensus. The zero-delay fence
+  // lets that synchronous hand-off claim the same pending row before it can
+  // briefly turn into a clickable bookmark between the two phases.
+  schedulePendingFinish() {
+    if (!this.pending || this.pending.runActive || this.pending.writes > 0) return;
+    if (this.pending.finishTimer) clearTimeout(this.pending.finishTimer);
+    const pendingId = this.pending.id;
+    this.pending.finishTimer = setTimeout(() => {
+      if (this.pending?.id === pendingId) this.finishPending();
+    }, 0);
+  },
+
+  finishPending() {
+    const pending = this.pending;
+    if (!pending || pending.runActive || pending.writes > 0) return;
+    if (pending.finishTimer) clearTimeout(pending.finishTimer);
+    this.pending = null;
+    const readyMeta = pending.latestMeta
+      || window.bookmarksData?.find(item => item.id === pending.id)
+      || pending.initialMeta;
+    if (readyMeta) replacePendingBookmarkWithReady(readyMeta);
+    else document.querySelector(`.bookmark.is-pending[data-id="${pending.id}"]`)?.remove();
+  },
+
   reset() {
+    const pending = this.pending;
+    if (pending?.finishTimer) clearTimeout(pending.finishTimer);
+    this.pending = null;
+    if (pending?.initialMeta) replacePendingBookmarkWithReady(pending.initialMeta);
+    else document.querySelector(`.bookmark.is-pending[data-id="${pending?.id || ""}"]`)?.remove();
     this.activeId = null;
   }
 };
@@ -1281,6 +1368,9 @@ function bookmarkMeta(bookmark) {
 function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
   const meta = bookmarkMeta(bookmark);
   if (!meta.id) return;
+  // Keep the local row disabled while the surrounding run (and its queued
+  // persistence writes) is still in flight.
+  window.App.bookmarkSession?.noteSavedMeta?.(meta);
   if (!window.bookmarksData) window.bookmarksData = [];
   const existingIndex = window.bookmarksData.findIndex(item => item.id === meta.id);
   if (existingIndex >= 0) {
@@ -1297,6 +1387,7 @@ let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
 const bookmarkWriteChains = new Map();
 
 function enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, operation) {
+  window.App.bookmarkSession?.noteWriteStarted?.(bookmarkId);
   const queueKey = `${requestGeneration}:${requestUid}:${bookmarkId}`;
   const previous = bookmarkWriteChains.get(queueKey) || Promise.resolve();
   const current = previous
@@ -1312,6 +1403,7 @@ function enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, operati
     if (bookmarkWriteChains.get(queueKey) === current) {
       bookmarkWriteChains.delete(queueKey);
     }
+    window.App.bookmarkSession?.noteWriteFinished?.(bookmarkId);
   });
 }
 
@@ -2026,6 +2118,8 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       window.bookmarksData = [];
       bookmarksNextCursor = null;
       if (container) container.innerHTML = "";
+      // A metadata refresh must not make an in-flight bookmark disappear.
+      ensurePendingBookmarkDOM(window.App.bookmarkSession?.pending);
     }
     do {
       // 35 statt 30: auf einem grossen Monitor stand der "Load more"-Button
@@ -2206,20 +2300,10 @@ function updateBookmarkDOM(bookmark) {
   if (label) label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
 }
 
-function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
-  const container = document.getElementById("bookmarksContainer");
-  
-  // Prüfen, ob das Bookmark schon existiert (Update-Fall), um Duplikate zu vermeiden
-  const existing = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
-  if (existing) {
-      // Optional: Update Text falls er sich geändert hat
-      return; 
-  }
-
+function createReadyBookmarkRow(bookmark) {
   const div = document.createElement("div");
   div.className = "bookmark";
   div.dataset.id = bookmark.id;
-  div.style.position = "relative";
   // Die Frage kommt als freier Nutzertext und darf nie als HTML interpretiert
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
@@ -2251,6 +2335,64 @@ function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   div.addEventListener("click", () => {
     window.openBookmark(bookmark.id);
   });
+
+  return div;
+}
+
+function ensurePendingBookmarkDOM(pending) {
+  const container = document.getElementById("bookmarksContainer");
+  if (!container || !pending?.id) return;
+  let row = document.querySelector(`.bookmark[data-id="${pending.id}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "bookmark";
+    row.dataset.id = pending.id;
+    container.prepend(row);
+  }
+
+  row.className = "bookmark is-pending";
+  row.setAttribute("role", "status");
+  row.setAttribute("aria-live", "polite");
+  row.setAttribute("aria-disabled", "true");
+  row.setAttribute(
+    "aria-label",
+    `Creating bookmark for ${pending.question || "this question"}. It will be available when the run is complete.`
+  );
+  row.title = "Bookmark is being created and will be available when the run is complete.";
+  row.replaceChildren();
+
+  const icon = document.createElement("span");
+  icon.className = "bookmark-pending-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = '<svg viewBox="0 0 20 22" fill="none"><path d="M4.25 2.75c0-.83.67-1.5 1.5-1.5h8.5c.83 0 1.5.67 1.5 1.5v16.8L10 16.1l-5.75 3.45V2.75Z"/></svg><span class="bookmark-pending-spinner"></span>';
+
+  const label = document.createElement("p");
+  label.textContent = truncateText(pending.question || "New comparison");
+  const status = document.createElement("span");
+  status.className = "bookmark-pending-status";
+  status.textContent = "Saving";
+  status.setAttribute("aria-hidden", "true");
+  row.append(icon, label, status);
+}
+
+function replacePendingBookmarkWithReady(bookmark) {
+  if (!bookmark?.id) return;
+  const row = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  const readyRow = createReadyBookmarkRow(bookmark);
+  if (row) row.replaceWith(readyRow);
+  else document.getElementById("bookmarksContainer")?.prepend(readyRow);
+}
+
+function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
+  const container = document.getElementById("bookmarksContainer");
+  if (!container) return;
+
+  // Prüfen, ob das Bookmark schon existiert (Update-Fall), um Duplikate zu vermeiden.
+  // Ein Pending-Eintrag bleibt dabei absichtlich gesperrt.
+  const existing = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  if (existing) return;
+
+  const div = createReadyBookmarkRow(bookmark);
 
   if (prepend) container.prepend(div);
   else container.appendChild(div);

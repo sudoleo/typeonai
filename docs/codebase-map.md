@@ -1156,6 +1156,12 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   sechs Modell-Writes und repariert als autoritativer Vollsnapshot auch einen
   fehlgeschlagenen Modell-Write. Die Firestore-Transaktion behält zusätzlich
   ein erhöhtes Konflikt-Retry-Budget für alte, noch parallel schreibende Clients.
+  Ab Sendestart reserviert `window.App.bookmarkSession` für eingeloggte Nutzer
+  sofort einen gesperrten, animierten Bookmark-Rahmen in der Sidebar. Modell-
+  und Consensus-Saves aktualisieren darin nur die Metadaten; anklickbar wird
+  der Eintrag erst, wenn weder Query/Consensus noch ein zugehöriger Save läuft.
+  Scheitert ein neuer Lauf vor dem ersten Save, verschwindet nur der lokale
+  Platzhalter; bei Follow-ups wird stattdessen das vorige Bookmark restauriert.
   Beim Restore stammen die
   sichtbaren Namen der Einzelantworten und die Citation-Metadaten aus den
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
@@ -2885,10 +2891,12 @@ ersten Check statt eines leeren Consensus-Panels.
   Chat-Bookmark darf nach vollständigem Transcript-Load dagegen über
   `restoreCompletedChat(chatId, turnId)` genau seine letzte completed Basis
   wiederherstellen.
-- **`window.App.bookmarkSession`** (definiert in `firebase.js`) hält nur die
-  stabile Bookmark-Dokument-ID der sichtbaren Unterhaltung. `query-send.js`
-  beginnt sie beim ersten Turn, alle Bookmark-Saves verwenden sie, ein
-  Bookmark-Restore übernimmt dessen ID; Clear/New comparison/Logout resetten sie.
+- **`window.App.bookmarkSession`** (definiert in `firebase.js`) hält die stabile
+  Bookmark-Dokument-ID der sichtbaren Unterhaltung und den rein lokalen
+  Pending-Zustand (`setRunActive` plus Save-Zähler) des Sidebar-Eintrags.
+  `query-send.js` beginnt sie beim ersten Turn und synchronisiert Query- sowie
+  Consensus-Lauf; alle Bookmark-Saves verwenden dieselbe ID, ein Bookmark-
+  Restore übernimmt sie. Clear/New comparison/Logout resetten beides.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.

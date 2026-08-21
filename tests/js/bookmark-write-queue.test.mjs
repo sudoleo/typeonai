@@ -12,8 +12,9 @@ function queueHarness() {
   const queueSource = source.slice(start, end);
   return Function(
     "isCurrentAuthenticatedUser",
+    "window",
     `${queueSource}\nreturn { enqueueBookmarkWrite };`
-  )(() => true);
+  )(() => true, { App: { bookmarkSession: {} } });
 }
 
 describe("bookmark write queue", () => {

@@ -269,7 +269,9 @@
     }
 
     function syncSendButtonRunning() {
-      setSendButtonRunning(isRunActive());
+      const running = isRunActive();
+      setSendButtonRunning(running);
+      window.App.bookmarkSession?.setRunActive?.(running, window.lastQuestion || "");
     }
 
     function isActiveQueryRun(runId) {
@@ -520,7 +522,7 @@
       const queryAuthIsCurrent = () => window.auth?.currentUser === queryAuthUser
         && (window.auth?.currentUser?.uid || null) === queryAuthUid
         && window.__consensioAuthState?.generation === queryAuthGeneration;
-      setSendButtonRunning(true);
+      syncSendButtonRunning();
       // Keep consensus unavailable until the current model run produces enough complete answers.
       // Bei jeder neuen Frage den Konsens-Bereich wieder ausblenden — im
       // laufenden Gespraech aber erst, wenn der Lauf wirklich stattfindet.
