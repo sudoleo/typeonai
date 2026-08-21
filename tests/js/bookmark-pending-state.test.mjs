@@ -120,10 +120,10 @@ describe("pending bookmark markup", () => {
     const row = document.querySelector('.bookmark[data-id="pending_id"]');
     expect(row.classList.contains("is-pending")).toBe(true);
     expect(row.getAttribute("aria-disabled")).toBe("true");
-    expect(row.querySelector(".bookmark-pending-icon svg")).not.toBeNull();
     expect(row.querySelector(".bookmark-pending-spinner")).not.toBeNull();
     expect(row.querySelector(".delete-bookmark")).toBeNull();
-    expect(row.textContent).toContain("Saving");
+    expect(row.textContent.trim()).toBe("A careful question");
+    expect(row.getAttribute("aria-label")).toContain("A careful question");
     dom.window.close();
   });
 });
