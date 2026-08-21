@@ -608,6 +608,37 @@
             };
           }
 
+          // Dasselbe fuer die Widerspruchs-Karten: ein archivierter Turn traegt
+          // seine Karten in der eigenen Schublade (.thread-history-differences),
+          // nicht im Live-Fuss. Die Karten entstehen erst NACH dieser Zeile
+          // (der Turn wird von oben nach unten gebaut) — deshalb wird der
+          // Container erst beim Klick gesucht, nicht beim Verankern.
+          function storedDifferenceFocus(body) {
+            return function (index) {
+              const turn = body.closest?.(".thread-history-turn");
+              const card = turn?.querySelectorAll(
+                ".thread-history-differences .diff-card"
+              )[index];
+              if (!card) return;
+              const panel = card.closest(".thread-history-panel");
+              const tab = panel && turn
+                ? Array.from(turn.querySelectorAll(".consensus-tab")).find(function (candidate) {
+                    return candidate.getAttribute("aria-controls") === panel.id;
+                  })
+                : null;
+              if (panel) panel.hidden = false;
+              if (tab) tab.setAttribute("aria-expanded", "true");
+              card.open = true;
+              card.scrollIntoView({ behavior: "smooth", block: "center" });
+              card.classList.add("is-focused");
+              setTimeout(function () { card.classList.remove("is-focused"); }, 2000);
+              window.trackUmamiEvent?.("app_consensus_marker_opened", {
+                kind: "difference",
+                stored_turn: true
+              });
+            };
+          }
+
           // --- Verdict: worüber, nicht wie viele -------------------------------
           // Aus differences[].claim wird eine kurze Themenangabe abgeleitet -
           // rein deterministisch, ohne zusätzlichen LLM-Call. "The models
@@ -1259,6 +1290,9 @@
             const body = options.body || window.App.consensusBodyEl();
             const fallbackBox = options.fallbackBox || $("consensusClaimsFallback");
             const answerNavigation = options.answerNavigation || LIVE_ANSWER_NAVIGATION;
+            // Ein archivierter Turn hat seine eigenen Karten; der Live-Fuss
+            // gehoert bereits dem naechsten Lauf.
+            const focusDifference = options.focusDifference || focusDifferenceCard;
             if (!body || !fallbackBox) return;
 
             // Pro Blockelement eine eigene Liste bereits markierter Bereiche:
@@ -1318,7 +1352,7 @@
               const control = attachPassageControl(
                 result,
                 diffMarkerLabel(diff) + ": " + diff.claim,
-                function () { focusDifferenceCard(index); },
+                function () { focusDifference(index); },
                 function () { return buildDiffPreview(diff); }
               );
               differenceControls.push({
@@ -1449,10 +1483,17 @@
               .filter(c => c && c.anchor && Array.isArray(c.agree) && Array.isArray(c.dissent));
             const modelsCompared = Array.isArray(data.models_compared)
               ? data.models_compared : [];
-            renderInlineMarkers(claims, [], modelsCompared, {
+            // Die Widersprueche gehoeren MIT in den Verlauf: ohne sie fiel ein
+            // strittiger Satz beim naechsten Turn auf sein Claim-Badge zurueck
+            // und las sich als "1 of 6 models support this" (bernstein) statt
+            // als roter Widerspruch — dieselbe Antwort, entschaerft.
+            const differences = (Array.isArray(data.differences) ? data.differences : [])
+              .filter(d => d && d.claim && Array.isArray(d.positions) && d.positions.length);
+            renderInlineMarkers(claims, differences, modelsCompared, {
               body: body,
               fallbackBox: fallbackBox,
               stored: true,
+              focusDifference: storedDifferenceFocus(body),
               // Ein archivierter Turn hat seine eigenen Quellen; die globale
               // Liste gehoert bereits dem naechsten Lauf.
               sources: Array.isArray(sources) ? sources : [],
