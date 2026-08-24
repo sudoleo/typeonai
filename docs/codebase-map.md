@@ -2483,7 +2483,8 @@ History zu behaupten.
   gesetzt sein, sobald eine Chat- oder Turn-Liste eine Folgeseite ausgibt.
 - Search Console (nur serverseitig): `GSC_SITE_URL` (URL-Prefix- oder
   `sc-domain:`-Property) und `GSC_SERVICE_ACCOUNT_JSON` (**ausschließlich ein
-  Dateipfad**, trotz Variablennamen). Relative Pfade werden gegen den Repository-
+  Dateipfad**, trotz Variablennamen; `GSC_SERVICE_ACCOUNT_FILE` gilt als
+  gleichwertiger Aliasname, weil Render diese Schreibweise trägt). Relative Pfade werden gegen den Repository-
   Root aufgelöst, absolute Pfade (z. B. Render Secret Files unter `/etc/secrets`)
   direkt verwendet. Verwendet ausschließlich
   `https://www.googleapis.com/auth/webmasters.readonly`; fehlende/ungültige

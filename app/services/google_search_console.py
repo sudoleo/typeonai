@@ -31,6 +31,8 @@ DEFAULT_ROW_LIMIT = 25_000
 DEFAULT_MAX_PAGES = 10
 MAX_TOP_QUERY_ROWS = 100
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+# Both spellings are in use. The value is a path in every environment.
+CREDENTIALS_PATH_ENV_VARS = ("GSC_SERVICE_ACCOUNT_JSON", "GSC_SERVICE_ACCOUNT_FILE")
 
 
 class SearchConsoleError(Exception):
@@ -50,13 +52,29 @@ class SearchConsoleConfig:
     @classmethod
     def from_env(cls) -> "SearchConsoleConfig":
         site_url = str(os.environ.get("GSC_SITE_URL") or "").strip()
-        credentials_path_value = str(
-            os.environ.get("GSC_SERVICE_ACCOUNT_JSON") or ""
-        ).strip()
+        # The variable holds a file path, so both names describe the same thing
+        # and both are accepted. A deployment that used the _FILE spelling
+        # looked fully configured while every collection failed as
+        # "not_configured".
+        credentials_path_value = next(
+            (
+                value for value in (
+                    str(os.environ.get(name) or "").strip()
+                    for name in CREDENTIALS_PATH_ENV_VARS
+                )
+                if value
+            ),
+            "",
+        )
         if not site_url or not credentials_path_value:
+            missing = ", ".join(
+                name for name, value in (
+                    ("GSC_SITE_URL", site_url),
+                    ("/".join(CREDENTIALS_PATH_ENV_VARS), credentials_path_value),
+                ) if not value
+            )
             raise SearchConsoleError(
-                "not_configured",
-                "GSC_SITE_URL and GSC_SERVICE_ACCOUNT_JSON are not configured.",
+                "not_configured", f"Not configured: {missing}."
             )
         domain_property = site_url.removeprefix("sc-domain:").strip()
         parsed_site = urlsplit(site_url)
@@ -80,11 +98,13 @@ class SearchConsoleConfig:
             info = json.loads(credentials_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError):
             raise SearchConsoleError(
-                "invalid_configuration", "GSC_SERVICE_ACCOUNT_JSON is invalid."
+                "invalid_configuration",
+                "The Search Console service account file is missing or invalid.",
             ) from None
         if not isinstance(info, dict) or info.get("type") != "service_account":
             raise SearchConsoleError(
-                "invalid_configuration", "GSC_SERVICE_ACCOUNT_JSON is invalid."
+                "invalid_configuration",
+                "The Search Console service account file is missing or invalid.",
             )
         return cls(site_url=site_url, service_account_info=info)
 
