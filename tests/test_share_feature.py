@@ -1240,6 +1240,31 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("toggleDifferencesView", body)
         self.assertIn("<strong>Unterschied:</strong>", body)
 
+    def test_structured_empty_differences_do_not_render_legacy_credibility_text(self):
+        doc = self._share_doc(
+            differences_data={
+                "claims": [],
+                "differences": [],
+                "best_model": "OpenAI",
+                "models_compared": ["OpenAI", "Gemini"],
+                "agreement": {"score": 96, "level": "very"},
+            },
+            differences_text=(
+                "The consensus answer is **very** credible.\n\n"
+                "_____________\n\n"
+                "- No substantive contradictions between the responses.\n\n"
+                "BestModel: OpenAI"
+            ),
+        )
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+
+        body = response.text
+        self.assertIn("no notable differences found", body)
+        self.assertIn('<span class="share-best-model-label">Best answer</span>OpenAI', body)
+        self.assertNotIn("very</strong> credible", body)
+        self.assertNotIn("No substantive contradictions between the responses", body)
+
     def test_related_questions_section_rendered(self):
         doc = self._share_doc()
         related = [
@@ -1279,6 +1304,13 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("M 38.0", body)
         self.assertIn("The central recommendation changed.", body)
         self.assertIn("76<span>/100</span>", body)
+        self.assertIn('href="#watch-run-check-1"', body)
+        self.assertIn('id="watch-run-check-1"', body)
+        self.assertIn('id="watchFullAgreement"', body)
+        self.assertNotIn(
+            "The latest answer is shown below. We compare every check with the previous result",
+            body,
+        )
 
     def test_watch_history_renders_position_map_and_direction_shift(self):
         doc = self._share_doc()
@@ -1314,6 +1346,9 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("50<span>/100</span>", body)
         self.assertIn("Recommended adoption timeline", body)
         self.assertIn("OpenAI", body)
+        self.assertLess(body.index(">Sources<"), body.index("Position Map"))
+        self.assertLess(body.index("Position Map"), body.index(">Cite this answer<"))
+        self.assertNotIn('<details class="watch-history-details">', body)
 
     def test_active_watch_page_shows_run_metadata_before_history_exists(self):
         doc = self._share_doc()
@@ -1369,6 +1404,7 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("Latest watched answer.", current.text)
         self.assertNotIn("Original immutable answer.", current.text)
         self.assertIn("Changed since last check", current.text)
+        self.assertIn('class="watch-chart is-compact"', current.text)
         self.assertIn('<strong>82</strong>', current.text)
         self.assertIn("2</b> AI models", current.text)
         self.assertIn("Current source", current.text)

@@ -869,6 +869,30 @@ def normalize_models_document(data: dict) -> dict:
         normalized_consensus.append(chosen_deep)
     normalized["deep_think_model"] = chosen_deep
 
+    # Watch-Synthese-Engine: getrennt nach Free/Pro, aber unabhaengig von den
+    # Antwortmodellen. Direkte Modell-IDs muessen in einer Providerliste
+    # stehen; Free darf weder Premium-IDs noch *-Pro-Aliasse verwenden.
+    incoming_watch_consensus = normalized.get("watch_consensus_models")
+    incoming_watch_consensus = (
+        incoming_watch_consensus
+        if isinstance(incoming_watch_consensus, dict)
+        else {}
+    )
+    clean_watch_consensus = {}
+    for tier in ("free", "pro"):
+        chosen = cfg.canonical_model_id(incoming_watch_consensus.get(tier))
+        valid = (
+            chosen in cfg.CONSENSUS_ENGINE_ALIASES
+            or chosen in allowed_direct_consensus
+        )
+        locked = chosen.endswith("-Pro") or chosen in premium
+        if not valid or (tier == "free" and locked):
+            chosen = cfg._BASE_WATCH_CONSENSUS_MODELS_BY_TIER[tier]
+        clean_watch_consensus[tier] = chosen
+        if chosen not in normalized_consensus:
+            normalized_consensus.append(chosen)
+    normalized["watch_consensus_models"] = clean_watch_consensus
+
     normalized["consensus"] = normalized_consensus
 
     # Differences-Judges je Provider: Firestore speichert immer eine vollstaendige
@@ -948,6 +972,11 @@ def _model_dependencies(data: dict) -> dict:
     for tier, models in (data.get("watch_models") or {}).items():
         for provider, model in (models or {}).items():
             add(provider, model, f"{tier} Watch")
+    for tier, model in (data.get("watch_consensus_models") or {}).items():
+        if model in cfg.CONSENSUS_ENGINE_ALIASES:
+            continue
+        for provider in PROVIDER_KEYS:
+            add(provider, model, f"{tier} Watch consensus")
     for field, label in (
         ("judge_models", "Standard judge"),
         ("judge_models_pro", "Pro judge"),
@@ -1115,6 +1144,7 @@ def get_models(request: Request):
                 "watch_models": {
                     tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
                 },
+                "watch_consensus_models": dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER),
                 "deep_think_model": cfg.get_deep_think_consensus_model(),
                 "judge_models": cfg.get_judge_models(),
                 "judge_models_pro": cfg.get_pro_judge_models(),
@@ -1138,7 +1168,15 @@ def update_models(request: Request, data: dict = Body(...)):
             raise HTTPException(status_code=400, detail=f"Missing or invalid format for {k}. Must be a list of strings.")
 
     try:
-        normalized = normalize_models_document(data)
+        normalization_input = dict(data)
+        # Ein bereits geoeffneter Admin-Tab aus der Version vor dieser
+        # additiven Einstellung darf den aktiven Watch-Consensus-Wert nicht
+        # unbemerkt auf den Default zuruecksetzen.
+        if data.get("watch_consensus_models") is None:
+            normalization_input["watch_consensus_models"] = dict(
+                cfg.WATCH_CONSENSUS_MODELS_BY_TIER
+            )
+        normalized = normalize_models_document(normalization_input)
         normalized["limits"] = normalize_limits_config(data.get("limits"))
         incoming_memory_edit = data.get("memory_edit")
         # Kompatibilitaet fuer einen bereits offenen Admin-Tab aus der Version
@@ -1207,6 +1245,20 @@ def update_models(request: Request, data: dict = Body(...)):
                     )
             if len(normalized["watch_models"][tier]) < 2:
                 raise HTTPException(status_code=400, detail=f"Select at least two valid {tier} Watch models")
+        incoming_watch_consensus = data.get("watch_consensus_models")
+        if incoming_watch_consensus is not None:
+            if not isinstance(incoming_watch_consensus, dict):
+                raise HTTPException(
+                    status_code=400,
+                    detail="watch_consensus_models must contain free and pro engines",
+                )
+            for tier in ("free", "pro"):
+                chosen = cfg.canonical_model_id(incoming_watch_consensus.get(tier))
+                if normalized["watch_consensus_models"].get(tier) != chosen:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"watch_consensus_models.{tier} is invalid for this tier",
+                    )
         doc_ref = db_firestore.collection("app_config").document("models")
         models_document = {
             "openai": normalized["openai"],
@@ -1220,6 +1272,7 @@ def update_models(request: Request, data: dict = Body(...)):
             "preset_models": normalized["preset_models"],
             "defaults": normalized["defaults"],
             "watch_models": normalized["watch_models"],
+            "watch_consensus_models": normalized["watch_consensus_models"],
             "deep_think_model": normalized["deep_think_model"],
             "judge_models": normalized["judge_models"],
             "judge_models_pro": normalized["judge_models_pro"],

@@ -31,6 +31,9 @@ def build_history_view(points):
             trigger = "changed" if point.get("changed") or score_event else "stable"
         coords.append({
             **point,
+            # Stable within the rendered history and independent of Firestore
+            # document IDs, so chart points can link to their visible run row.
+            "anchor_id": f"check-{index + 1}",
             "trigger": trigger,
             "x": round(x, 1),
             "y": round(y, 1),

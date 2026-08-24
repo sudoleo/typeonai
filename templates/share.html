@@ -22,7 +22,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260801-question-clamp1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260824-watch-clarity1">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -49,6 +49,34 @@
   {% set public_nav_event = "share_page_cta" %}
   {% include "partials/public_nav.html" %}
 
+  {% macro agreement_chart(history, compact=false) %}
+  <svg class="watch-chart{% if compact %} is-compact{% endif %}" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
+       aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that run.">
+    {% if not compact %}<line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>{% endif %}
+    <line class="watch-grid" x1="38" y1="18" x2="622" y2="18"></line>
+    <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
+    <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
+    {% if not compact %}
+    <text class="watch-axis-label" x="4" y="23">100</text>
+    <text class="watch-axis-label" x="13" y="94">50</text>
+    <text class="watch-axis-label" x="21" y="165">0</text>
+    {% endif %}
+    <path class="watch-chart-line" d="{{ history.path }}"></path>
+    {% for point in history.points %}
+    <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
+       aria-label="{{ point.ts.strftime('%Y-%m-%d') }}: {{ point.agreement_score }} out of 100 agreement{% if point.change_summary %}. {{ point.change_summary }}{% endif %}">
+      <circle class="watch-chart-point{% if point.changed %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if compact %}{% if point.changed %}8{% else %}7{% endif %}{% elif point.changed %}5{% else %}4{% endif %}">
+        <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %} · {{ point.change_summary }}{% else %} · No material movement{% endif %}</title>
+      </circle>
+    </a>
+    {% endfor %}
+    {% if not compact %}
+    <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
+    <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
+    {% endif %}
+  </svg>
+  {% endmacro %}
+
   <main class="page-shell" data-math-render>
     <header class="page-header share-header">
       <p class="eyebrow">{% if watch_page %}Tracked question{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
@@ -57,12 +85,10 @@
            Skript unten, das auch prüft, ob überhaupt etwas abgeschnitten ist. -->
       <h1 id="shareQuestion" class="share-question{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}">{{ question }}</h1>
       <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
-      {% if watch_page %}
+      {% if watch_page and not watch_has_comparison %}
       <p class="watch-plain-intro">
         {% if watch_awaiting_first_run %}
           This question is scheduled for repeated checks. The first result will become the baseline; there is no development to report yet.
-        {% elif watch_has_comparison %}
-          The latest answer is shown below. We compare every check with the previous result and call out only meaningful movement.
         {% else %}
           This is the first saved result. Future checks will be compared with it, so there is no trend to interpret yet.
         {% endif %}
@@ -88,34 +114,51 @@
       {% if watch_page and watch_drift and not watch_awaiting_first_run %}
       {% if watch_has_comparison %}
       <section class="watch-drift-hero is-{{ watch_drift.trigger }}" aria-labelledby="watchDriftHeading">
-        <div class="watch-drift-status">
-          <span class="watch-drift-pulse" aria-hidden="true"></span>
-          <div>
-            <p class="eyebrow">{% if watch_selected_version.is_original %}Tracking baseline{% elif watch_selected_version.is_historical %}Movement at this check{% else %}Latest movement{% endif %}</p>
-            <h2 id="watchDriftHeading">{{ watch_drift.label }}</h2>
+        <div class="watch-drift-layout">
+          <div class="watch-drift-copy">
+            <div class="watch-drift-status">
+              <span class="watch-drift-pulse" aria-hidden="true"></span>
+              <div>
+                <p class="eyebrow">{% if watch_selected_version.is_original %}Tracking baseline{% elif watch_selected_version.is_historical %}Movement at this check{% else %}Latest movement{% endif %}</p>
+                <h2 id="watchDriftHeading">{{ watch_drift.label }}</h2>
+              </div>
+            </div>
+            <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
+            <details class="watch-analysis-details">
+              <summary>Advanced change metrics</summary>
+              <dl class="watch-drift-metrics">
+                <div>
+                  <dt>Direction shift</dt>
+                  <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
+                </div>
+                <div>
+                  <dt>Agreement change</dt>
+                  <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts</span>{% else %}&mdash;{% endif %}</dd>
+                </div>
+                <div>
+                  <dt>Compared with</dt>
+                  <dd class="is-text">{% if watch_selected_version.is_original %}Tracking start{% else %}Previous check{% endif %}</dd>
+                </div>
+              </dl>
+              {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
+              <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
+              {% endif %}
+            </details>
           </div>
+          {% if watch_history %}
+          <div class="watch-compact-agreement" aria-labelledby="watchCompactAgreementHeading">
+            <div class="watch-compact-agreement-heading">
+              <div>
+                <p class="eyebrow" id="watchCompactAgreementHeading">Agreement over time</p>
+                <span>Hover a point for details. Select it to open that run.</span>
+              </div>
+              <strong>{{ watch_history.latest_score }}<span>/100</span></strong>
+            </div>
+            {{ agreement_chart(watch_history, true) }}
+            <a class="watch-full-chart-link" href="#watchFullAgreement">View full chart</a>
+          </div>
+          {% endif %}
         </div>
-        <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
-        <details class="watch-analysis-details">
-          <summary>Open advanced change metrics</summary>
-        <dl class="watch-drift-metrics">
-          <div>
-            <dt>Direction shift</dt>
-            <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
-          </div>
-          <div>
-            <dt>Agreement change</dt>
-            <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts</span>{% else %}&mdash;{% endif %}</dd>
-          </div>
-          <div>
-            <dt>Compared with</dt>
-            <dd class="is-text">{% if watch_selected_version.is_original %}Tracking start{% else %}Previous check{% endif %}</dd>
-          </div>
-        </dl>
-        {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
-        <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
-        {% endif %}
-        </details>
         {% if watch_selected_version.is_historical %}
         <div class="watch-version-banner">
           <span>You are viewing {% if watch_selected_version.is_original %}the original baseline{% else %}a historical version{% endif %}.</span>
@@ -132,7 +175,7 @@
       {% endif %}
       {% endif %}
       {% if scoreboard and (scoreboard.score is not none or scoreboard.model_count) %}
-      <div class="share-scoreboard" role="group" aria-label="Consensus verdict at a glance">
+      <div class="share-scoreboard{% if watch_page and watch_has_comparison and watch_history %} is-facts-only{% endif %}" role="group" aria-label="Consensus verdict at a glance">
         {% if scoreboard.score is not none %}
         <div class="share-scoreboard-score">
           <strong>{{ scoreboard.score }}</strong>
@@ -153,7 +196,6 @@
           {% if scoreboard.checks > 1 %}<li><b>{{ scoreboard.checks }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
         </ul>
       </div>
-      <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered independently and were cross-checked by a judge from a different model family. <a href="/consensus-engine">How it works</a></p>
       {% endif %}
       {% if consensus_model_view or consulted_models %}
       <div class="share-models">
@@ -290,6 +332,81 @@
       </section>
       {% endif %}
 
+      {% if watch_history and watch_history.position_map %}
+      <section class="legal-panel watch-position-map" aria-labelledby="watchPositionHeading">
+        <div class="watch-position-intro">
+          <div>
+            <p class="eyebrow">Position Map</p>
+            <h2 id="watchPositionHeading">Where the models stand</h2>
+            <p>Each row is one part of the answer. The cards show the distinct positions; the model chips show who supports each one.</p>
+          </div>
+          <div class="watch-direction-score" aria-label="How much model positions changed">
+            {% if watch_history.position_map.shift_score is not none %}
+            <strong>{{ watch_history.position_map.shift_score }}<span>/100</span></strong>
+            {% else %}
+            <strong>&mdash;</strong>
+            {% endif %}
+            <span>Direction Shift &middot; {{ watch_history.position_map.shift_label }}</span>
+          </div>
+        </div>
+
+        <div class="watch-position-dimensions" aria-label="Latest model positions">
+          {% for dimension in watch_history.position_map.dimensions %}
+          <article class="watch-position-dimension">
+            <div class="watch-position-question">
+              <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Models disagree{% elif dimension.type == "claim" %}Shared conclusion{% else %}Different emphasis{% endif %}</span>
+              <h3>{{ dimension.label }}</h3>
+            </div>
+            <div class="watch-position-clusters">
+              {% for position in dimension.positions %}
+              <div class="watch-position-cluster">
+                <span class="watch-position-label">{% if dimension.positions | length == 1 %}Shared position{% else %}Position {{ loop.index }}{% endif %}</span>
+                {% if position.stance and position.stance != dimension.label %}
+                <p>{{ position.stance }}</p>
+                {% else %}
+                <p>Supports this conclusion</p>
+                {% endif %}
+                <ul aria-label="Models supporting this position">{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+              </div>
+              {% endfor %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+
+        {% if watch_history.position_map.trajectories %}
+        <details class="watch-position-movement">
+          <summary>See how each model moved across checks</summary>
+          <div class="watch-trajectory-scroll">
+            <table class="watch-trajectory">
+              <caption class="sr-only">Model position movement by watch date</caption>
+              <thead>
+                <tr><th scope="col">Model</th>{% for date in watch_history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
+              </thead>
+              <tbody>
+                {% for row in watch_history.position_map.trajectories %}
+                <tr>
+                  <th scope="row">{{ row.provider }}</th>
+                  {% for cell in row.cells %}
+                  <td>
+                    {% if cell.score is not none %}
+                    <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
+                          aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position changed, {{ cell.score }} out of 100{% else %}same position{% endif %}"
+                          title="{{ row.provider }} · {{ cell.date }} · {% if cell.moved %}changed {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}same position{% endif %}"></span>
+                    {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
+                  </td>
+                  {% endfor %}
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Same position</span><span><i class="is-moved"></i>Changed position</span></div>
+        </details>
+        {% endif %}
+      </section>
+      {% endif %}
+
       {% if citation_text %}
       <section class="legal-panel">
         <h2>Cite this answer</h2>
@@ -308,138 +425,36 @@
         <div class="watch-history-heading">
           <div>
             <p class="eyebrow">Consensus Watch</p>
-            <h2 id="watchHistoryHeading">How AI answers move</h2>
+            <h2 id="watchHistoryHeading">Run history</h2>
           </div>
           <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small></strong>
         </div>
-        <details class="watch-history-details">
-        <summary>Open advanced timeline analysis, position movement and saved versions</summary>
-        {% if watch_history.position_map %}
-        <div class="watch-position-map" aria-labelledby="watchPositionHeading">
-          <div class="watch-position-intro">
-            <div>
-              <h3 id="watchPositionHeading">Position Map</h3>
-              <p>Each question keeps its own dimensions. The map tracks providers moving between positions instead of forcing every answer onto a yes/no axis.</p>
-            </div>
-            <div class="watch-direction-score" aria-label="Direction Shift score">
-              {% if watch_history.position_map.shift_score is not none %}
-              <strong>{{ watch_history.position_map.shift_score }}<span>/100</span></strong>
-              {% else %}
-              <strong>&mdash;</strong>
-              {% endif %}
-              <span>Direction Shift &middot; {{ watch_history.position_map.shift_label }}</span>
-            </div>
+        <details id="watchFullAgreement" class="watch-full-agreement">
+          <summary>View the full agreement chart</summary>
+          <div class="watch-agreement-heading">
+            <h3>Agreement over time</h3>
+            <p>How strongly the models support the same claims. Every point links to its run below.</p>
           </div>
+          <div class="watch-chart-scroll">{{ agreement_chart(watch_history) }}</div>
+        </details>
 
-          {% if watch_history.position_map.trajectories %}
-          <div class="watch-trajectory-scroll">
-            <table class="watch-trajectory">
-              <caption class="sr-only">Provider position movement by watch date</caption>
-              <thead>
-                <tr><th scope="col">Provider</th>{% for date in watch_history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
-              </thead>
-              <tbody>
-                {% for row in watch_history.position_map.trajectories %}
-                <tr>
-                  <th scope="row">{{ row.provider }}</th>
-                  {% for cell in row.cells %}
-                  <td>
-                    {% if cell.score is not none %}
-                    <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
-                          aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position moved, {{ cell.score }} out of 100{% else %}stable{% endif %}"
-                          title="{{ row.provider }} · {{ cell.date }} · {% if cell.moved %}moved {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}stable{% endif %}"></span>
-                    {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
-                  </td>
-                  {% endfor %}
-                </tr>
-                {% endfor %}
-              </tbody>
-            </table>
-          </div>
-          <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Stable</span><span><i class="is-moved"></i>Moved</span></div>
-          {% endif %}
-
-          <div class="watch-position-dimensions" aria-label="Latest provider positions">
-            {% for dimension in watch_history.position_map.dimensions %}
-            <article class="watch-position-dimension">
-              <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Contradiction{% elif dimension.type == "claim" %}Key claim{% else %}Different emphasis{% endif %}</span>
-              <h4>{{ dimension.label }}</h4>
-              <div class="watch-position-clusters">
-                {% for position in dimension.positions %}
-                <div class="watch-position-cluster">
-                  {# Beim einstimmigen Claim-Fallback ist die Haltung identisch mit dem
-                     Claim selbst - den Satz nicht doppelt zeigen, nur die Traeger. #}
-                  {% if position.stance and position.stance != dimension.label %}
-                  <p>{{ position.stance }}</p>
-                  {% else %}
-                  <p class="watch-position-supported">Supported by</p>
-                  {% endif %}
-                  <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
-                </div>
-                {% endfor %}
-              </div>
-            </article>
-            {% endfor %}
-          </div>
+        <div class="watch-runs-heading">
+          <h3>Checks</h3>
+          <p>Newest first. Open any saved result to read the full consensus from that date.</p>
         </div>
-        {% endif %}
-        <div class="watch-agreement-heading">
-          <h3>Agreement over time</h3>
-          <p>How strongly the providers support the same claims.</p>
-        </div>
-        <div class="watch-chart-scroll">
-          <svg class="watch-chart" viewBox="0 0 {{ watch_history.width }} {{ watch_history.height }}" role="img"
-               aria-label="Agreement score from {{ watch_history.start_date }} to {{ watch_history.end_date }}">
-            <line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>
-            <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
-            <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
-            <text class="watch-axis-label" x="4" y="23">100</text>
-            <text class="watch-axis-label" x="13" y="94">50</text>
-            <text class="watch-axis-label" x="21" y="165">0</text>
-            <path class="watch-chart-line" d="{{ watch_history.path }}"></path>
-            {% for point in watch_history.points %}
-            <circle class="watch-chart-point{% if point.changed %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.changed %}5{% else %}4{% endif %}">
-              <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %}. {{ point.change_summary }}{% endif %}</title>
-            </circle>
-            {% endfor %}
-            <text class="watch-date-label" x="38" y="184">{{ watch_history.start_date }}</text>
-            <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ watch_history.end_date }}</text>
-          </svg>
-        </div>
-        {% if watch_history.events %}
-        <ol class="watch-events">
-          {% for event in watch_history.events %}
-          <li>
-            <time datetime="{{ event.ts.isoformat() }}">{{ event.ts.strftime("%Y-%m-%d") }}</time>
-            <strong>{{ event.agreement_score }}/100</strong>
-            {% if event.severity == "major" %}<span class="watch-event-major">Major</span>{% endif %}
-            {% if event.change_summary %}<p>{{ event.change_summary }}</p>{% endif %}
-            {% if event.has_snapshot and event.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ event.run_id }}">View consensus</a>{% endif %}
+        <ol class="watch-runs">
+          {% for point in watch_history.points | reverse %}
+          <li id="watch-run-{{ point.anchor_id }}" class="is-{{ point.trigger }}{% if point.run_id == watch_selected_version.id %} is-selected{% endif %}" tabindex="-1">
+            <div class="watch-run-meta">
+              <time datetime="{{ point.ts.isoformat() }}">{{ point.ts.strftime("%Y-%m-%d") }}</time>
+              <span class="watch-run-state">{% if point.trigger == "changed" %}Meaningful change{% else %}Stable{% endif %}</span>
+            </div>
+            <strong>{{ point.agreement_score }}<span>/100 agreement</span></strong>
+            <p>{{ point.change_summary or "No meaningful movement detected in this check." }}</p>
+            {% if point.has_snapshot and point.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Open this consensus</a>{% endif %}
           </li>
           {% endfor %}
         </ol>
-        {% endif %}
-        {% if watch_versions %}
-        <details class="watch-versions">
-          <summary>Browse {{ watch_versions | length }} saved consensus version{{ "s" if watch_versions | length != 1 }}</summary>
-          <ol>
-            {% for version in watch_versions %}
-            <li{% if version.is_selected %} class="is-selected"{% endif %}>
-              <span class="watch-version-state is-{{ version.trigger }}">{{ version.trigger }}</span>
-              <time>{{ version.date }}</time>
-              {% if version.is_current %}<strong>Current</strong>{% endif %}
-              <a href="{{ version.url }}">Open version</a>
-            </li>
-            {% endfor %}
-            <li{% if watch_selected_version.is_original %} class="is-selected"{% endif %}>
-              <span class="watch-version-state">baseline</span>
-              <span>Tracking start</span>
-              <a href="{{ watch_selected_version.original_url }}">Open original</a>
-            </li>
-          </ol>
-        </details>
-        {% endif %}
-        </details>
       </section>
       {% endif %}
 
@@ -457,6 +472,13 @@
           {% endfor %}
         </ul>
       </section>
+      {% endif %}
+
+      {% if scoreboard %}
+      <p class="share-method-note">
+        <strong>How this answer was made.</strong> {% if scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %} answered independently, then a judge from a different model family cross-checked the result.{% if watch_page and watch_has_comparison %} Each check is compared with the previous result and only meaningful movement is highlighted.{% endif %}
+        <a href="/consensus-engine">How it works</a>
+      </p>
       {% endif %}
 
       <p class="share-disclaimer">
@@ -517,6 +539,19 @@
           differencesView.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       }
+    })();
+
+    // Der kompakte Verlauf verlinkt dezent auf die große Grafik. Ein normaler
+    // Hash-Link bleibt ohne JS verständlich; mit JS öffnet sich das Detail.
+    (function () {
+      const fullChart = document.getElementById("watchFullAgreement");
+      if (!fullChart) return;
+      document.querySelectorAll('a[href="#watchFullAgreement"]').forEach(function (link) {
+        link.addEventListener("click", function () {
+          fullChart.open = true;
+        });
+      });
+      if (window.location.hash === "#watchFullAgreement") fullChart.open = true;
     })();
 
     {% if can_follow %}

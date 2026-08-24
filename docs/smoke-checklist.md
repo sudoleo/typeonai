@@ -387,13 +387,16 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       nächster Lauf sind über „Schedule and check dates“ erreichbar. Mit History rendert
       sie den neuesten gespeicherten Consensus statt des ursprünglichen Texts,
       einen Stable/Changed-Drift-Header; Direction Shift und Agreement Change
-      stehen erst in „advanced change metrics“. Die komplette Timeline mit
-      SVG-Linie/Punkten und Change-Liste startet eingeklappt und funktioniert in
-      Light/Dark ohne Mobile-Overflow. Jede neue Vollversion ist über „Browse saved
-      consensus versions“ erreichbar; `?version=original` zeigt unverändert die
+      stehen erst in „advanced change metrics“. Der Drift-Header enthält den
+      kompakten Agreement-Chart; Hover erklärt jeden Punkt, Klick springt zur
+      passenden sichtbaren Run-Zeile. Der Link „View full chart“ öffnet die große
+      SVG-Kurve. Chart, Run-Liste und Position Map funktionieren in Light/Dark
+      ohne Mobile-Overflow. Jede neue Vollversion ist aus ihrer Run-Zeile erreichbar;
+      `?version=original` zeigt unverändert die
       Ausgangsversion. Eine normale Shared Page ohne Watch bleibt unverändert.
-      Neue History zeigt davor die mehrdimensionale Position Map mit Provider-
-      Trajektorien, aktuellen Standpunkt-Gruppen und Direction Shift; alte
+      Neue History zeigt direkt unter den Quellen die stets offene, mehrdimensionale
+      Position Map mit verständlichen Positionskarten, Modell-Chips und Direction
+      Shift; Provider-Trajektorien sind nachrangig aufklappbar. Alte
       Punkte ohne `opinion_map` degradieren auf den Agreement-Chart.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       Major Change bzw. Score-Delta ≥15 sendet genau eine Multipart-Mail; Minor

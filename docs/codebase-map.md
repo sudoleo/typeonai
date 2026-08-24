@@ -1038,6 +1038,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   den Live-Boxen. Turns ohne `differences_data.differences` (alte Bookmarks)
   behalten den Freitext-Fallback, jetzt mit Credibility-Badge und ohne die
   `BestModel:`-Zeile (`stripBestModelLine`).
+  Die öffentliche Share-/Watch-Seite folgt derselben Autorität: Sobald
+  `differences_data.differences` als Liste vorliegt, wird sie auch leer als
+  echter „keine Unterschiede“-Befund gerendert. Der Legacy-Credibility-Text
+  erscheint nur bei Snapshots ohne strukturierte Liste; eine enthaltene
+  `BestModel:`-Zeile wird weiterhin separat als „Best answer“ dargestellt.
   Ausserdem steht `.src-ref` jetzt im `MARK_SKIP_SELECTOR` — ohne das wurde
   die Quellenzahl selbst als Satzteil gewrappt und trug die Markierung
   der Passage (eine angestrichene „3" sieht aus wie ein Fehler). Ein Satz wird höchstens einmal dekoriert
@@ -2266,7 +2271,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   `accepted → reserved → running → succeeded|failed`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
-  `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`, `defaults`,
+  `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`,
+  `watch_consensus_models`, `defaults`,
   `limits` sowie die sichere, einzeln normalisierte `memory_edit`-Konfiguration
   (Kill-Switch, OpenAI-Modell, Free-/Pro-Zeichen- und Tageslimits, Minuten-/
   Globallimit, Input-/Output- und Timeout-Caps).
@@ -2569,9 +2575,12 @@ geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`,
 per ↑/↓ sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
 nur Nicht-Premium erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch_models`
 enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindestens zwei
-Provider nötig, Free wird serverseitig auf Nicht-Premium begrenzt.
+Provider nötig, Free wird serverseitig auf Nicht-Premium begrenzt. Das getrennte Feld
+`watch_consensus_models` wählt pro Tier genau eine Synthese-Engine (Alias oder direkte
+konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwenden.
   `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr), entfernt
   verwaiste Premium-IDs und validiert `defaults`, `preset_models`, `watch_models`,
+  `watch_consensus_models`,
   Judges + `deep_think_model`. Provider-
 Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
@@ -2703,7 +2712,11 @@ alle fünf Minuten und fenced Completion wie Fehlerabschluss über
 ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
-laufen innerhalb des einzelnen Watch-Runs parallel. Keine Attachments/Follow-ups und keine
+laufen innerhalb des einzelnen Watch-Runs parallel. Die Synthese sowie die nachgelagerte
+Differences-/Change-Analyse verwenden die tierabhängige Engine aus
+`watch_consensus_models`. Ist deren Provider mangels Key nicht verfügbar oder für den Lauf
+ausgeschlossen, fällt der Scheduler deterministisch auf den ersten erfolgreichen
+Watch-Antwortprovider in `PROVIDER_ORDER` zurück. Keine Attachments/Follow-ups und keine
 In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
 `shares/{share_id}/watch_history/{run_id}` genau eine unveränderliche Version:
 kompakte Drift-/Score-Felder plus aktuellen Consensus, Differences, Quellen- und
@@ -2748,15 +2761,17 @@ komplette Plaintext-Hälfte in Base64 und URLs sind nicht mehr klickbar.
 Telegram sendet dieselbe Struktur als HTML (`parse_mode=HTML`), Frage und langer
 Consensus stehen in `<blockquote expandable>`; wird die Auszeichnung abgelehnt
 (HTTP 400), geht dieselbe Nachricht als Klartext raus.
-Watch-Seiten beginnen mit einer einfachen Erklärung („erste Baseline“ bzw.
-„seit dem letzten Check“). Lange Fragen klappen im Seitenkopf auf drei Zeilen
+Watch-Seiten erklären nur vor dem ersten Vergleich die Baseline; bei vorhandener
+History beginnt der Inhalt direkt mit Status und Zeitplan. Lange Fragen klappen im Seitenkopf auf drei Zeilen
 ein (`#shareQuestion` + `#shareQuestionMore`, gleiche Geste wie `#threadAsk` in
 /app; ohne JS bleibt der volle Text stehen), in der eingeklappten Dashboard-Karte
 auf zwei. Zeitplan und Check-Daten stehen im Kopf stets
 sichtbar; nur Direction-/Agreement-Metriken liegen in einklappbaren
 Expertendetails. Vor der ersten echten Vergleichsstufe
-werden keine Entwicklungsmetriken suggeriert. Die vollständige History-/
-Position-Analyse startet ebenfalls immer eingeklappt. Die normale Watch-URL
+werden keine Entwicklungsmetriken suggeriert. Bei vorhandener History integriert
+der Drift-Header einen kompakten Agreement-Chart: seine Punkte besitzen Hover-
+Beschreibungen und springen in die stets sichtbare Run-Liste. Die große Kurve
+bleibt als dezentes, zunächst geschlossenes Detail aus dem Header verlinkt. Die normale Watch-URL
 rendert serverseitig die neueste Vollversion über dem unveränderten Share-Baseline-
 Dokument; `?version=<run_id>` öffnet eine immutable historische Vollversion und
 `?version=original` den Ausgangs-Consensus. Shared Pages ohne Watch behalten ihr
@@ -2766,10 +2781,13 @@ Citation; kompakte History-Metadaten werden nie in den Share-Snapshot gemischt.
 Fehlt die aktuelle Vollversion (auch bei Legacy-History), zeigt die Seite einen
 klaren Hinweis und rendert den Original-Snapshot vollständig konsistent. Der
 Drift-Header stellt Stable/Changed sowie den Change-Summary vor den Text; seine
-Expertendetails trennen Direction Shift und Agreement Change.
-Die öffentliche Watch-History rendert zusätzlich eine **Position Map**: statt
-einer universellen Ja/Nein-Achse zeigt sie frage-spezifische Standpunkt-
-Dimensionen, Provider-Bewegungen über die Läufe und den gemeinsamen
+Expertendetails trennen Direction Shift und Agreement Change. Die Engine-
+Provenienz und der Vergleichshinweis stehen als Methodennotiz am Seitenende.
+Direkt unter den Quellen rendert die öffentliche Watch-History eine stets offene,
+menschenlesbare **Position Map**: statt einer universellen Ja/Nein-Achse zeigt
+sie pro frage-spezifischer Dimension klar benannte Positionskarten samt
+Modell-Chips. Provider-Bewegungen über die Läufe bleiben als nachrangiges Detail
+verfügbar; der Kopf zeigt den gemeinsamen
 **Direction Shift**. Die Berechnung ist deterministisch aus dem ohnehin
 vorhandenen Differences-JSON plus dem Change-Judge-Ergebnis und verursacht
 keinen zusätzlichen LLM-Call. Stable-Läufe werden mit 0 gewertet; bei nicht

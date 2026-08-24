@@ -111,6 +111,7 @@ document.getElementById('tab-models').addEventListener('change', () => {
     renderJudgeSelects();
     renderConsensusAddSelect();
     renderPresetModels();
+    renderWatchModelConfig();
 });
 
 // ==============================
@@ -151,6 +152,14 @@ function chip(kind, text, title) {
 function renderWatchModelConfig() {
     const container = document.getElementById('watchModelConfig');
     if (!container) return;
+    const currentModels = { free: {}, pro: {} };
+    container.querySelectorAll('[data-watch-tier][data-provider]').forEach(select => {
+        currentModels[select.dataset.watchTier][select.dataset.provider] = select.value;
+    });
+    const currentConsensus = {};
+    container.querySelectorAll('[data-watch-consensus-tier]').forEach(select => {
+        currentConsensus[select.dataset.watchConsensusTier] = select.value;
+    });
     container.innerHTML = '';
     ['Provider', 'Free Watch', 'Pro Watch'].forEach(text => {
         const head = document.createElement('div');
@@ -159,7 +168,11 @@ function renderWatchModelConfig() {
         container.appendChild(head);
     });
     const premium = new Set(globalModelsData.premium || []);
-    const configured = globalModelsData.watch_models || {};
+    const savedModels = globalModelsData.watch_models || {};
+    const configured = {
+        free: { ...(savedModels.free || {}), ...currentModels.free },
+        pro: { ...(savedModels.pro || {}), ...currentModels.pro },
+    };
     providers.forEach(provider => {
         const label = document.createElement('div');
         label.className = 'watch-model-provider';
@@ -191,6 +204,36 @@ function renderWatchModelConfig() {
             select.addEventListener('change', markDirty);
             container.appendChild(select);
         });
+    });
+
+    const consensusLabel = document.createElement('div');
+    consensusLabel.className = 'watch-model-provider';
+    consensusLabel.textContent = 'Consensus engine';
+    container.appendChild(consensusLabel);
+    const configuredConsensus = {
+        ...(globalModelsData.watch_consensus_models || {}),
+        ...currentConsensus,
+    };
+    const consensusModels = consensusListValues();
+    ['free', 'pro'].forEach(tier => {
+        const select = document.createElement('select');
+        select.className = 'watch-model-select';
+        select.dataset.watchConsensusTier = tier;
+        consensusModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            const description = consensusDescription(model);
+            if (description) option.textContent += ` — ${description}`;
+            if (tier === 'free' && isLockedConsensusModel(model)) {
+                option.disabled = true;
+                option.textContent += ' — Pro only';
+            }
+            select.appendChild(option);
+        });
+        select.value = configuredConsensus[tier] || '';
+        select.addEventListener('change', markDirty);
+        container.appendChild(select);
     });
 }
 
@@ -565,6 +608,7 @@ function addConsensusListValue(modelName) {
     renderConsensusAddSelect();
     renderDeepThinkSelect();
     renderPresetModels();
+    renderWatchModelConfig();
 }
 
 function removeConsensusListValue(modelName) {
@@ -577,6 +621,7 @@ function removeConsensusListValue(modelName) {
     renderConsensusAddSelect();
     renderDeepThinkSelect();
     renderPresetModels();
+    renderWatchModelConfig();
 }
 
 // Kandidaten fuer das Add-Dropdown: Aliase + direkte Modell-IDs aus den
@@ -999,6 +1044,7 @@ async function saveModels() {
         judge_families: currentJudgeFamilies(),
         chat_memory_models: currentChatMemoryModels(),
         watch_models: { free: {}, pro: {} },
+        watch_consensus_models: { free: '', pro: '' },
         defaults: {},
         limits: {},
         memory_edit: {}
@@ -1049,9 +1095,16 @@ async function saveModels() {
     document.querySelectorAll('[data-watch-tier][data-provider]').forEach(select => {
         if (select.value) data.watch_models[select.dataset.watchTier][select.dataset.provider] = select.value;
     });
+    document.querySelectorAll('[data-watch-consensus-tier]').forEach(select => {
+        data.watch_consensus_models[select.dataset.watchConsensusTier] = select.value;
+    });
     for (const tier of ['free', 'pro']) {
         if (Object.keys(data.watch_models[tier]).length < 2) {
             setStatus(`Select at least two ${tier} Watch models.`, true);
+            return;
+        }
+        if (!data.watch_consensus_models[tier]) {
+            setStatus(`Select a ${tier} Watch consensus engine.`, true);
             return;
         }
     }

@@ -160,6 +160,17 @@ WATCH_MODELS_BY_TIER = {
     tier: dict(models) for tier, models in _BASE_WATCH_MODELS_BY_TIER.items()
 }
 
+# Separate Synthese-Engine fuer Consensus-Watches. Sie ist bewusst nicht an
+# eines der Antwortmodelle gebunden: der konfigurierte Provider kann den
+# Consensus aus den unabhaengigen Antworten erzeugen, ohne selbst eine
+# Antwortposition beizusteuern. Legacy-Dokumente behalten mit OpenAI die
+# bisherige bevorzugte Engine, solange der Provider verfuegbar ist.
+_BASE_WATCH_CONSENSUS_MODELS_BY_TIER = {
+    "free": "OpenAI",
+    "pro": "OpenAI",
+}
+WATCH_CONSENSUS_MODELS_BY_TIER = dict(_BASE_WATCH_CONSENSUS_MODELS_BY_TIER)
+
 # Vom Admin gepflegte Anzeige-Reihenfolge der Modelle je Provider in den normalen
 # Pickern. Leere Liste => deterministischer Auto-Sort (model_picker_sort_key).
 MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
@@ -1047,6 +1058,23 @@ def get_watch_models(is_pro: bool) -> dict[str, str]:
     return dict(WATCH_MODELS_BY_TIER["pro" if is_pro else "free"])
 
 
+def apply_watch_consensus_models(config: dict | None) -> None:
+    """Apply one valid Consensus engine per Watch tier with safe fallbacks."""
+    incoming = config if isinstance(config, dict) else {}
+    for tier in ("free", "pro"):
+        chosen = canonical_model_id(incoming.get(tier))
+        resolved = get_consensus_model_config(chosen)
+        if not resolved or not resolved.provider:
+            chosen = _BASE_WATCH_CONSENSUS_MODELS_BY_TIER[tier]
+        if tier == "free" and is_premium_consensus_model(chosen):
+            chosen = _BASE_WATCH_CONSENSUS_MODELS_BY_TIER[tier]
+        WATCH_CONSENSUS_MODELS_BY_TIER[tier] = chosen
+
+
+def get_watch_consensus_model(is_pro: bool) -> str:
+    return WATCH_CONSENSUS_MODELS_BY_TIER["pro" if is_pro else "free"]
+
+
 rebuild_model_configs()
 
 
@@ -1220,6 +1248,7 @@ def _capture_runtime_config() -> dict:
         "order": {key: list(value) for key, value in MODEL_ORDER_BY_PROVIDER.items()},
         "defaults": dict(FREE_DEFAULT_MODEL_BY_PROVIDER),
         "watch": {key: dict(value) for key, value in WATCH_MODELS_BY_TIER.items()},
+        "watch_consensus": dict(WATCH_CONSENSUS_MODELS_BY_TIER),
         "limits": dict(LIMITS),
         "memory_edit_config": dict(MEMORY_EDIT_CONFIG),
     }
@@ -1253,6 +1282,8 @@ def _restore_runtime_config(state: dict) -> None:
     for tier in WATCH_MODELS_BY_TIER:
         WATCH_MODELS_BY_TIER[tier].clear()
         WATCH_MODELS_BY_TIER[tier].update(state["watch"].get(tier, {}))
+    WATCH_CONSENSUS_MODELS_BY_TIER.clear()
+    WATCH_CONSENSUS_MODELS_BY_TIER.update(state["watch_consensus"])
     LIMITS.clear()
     LIMITS.update(state["limits"])
     MEMORY_EDIT_CONFIG.clear()
@@ -1360,6 +1391,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             apply_model_order({provider: data.get(provider) for provider in MODEL_ORDER_BY_PROVIDER})
             apply_default_models(data.get("defaults"))
             apply_watch_models(data.get("watch_models"))
+            apply_watch_consensus_models(data.get("watch_consensus_models"))
 
             apply_limits(data.get("limits"))
             apply_memory_edit_config(data.get("memory_edit"))
@@ -1377,6 +1409,15 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             if persist_backfill and data.get("memory_edit") != normalized_memory_edit:
                 doc_ref.set(
                     {"memory_edit": normalized_memory_edit}, merge=True,
+                    timeout=5.0, retry=None,
+                )
+            normalized_watch_consensus = dict(WATCH_CONSENSUS_MODELS_BY_TIER)
+            if (
+                persist_backfill
+                and data.get("watch_consensus_models") != normalized_watch_consensus
+            ):
+                doc_ref.set(
+                    {"watch_consensus_models": normalized_watch_consensus}, merge=True,
                     timeout=5.0, retry=None,
                 )
             # Update ALL_ALLOWED_MODELS
@@ -1406,6 +1447,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 "watch_models": {
                     tier: dict(models) for tier, models in WATCH_MODELS_BY_TIER.items()
                 },
+                "watch_consensus_models": dict(WATCH_CONSENSUS_MODELS_BY_TIER),
                 "limits": get_limits_config(),
                 "memory_edit": get_memory_edit_config(),
             }, timeout=5.0, retry=None)

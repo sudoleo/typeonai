@@ -42,6 +42,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "watch_models": {
                 tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()
             },
+            "watch_consensus_models": dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER),
             "deep_think_model": cfg.get_deep_think_consensus_model(),
             "judge_models": cfg.get_judge_models(),
             "judge_models_pro": cfg.get_pro_judge_models(),

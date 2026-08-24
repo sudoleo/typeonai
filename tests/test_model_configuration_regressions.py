@@ -455,19 +455,31 @@ class ExistingModelFlowTests(unittest.TestCase):
                     "anthropic": cfg.ANTHROPIC_PRO_MODEL,
                 },
             },
+            "watch_consensus_models": {
+                "free": "OpenAI-Pro",
+                "pro": "Gemini-Pro",
+            },
         })
         self.assertEqual(set(normalized["watch_models"]["free"]), {"openai", "mistral"})
         self.assertEqual(len(normalized["watch_models"]["pro"]), 3)
+        self.assertEqual(normalized["watch_consensus_models"]["free"], "OpenAI")
+        self.assertEqual(normalized["watch_consensus_models"]["pro"], "Gemini-Pro")
 
         snapshot = {tier: dict(models) for tier, models in cfg.WATCH_MODELS_BY_TIER.items()}
+        consensus_snapshot = dict(cfg.WATCH_CONSENSUS_MODELS_BY_TIER)
         try:
             cfg.apply_watch_models(normalized["watch_models"])
+            cfg.apply_watch_consensus_models(normalized["watch_consensus_models"])
             self.assertEqual(cfg.get_watch_models(False), normalized["watch_models"]["free"])
             self.assertEqual(cfg.get_watch_models(True), normalized["watch_models"]["pro"])
+            self.assertEqual(cfg.get_watch_consensus_model(False), "OpenAI")
+            self.assertEqual(cfg.get_watch_consensus_model(True), "Gemini-Pro")
         finally:
             for tier, models in snapshot.items():
                 cfg.WATCH_MODELS_BY_TIER[tier].clear()
                 cfg.WATCH_MODELS_BY_TIER[tier].update(models)
+            cfg.WATCH_CONSENSUS_MODELS_BY_TIER.clear()
+            cfg.WATCH_CONSENSUS_MODELS_BY_TIER.update(consensus_snapshot)
 
     def test_admin_model_rows_have_order_and_default_controls(self):
         module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
@@ -489,7 +501,9 @@ class ExistingModelFlowTests(unittest.TestCase):
         module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         self.assertIn('id="watchModelConfig"', template)
         self.assertIn("watch_models: { free: {}, pro: {} }", module)
+        self.assertIn("watch_consensus_models: { free: '', pro: '' }", module)
         self.assertIn("data.watch_models[select.dataset.watchTier]", module)
+        self.assertIn("select.dataset.watchConsensusTier", module)
 
     def test_provider_errors_are_structured_without_fallback_response(self):
         response = source_response({

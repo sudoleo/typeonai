@@ -674,20 +674,25 @@ def share_page(request: Request, slug_id: str):
     # gerendert). Beides read-only aus dem Snapshot – keine LLM-Calls.
     differences_data = payload["differences_data"] if isinstance(payload["differences_data"], dict) else {}
     differences = differences_data.get("differences") or []
+    has_structured_differences = isinstance(differences_data.get("differences"), list)
     best_model_display = str(differences_data.get("best_model") or "").strip()
     differences_fallback_html = ""
-    if not differences and payload["differences_text"]:
-        # Die technische "BestModel: X"-Zeile aus dem Freitext ziehen und
-        # stattdessen als gestaltetes Element unter den Differences anzeigen.
+    if payload["differences_text"]:
+        # Die technische "BestModel: X"-Zeile auch aus Legacy-/Uebergangs-
+        # Snapshots ziehen, aber den restlichen Freitext nur dann anzeigen,
+        # wenn keine autoritative strukturierte Differences-Liste existiert.
+        # Eine vorhandene leere Liste ist ein echter "keine Unterschiede"-
+        # Befund und darf nicht auf den alten Credibility-Text zurueckfallen.
         fallback_text = str(payload["differences_text"])
         match = _BEST_MODEL_RE.search(fallback_text)
         if match:
             if not best_model_display:
                 best_model_display = match.group(1).strip()
             fallback_text = _BEST_MODEL_RE.sub("", fallback_text).strip()
-        differences_fallback_html = render_public_markdown(
-            fallback_text, payload["sources"]
-        )
+        if not has_structured_differences:
+            differences_fallback_html = render_public_markdown(
+                fallback_text, payload["sources"]
+            )
     model_count = (
         len(differences_data.get("models_compared") or [])
         or len(payload["included_models"])

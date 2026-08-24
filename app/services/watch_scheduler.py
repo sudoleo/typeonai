@@ -72,6 +72,17 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict,
     )
 
 
+def _configured_consensus_engine(keys: dict, is_pro: bool, excluded: set[str]) -> str | None:
+    """Return the configured Watch engine when its provider can be called."""
+    chosen = cfg.get_watch_consensus_model(is_pro)
+    resolved = cfg.get_consensus_model_config(chosen)
+    if not resolved or not resolved.provider or resolved.provider in excluded:
+        return None
+    if not provider_transport.provider_available(resolved.provider, keys):
+        return None
+    return chosen
+
+
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
                   previous_opinion_map=None, is_pro: bool = False,
                   excluded_providers=None, baseline_consensus: str = "",
@@ -87,10 +98,15 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     selected_models = _selected_models(
         keys, is_pro, excluded, model_overrides=model_overrides
     )
+    configured_engine = _configured_consensus_engine(keys, is_pro, excluded)
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
+        if configured_engine:
+            provider = cfg.get_consensus_model_config(configured_engine).provider
+            keys[PROVIDER_LABELS[provider]] = "mock"
     provider_models = dict(selected_models)
+
     def first_successful_engine(answers) -> str:
         provider = next(name for name, _model in selected_models if name in answers)
         return PROVIDER_LABELS[provider]
@@ -98,7 +114,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     pipeline = run_consensus_pipeline(
         question=question,
         provider_models=provider_models,
-        consensus_model=first_successful_engine,
+        consensus_model=configured_engine or first_successful_engine,
         keys=keys,
         is_pro=is_pro,
         deep_think=False,
@@ -108,10 +124,13 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         judge=query_differences,
         log_context="Consensus Watch",
     )
-    engine = first_successful_engine({
+    engine = configured_engine or first_successful_engine({
         provider: True
         for provider, _model in selected_models
-        if any(item["provider"] == PROVIDER_LABELS[provider] for item in pipeline["model_answers"])
+        if any(
+            item["provider"] == PROVIDER_LABELS[provider]
+            for item in pipeline["model_answers"]
+        )
     })
     consensus = pipeline["consensus_response"]
     differences = pipeline["differences_data"]

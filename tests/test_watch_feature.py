@@ -1076,10 +1076,62 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertEqual(list(watch_scheduler.PROVIDER_ORDER), expected)
         with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
                 patch.object(cfg, "get_watch_models", return_value=configured), \
+                patch.object(watch_scheduler, "_configured_consensus_engine", return_value=None), \
                 patch.object(watch_scheduler, "run_consensus_pipeline", side_effect=pipeline):
             result = watch_scheduler.execute_watch("Question", "")
 
         self.assertEqual(result["consensus_model"], "Gemini")
+
+    def test_watch_uses_configured_consensus_engine_independent_of_answer_models(self):
+        configured = {
+            "openai": "openai-model",
+            "mistral": "mistral-model",
+        }
+
+        def pipeline(**kwargs):
+            self.assertEqual(kwargs["consensus_model"], "Gemini-Pro")
+            differences = {
+                "agreement": {"score": 80, "level": "strong"},
+                "claims": [],
+                "differences": [],
+            }
+            return {
+                "consensus_response": "Consensus",
+                "differences": "No material differences.",
+                "differences_data": differences,
+                "agreement": differences["agreement"],
+                "model_answers": [
+                    {
+                        "provider": "OpenAI", "model": "openai-model",
+                        "response": "OpenAI answer", "sources": [],
+                    },
+                    {
+                        "provider": "Mistral", "model": "mistral-model",
+                        "response": "Mistral answer", "sources": [],
+                    },
+                ],
+            }
+
+        with patch.dict(os.environ, {"MOCK_LLM": "1"}), \
+                patch.object(cfg, "get_watch_models", return_value=configured), \
+                patch.object(cfg, "get_watch_consensus_model", return_value="Gemini-Pro"), \
+                patch.object(watch_scheduler, "run_consensus_pipeline", side_effect=pipeline):
+            result = watch_scheduler.execute_watch("Question", "", is_pro=True)
+
+        self.assertEqual(result["consensus_model"], "Gemini-Pro")
+
+    def test_watch_falls_back_when_configured_consensus_provider_is_unavailable(self):
+        with patch.object(cfg, "get_watch_consensus_model", return_value="Gemini"), \
+                patch.object(
+                    watch_scheduler.provider_transport,
+                    "provider_available",
+                    return_value=False,
+                ):
+            engine = watch_scheduler._configured_consensus_engine(
+                {"Gemini": ""}, False, set()
+            )
+
+        self.assertIsNone(engine)
 
     def test_publisher_watch_excludes_deepseek_even_if_configured_for_free(self):
         configured = {
