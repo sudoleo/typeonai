@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -181,6 +182,68 @@ def test_review_uses_at_most_one_portfolio_judge_call(monkeypatch):
     assert result["status"] == "completed"
     assert judge.calls == 1
     assert result["judge_called"] is True
+
+
+def judge_page(index, *, status="opportunity", visibility=83.0):
+    return {
+        "page_id": f"{index:064x}",
+        "url": "https://consens.io/q/is-claude-code-or-codex-better-at-debugging-4f2a9c1e",
+        "title": "Is Claude Code or Codex better at debugging?",
+        "page_type": "share",
+        "age_days": 41,
+        "metrics_7d": {"clicks": 0.0, "impressions": 12.0, "ctr": 0.0, "position": 18.3,
+                       "days": 7, "visibility": 12.0},
+        "metrics_28d": {"clicks": 1.0, "impressions": 63.0, "ctr": 0.0158, "position": 17.9,
+                        "days": 28, "visibility": visibility},
+        "status": status,
+        "recommendation": "refresh_title_and_intro",
+        "distinctiveness": {"distinctive": True, "reason": "models_diverge",
+                            "agreement_score": 64, "contradictions": 3,
+                            "major_contradictions": 1, "models_compared": 5},
+        "top_queries": [
+            {"query": "claude code vs codex debugging", "clicks": 0,
+             "impressions": 14, "position": 16.2}
+        ] * 5,
+        "watch_status": "active",
+        "uncertainties": ["incomplete_query_data", "missing_meta_description"],
+    }
+
+
+def test_a_growing_portfolio_still_fits_into_one_judge_prompt():
+    """The 40k cap held about 27 pages, so the judge went quiet as the site grew."""
+    pages = [judge_page(index) for index in range(100)]
+    prompt = weekly.SeoPortfolioJudge.build_prompt(pages, "Current brief " * 200)
+    assert len(prompt) <= weekly.MAX_PORTFOLIO_PROMPT_CHARS
+    payload = json.loads(prompt[prompt.index("{"):])
+    assert len(payload["pages"]) == 100
+    assert "omitted_page_count" not in payload
+    assert payload["pages"][0]["top_queries"]
+
+
+def test_judge_prompt_gives_up_detail_before_it_gives_up_pages(monkeypatch):
+    pages = [
+        judge_page(index, status="emerging", visibility=1.0) if index % 3 else judge_page(index)
+        for index in range(60)
+    ]
+
+    # Enough for all 60 pages stripped to the bone, not enough for their detail.
+    monkeypatch.setattr(weekly, "MAX_PORTFOLIO_PROMPT_CHARS", 40_000)
+    thinned = json.loads(_payload(weekly.SeoPortfolioJudge.build_prompt(pages, "brief")))
+    assert len(thinned["pages"]) == 60, "every page survives while detail can still be cut"
+    assert "top_queries" not in thinned["pages"][0]
+    assert "metrics_7d" not in thinned["pages"][0]
+    assert "omitted_page_count" not in thinned
+
+    monkeypatch.setattr(weekly, "MAX_PORTFOLIO_PROMPT_CHARS", 12_000)
+    truncated = json.loads(_payload(weekly.SeoPortfolioJudge.build_prompt(pages, "brief")))
+    assert 0 < len(truncated["pages"]) < 60
+    assert truncated["omitted_page_count"] == 60 - len(truncated["pages"])
+    # The quiet pages are the ones that go, and the judge is told the list is a sample.
+    assert {page["status"] for page in truncated["pages"]} == {"opportunity"}
+
+
+def _payload(prompt: str) -> str:
+    return prompt[prompt.index("{"):]
 
 
 def test_portfolio_judge_defaults_to_gpt_5_6_terra(monkeypatch):
