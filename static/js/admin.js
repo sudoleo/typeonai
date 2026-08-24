@@ -1843,6 +1843,14 @@ function seoStatus(message, isError) {
     el.className = isError ? 'error' : 'success';
 }
 
+function appendSeoText(parent, tag, text, className) {
+    const node = document.createElement(tag);
+    node.textContent = text || '';
+    if (className) node.className = className;
+    parent.appendChild(node);
+    return node;
+}
+
 function formatSeoNumber(value) {
     const number = Number(value || 0);
     return Number.isInteger(number)
@@ -1856,7 +1864,73 @@ function formatSeoMetric(metric, key) {
     return formatSeoNumber(metric[key]);
 }
 
+// Ordered loudest first: the operator should read trouble before routine.
+const SEO_STATUS_ORDER = [
+    'declining', 'opportunity', 'insufficient_data', 'invisible', 'winner', 'emerging'
+];
+const SEO_STATUS_LABELS = {
+    declining: 'declining',
+    opportunity: 'opportunity',
+    insufficient_data: 'insufficient data',
+    invisible: 'invisible',
+    winner: 'winner',
+    emerging: 'emerging'
+};
+// "emerging" is the resting state of a healthy young page: nothing to decide.
+// Everything else is either good news or a problem and stays in the default view.
+const SEO_QUIET_STATUSES = new Set(['emerging']);
+const SEO_HEALTHY_RUN_STATUSES = new Set(['success', 'partial']);
+const SEO_METRIC_KEYS = ['clicks', 'impressions', 'ctr', 'position'];
+
+const seoState = {
+    data: null,
+    // null means "never checked in this session", which is not the same as failed.
+    connection: null,
+    reviewGroupByPage: new Map(),
+    filters: { search: '', scope: 'attention', status: '', recommendation: '', origin: '' }
+};
+
+function seoRows() {
+    return (seoState.data || {}).rows || [];
+}
+
+function seoLatestRecommendation(row) {
+    return (row.recommendation_history || [])[0] || {};
+}
+
+function seoRowMatchesFilters(row) {
+    const filters = seoState.filters;
+    const status = row.status || 'insufficient_data';
+    const inReview = seoState.reviewGroupByPage.has(row.page_id);
+    if (filters.scope === 'attention' && SEO_QUIET_STATUSES.has(status) && !inReview) return false;
+    if (filters.status && status !== filters.status) return false;
+    if (filters.origin && (row.origin || '') !== filters.origin) return false;
+    if (filters.recommendation) {
+        const recommendation = seoLatestRecommendation(row).recommendation || '';
+        if ((recommendation || 'not_generated') !== filters.recommendation) return false;
+    }
+    if (filters.search) {
+        const haystack = [
+            row.url || '', (row.dossier || {}).title || '', row.share_id || '', row.origin || ''
+        ].join(' ').toLowerCase();
+        if (!haystack.includes(filters.search)) return false;
+    }
+    return true;
+}
+
 function renderSeoOverview(data) {
+    seoState.data = data;
+    // The review runs first: it owns the map that tells the page list which
+    // rows already carry a pending decision, so nothing is told twice.
+    renderSeoWeeklyReview(data.weekly_review || {});
+    renderSeoDiagnostics(data);
+    renderSeoPortfolio(data);
+    renderSeoFilterOptions(data);
+    renderSeoTable();
+    renderSeoAlerts();
+}
+
+function renderSeoDiagnostics(data) {
     const config = data.configuration || {};
     const configState = document.getElementById('seoConfigState');
     configState.textContent = config.configured
@@ -1878,128 +1952,390 @@ function renderSeoOverview(data) {
     const judgeState = document.getElementById('seoContentJudgeState');
     judgeState.textContent = judge.configured ? 'configured' : 'not configured';
     judgeState.title = judge.message || '';
-    renderSeoWeeklyReview(data.weekly_review || {});
-
-    const body = document.getElementById('seoTableBody');
-    body.textContent = '';
-    (data.rows || []).forEach(row => {
-        const tr = document.createElement('tr');
-        const pageCell = document.createElement('td');
-        const link = document.createElement('a');
-        link.href = row.url;
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.textContent = row.url;
-        pageCell.appendChild(link);
-        const origin = document.createElement('div');
-        origin.className = 'section-hint';
-        origin.textContent = row.origin + (row.share_id ? ` · ${row.share_id}` : '');
-        pageCell.appendChild(origin);
-        const dossier = row.dossier || {};
-        if (dossier.title) {
-            const title = document.createElement('div');
-            title.className = 'section-hint';
-            title.textContent = dossier.title;
-            pageCell.appendChild(title);
-        }
-        const queryData = row.query_data || {};
-        const queries = (queryData.top_queries || []).slice(0, 3);
-        if (queries.length || queryData.period_end) {
-            const queryList = document.createElement('div');
-            queryList.className = 'seo-query-list';
-            const partial = queryData.partial ? ' · partial' : '';
-            queryList.textContent = queries.length
-                ? `Top queries${partial}: ${queries.map(item => item.query).join(', ')}`
-                : `Query snapshot ${queryData.period_end || ''}${partial}: no rows`;
-            pageCell.appendChild(queryList);
-        }
-        tr.appendChild(pageCell);
-        ['clicks', 'impressions', 'ctr', 'position'].forEach(key => {
-            const td = document.createElement('td');
-            td.textContent = formatSeoMetric(row.metrics_7d || {}, key);
-            tr.appendChild(td);
-        });
-        ['clicks', 'impressions', 'ctr', 'position'].forEach(key => {
-            const td = document.createElement('td');
-            td.textContent = formatSeoMetric(row.metrics_28d || {}, key);
-            tr.appendChild(td);
-        });
-        const statusCell = document.createElement('td');
-        const status = document.createElement('span');
-        status.className = 'seo-status';
-        status.textContent = row.status || 'insufficient_data';
-        status.title = (data.status_rules || {})[row.status] || '';
-        statusCell.appendChild(status);
-        const window28 = row.metrics_28d || {};
-        appendSeoText(
-            statusCell, 'div',
-            Number(window28.days || 0) + '/28 daily rows \u00b7 visibility '
-                + Math.round(Number(window28.visibility || 0)),
-            'section-hint'
-        ).title = 'Visibility weights one click as 20 impressions. The status depends on stored daily rows, not on clicks.';
-        tr.appendChild(statusCell);
-
-        const history = row.recommendation_history || [];
-        const latest = history[0] || {};
-        const recommendationCell = document.createElement('td');
-        recommendationCell.className = 'seo-recommendation';
-        const recommendation = document.createElement('span');
-        recommendation.className = 'seo-status';
-        recommendation.textContent = latest.recommendation || 'not generated';
-        recommendation.title = (latest.evidence || []).join(' ');
-        recommendationCell.appendChild(recommendation);
-        if (latest.recommendation) {
-            const confidence = document.createElement('div');
-            confidence.className = 'section-hint';
-            confidence.textContent = `${Math.round(Number(latest.confidence || 0) * 100)}% confidence`
-                + (latest.llm_evaluation ? ` · content judge: ${latest.llm_evaluation.recommendation}` : '');
-            recommendationCell.appendChild(confidence);
-        }
-        if (history.length) {
-            const details = document.createElement('details');
-            details.className = 'seo-history';
-            const summary = document.createElement('summary');
-            summary.textContent = `History (${history.length})`;
-            details.appendChild(summary);
-            history.forEach(item => {
-                const entry = document.createElement('div');
-                const timestamp = item.created_at ? new Date(item.created_at).toLocaleString() : 'unknown time';
-                entry.textContent = `${timestamp} · ${item.recommendation}`
-                    + (item.llm_evaluation ? ` / ${item.llm_evaluation.recommendation}` : '');
-                details.appendChild(entry);
-            });
-            recommendationCell.appendChild(details);
-        }
-        tr.appendChild(recommendationCell);
-
-        const actionCell = document.createElement('td');
-        const actions = document.createElement('div');
-        actions.className = 'seo-action-stack';
-        const generate = document.createElement('button');
-        generate.type = 'button';
-        generate.className = 'admin-btn secondary';
-        generate.textContent = 'Generate recommendation';
-        generate.addEventListener('click', () => runSeoRecommendation(row.page_id, false, generate));
-        actions.appendChild(generate);
-        const judgeApplicable = ['opportunity', 'declining'].includes(row.status)
-            || latest.recommendation === 'noindex_candidate';
-        if (judge.configured && judgeApplicable) {
-            const ask = document.createElement('button');
-            ask.type = 'button';
-            ask.className = 'admin-btn secondary';
-            ask.textContent = 'Ask content judge';
-            ask.addEventListener('click', () => runSeoRecommendation(row.page_id, true, ask));
-            actions.appendChild(ask);
-        }
-        actionCell.appendChild(actions);
-        tr.appendChild(actionCell);
-        body.appendChild(tr);
-    });
-    document.getElementById('seoEmptyState').hidden = (data.rows || []).length > 0;
     document.getElementById('seoRules').textContent = Object.entries(data.status_rules || {})
         .map(([name, definition]) => `${name}: ${definition}`).join(' · ');
 }
 
+// --- Level 0: the alert strip -------------------------------------------
+// Configuration and the collection run used to sit in a quiet card and stayed
+// quiet for five weeks while the pipeline was dead. Every failure state that
+// can silence the pipeline has to surface here, above everything else.
+function addSeoAlert(container, tone, title, detail) {
+    const box = document.createElement('div');
+    box.className = `seo-alert is-${tone}`;
+    appendSeoText(box, 'strong', title);
+    if (detail) appendSeoText(box, 'span', detail);
+    container.appendChild(box);
+    return box;
+}
+
+function renderSeoAlerts() {
+    const container = document.getElementById('seoAlerts');
+    container.textContent = '';
+    const data = seoState.data || {};
+    const config = data.configuration || {};
+    const run = data.last_run || {};
+    const review = (data.weekly_review || {}).latest_review || {};
+
+    if (!config.configured) {
+        addSeoAlert(
+            container, 'error', 'Search Console is not configured.',
+            config.message || 'No usable credentials. No collection run can succeed.'
+        );
+    }
+
+    const connection = seoState.connection;
+    if (connection && !connection.connected) {
+        addSeoAlert(
+            container, 'error', 'Search Console connection failed.',
+            connection.message || String(connection.status || 'connection_failed').replaceAll('_', ' ')
+        );
+    } else if (!connection && config.configured) {
+        addSeoAlert(
+            container, 'notice', 'Connection not verified in this session.',
+            'Use “Check Search Console connection” to confirm the property still answers.'
+        );
+    }
+
+    const runStatus = String(run.status || '');
+    if (!run.started_at) {
+        addSeoAlert(
+            container, 'error', 'No Search Console collection has ever run.',
+            'Without stored daily rows every status below is a data gap, not a traffic signal.'
+        );
+    } else if (runStatus === 'running') {
+        addSeoAlert(
+            container, 'notice', 'A collection run is still in progress.',
+            [new Date(run.started_at).toLocaleString(), run.message || ''].filter(Boolean).join(' · ')
+        );
+    } else if (!SEO_HEALTHY_RUN_STATUSES.has(runStatus)) {
+        addSeoAlert(
+            container, 'error',
+            `Latest collection run did not succeed (${runStatus || 'unknown'}).`,
+            [new Date(run.started_at).toLocaleString(), run.message || ''].filter(Boolean).join(' · ')
+        );
+    }
+
+    const reviewStatus = String(review.status || '');
+    if (reviewStatus === 'collection_failed' || reviewStatus === 'error') {
+        addSeoAlert(
+            container, 'error', `Latest weekly review ended as ${reviewStatus.replaceAll('_', ' ')}.`,
+            review.summary || (review.collection || {}).message || 'Check server diagnostics.'
+        );
+    }
+
+    if (review.run_id && !review.judge_called && review.judge_error) {
+        addSeoAlert(
+            container, 'warning', 'The portfolio judge did not answer in the last review.',
+            `${review.judge_error} The assessment was generated from the rules, not by the judge.`
+        );
+    }
+
+    const eligible = Number(data.eligible_urls || 0);
+    if (eligible > 0 && Number(data.captured_urls || 0) === 0) {
+        addSeoAlert(
+            container, 'error', `No page has any stored Search Console data (0 of ${eligible}).`,
+            'Every status below reads insufficient_data because nothing was written, not because traffic is low.'
+        );
+    }
+
+    container.hidden = container.children.length === 0;
+}
+
+// --- Level 1: the portfolio ---------------------------------------------
+function renderSeoPortfolio(data) {
+    const rows = data.rows || [];
+    const counts = new Map();
+    rows.forEach(row => {
+        const status = row.status || 'insufficient_data';
+        counts.set(status, (counts.get(status) || 0) + 1);
+    });
+    const ordered = SEO_STATUS_ORDER
+        .concat([...counts.keys()].filter(status => !SEO_STATUS_ORDER.includes(status)))
+        .filter(status => counts.get(status));
+
+    const bar = document.getElementById('seoStatusBar');
+    bar.textContent = '';
+    ordered.forEach(status => {
+        const segment = document.createElement('div');
+        segment.className = `seo-status-segment is-${status}`;
+        segment.style.flexGrow = String(counts.get(status));
+        segment.title = `${SEO_STATUS_LABELS[status] || status}: ${counts.get(status)}`;
+        bar.appendChild(segment);
+    });
+
+    const legend = document.getElementById('seoStatusLegend');
+    legend.textContent = '';
+    ordered.forEach(status => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `seo-legend-item is-${status}`;
+        if (seoState.filters.status === status) button.classList.add('is-active');
+        appendSeoText(button, 'span', '', 'seo-legend-dot');
+        appendSeoText(button, 'span', `${SEO_STATUS_LABELS[status] || status} ${counts.get(status)}`);
+        button.title = (data.status_rules || {})[status] || '';
+        button.addEventListener('click', () => {
+            // A second click on the active class clears the filter again.
+            const next = seoState.filters.status === status ? '' : status;
+            seoState.filters.status = next;
+            document.getElementById('seoStatusFilter').value = next;
+            if (next) {
+                seoState.filters.scope = 'all';
+                document.getElementById('seoScopeFilter').value = 'all';
+            }
+            renderSeoPortfolio(seoState.data || {});
+            renderSeoTable();
+        });
+        legend.appendChild(button);
+    });
+
+    const visible = rows.filter(row => !SEO_QUIET_STATUSES.has(row.status || 'insufficient_data')).length;
+    document.getElementById('seoPortfolioLine').textContent = rows.length
+        ? `${rows.length} tracked pages · ${visible} outside the quiet “emerging” state`
+            + ` · latest finalized data ${data.final_date || 'unknown'}`
+        : 'No pages tracked yet.';
+}
+
+// --- Level 3: the page inventory ----------------------------------------
+function fillSeoSelect(select, values, labels) {
+    const previous = select.value;
+    const placeholder = select.options[0];
+    select.textContent = '';
+    select.appendChild(placeholder);
+    values.forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = (labels || {})[value] || value;
+        select.appendChild(option);
+    });
+    select.value = [...select.options].some(option => option.value === previous) ? previous : '';
+    return select.value;
+}
+
+function renderSeoFilterOptions(data) {
+    const rows = data.rows || [];
+    const statuses = SEO_STATUS_ORDER
+        .concat([...new Set(rows.map(row => row.status || 'insufficient_data'))])
+        .filter((status, index, all) => all.indexOf(status) === index)
+        .filter(status => rows.some(row => (row.status || 'insufficient_data') === status));
+    seoState.filters.status = fillSeoSelect(
+        document.getElementById('seoStatusFilter'), statuses, SEO_STATUS_LABELS
+    );
+    const recommendations = [...new Set(
+        rows.map(row => seoLatestRecommendation(row).recommendation || 'not_generated')
+    )].sort();
+    seoState.filters.recommendation = fillSeoSelect(
+        document.getElementById('seoRecommendationFilter'), recommendations,
+        { not_generated: 'not generated' }
+    );
+    const origins = [...new Set(rows.map(row => row.origin || '').filter(Boolean))].sort();
+    seoState.filters.origin = fillSeoSelect(document.getElementById('seoOriginFilter'), origins);
+}
+
+function seoMetricCell(row, key) {
+    const td = document.createElement('td');
+    appendSeoText(td, 'div', formatSeoMetric(row.metrics_28d || {}, key));
+    appendSeoText(td, 'div', formatSeoMetric(row.metrics_7d || {}, key), 'seo-metric-7d')
+        .title = 'Last 7 days';
+    return td;
+}
+
+function buildSeoPageCell(row) {
+    const pageCell = document.createElement('td');
+    const link = document.createElement('a');
+    link.href = row.url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = row.url;
+    pageCell.appendChild(link);
+    const reviewGroup = seoState.reviewGroupByPage.get(row.page_id);
+    if (reviewGroup) {
+        // The decision itself lives in the work list above; the list only says
+        // that this page is already waiting there.
+        appendSeoText(pageCell, 'span', `In this review: ${reviewGroup}`, 'seo-review-pill');
+    }
+    appendSeoText(
+        pageCell, 'div', row.origin + (row.share_id ? ` · ${row.share_id}` : ''), 'section-hint'
+    );
+    const dossier = row.dossier || {};
+    if (dossier.title) appendSeoText(pageCell, 'div', dossier.title, 'section-hint');
+    const queryData = row.query_data || {};
+    const queries = (queryData.top_queries || []).slice(0, 3);
+    if (queries.length || queryData.period_end) {
+        const partial = queryData.partial ? ' · partial' : '';
+        appendSeoText(
+            pageCell, 'div',
+            queries.length
+                ? `Top queries${partial}: ${queries.map(item => item.query).join(', ')}`
+                : `Query snapshot ${queryData.period_end || ''}${partial}: no rows`,
+            'seo-query-list'
+        );
+    }
+    return pageCell;
+}
+
+function buildSeoStatusCell(row, statusRules) {
+    const statusCell = document.createElement('td');
+    const status = document.createElement('span');
+    status.className = 'seo-status';
+    status.textContent = SEO_STATUS_LABELS[row.status] || row.status || 'insufficient data';
+    status.title = statusRules[row.status] || '';
+    statusCell.appendChild(status);
+    const window28 = row.metrics_28d || {};
+    const days = Number(window28.days || 0);
+    appendSeoText(
+        statusCell, 'div', `${days}/28 daily rows`, 'section-hint'
+    ).title = 'Stored finalized daily rows. The status depends on these rows, not on clicks.';
+    if (row.status === 'insufficient_data') {
+        // This exact confusion once sent the operator hunting for a traffic
+        // problem that was really a missing-data problem.
+        appendSeoText(
+            statusCell, 'div',
+            'Data gap, not low traffic: fewer than 7 stored rows.',
+            'seo-status-note'
+        );
+    }
+    return statusCell;
+}
+
+function buildSeoRecommendationCell(row) {
+    const history = row.recommendation_history || [];
+    const latest = history[0] || {};
+    const cell = document.createElement('td');
+    cell.className = 'seo-recommendation';
+    const recommendation = document.createElement('span');
+    recommendation.className = 'seo-status';
+    recommendation.textContent = latest.recommendation || 'not generated';
+    recommendation.title = (latest.evidence || []).join(' ');
+    cell.appendChild(recommendation);
+    if (latest.recommendation) {
+        appendSeoText(
+            cell, 'div',
+            `${Math.round(Number(latest.confidence || 0) * 100)}% confidence`
+                + (latest.llm_evaluation ? ` · content judge: ${latest.llm_evaluation.recommendation}` : ''),
+            'section-hint'
+        );
+    }
+    if (history.length) {
+        const details = document.createElement('details');
+        details.className = 'seo-history';
+        appendSeoText(details, 'summary', `History (${history.length})`);
+        history.forEach(item => {
+            const timestamp = item.created_at ? new Date(item.created_at).toLocaleString() : 'unknown time';
+            appendSeoText(
+                details, 'div',
+                `${timestamp} · ${item.recommendation}`
+                    + (item.llm_evaluation ? ` / ${item.llm_evaluation.recommendation}` : '')
+            );
+        });
+        cell.appendChild(details);
+    }
+    return cell;
+}
+
+function buildSeoActionCell(row, judgeConfigured) {
+    const actionCell = document.createElement('td');
+    const actions = document.createElement('div');
+    actions.className = 'seo-action-stack';
+    const generate = document.createElement('button');
+    generate.type = 'button';
+    generate.className = 'admin-btn secondary';
+    generate.textContent = 'Generate recommendation';
+    generate.addEventListener('click', () => runSeoRecommendation(row.page_id, false, generate));
+    actions.appendChild(generate);
+    const latest = seoLatestRecommendation(row);
+    const judgeApplicable = ['opportunity', 'declining'].includes(row.status)
+        || latest.recommendation === 'noindex_candidate';
+    if (judgeConfigured && judgeApplicable) {
+        const ask = document.createElement('button');
+        ask.type = 'button';
+        ask.className = 'admin-btn secondary';
+        ask.textContent = 'Ask content judge';
+        ask.addEventListener('click', () => runSeoRecommendation(row.page_id, true, ask));
+        actions.appendChild(ask);
+    }
+    actionCell.appendChild(actions);
+    return actionCell;
+}
+
+function renderSeoTable() {
+    const data = seoState.data || {};
+    const statusRules = data.status_rules || {};
+    const judgeConfigured = !!(data.content_judge || {}).configured;
+    const allRows = seoRows();
+    const rows = allRows.filter(seoRowMatchesFilters);
+    const body = document.getElementById('seoTableBody');
+    body.textContent = '';
+
+    const byStatus = new Map();
+    rows.forEach(row => {
+        const status = row.status || 'insufficient_data';
+        if (!byStatus.has(status)) byStatus.set(status, []);
+        byStatus.get(status).push(row);
+    });
+    const ordered = SEO_STATUS_ORDER
+        .concat([...byStatus.keys()].filter(status => !SEO_STATUS_ORDER.includes(status)))
+        .filter(status => byStatus.has(status));
+
+    ordered.forEach(status => {
+        const groupRow = document.createElement('tr');
+        groupRow.className = 'seo-group-row';
+        const cell = document.createElement('td');
+        cell.colSpan = 9;
+        appendSeoText(cell, 'strong', SEO_STATUS_LABELS[status] || status);
+        appendSeoText(cell, 'span', ` ${byStatus.get(status).length}`, 'seo-group-count');
+        appendSeoText(cell, 'span', statusRules[status] || '', 'seo-group-rule');
+        groupRow.appendChild(cell);
+        body.appendChild(groupRow);
+
+        byStatus.get(status).forEach(row => {
+            const tr = document.createElement('tr');
+            tr.appendChild(buildSeoPageCell(row));
+            const visibility = document.createElement('td');
+            appendSeoText(
+                visibility, 'div',
+                String(Math.round(Number((row.metrics_28d || {}).visibility || 0)))
+            ).title = 'Visibility over 28 days. One click weighs as much as 20 impressions.';
+            tr.appendChild(visibility);
+            SEO_METRIC_KEYS.forEach(key => tr.appendChild(seoMetricCell(row, key)));
+            tr.appendChild(buildSeoStatusCell(row, statusRules));
+            tr.appendChild(buildSeoRecommendationCell(row));
+            tr.appendChild(buildSeoActionCell(row, judgeConfigured));
+            body.appendChild(tr);
+        });
+    });
+
+    document.getElementById('seoEmptyState').hidden = allRows.length > 0;
+    document.getElementById('seoFilterEmptyState').hidden = !allRows.length || rows.length > 0;
+    document.getElementById('seoInventoryCount').textContent = allRows.length
+        ? `Showing ${rows.length} of ${allRows.length} pages, sorted by visibility inside each status.`
+        : 'No pages loaded.';
+}
+
+function readSeoFilters() {
+    seoState.filters.search = document.getElementById('seoSearch').value.trim().toLowerCase();
+    seoState.filters.scope = document.getElementById('seoScopeFilter').value;
+    seoState.filters.status = document.getElementById('seoStatusFilter').value;
+    seoState.filters.recommendation = document.getElementById('seoRecommendationFilter').value;
+    seoState.filters.origin = document.getElementById('seoOriginFilter').value;
+    renderSeoPortfolio(seoState.data || {});
+    renderSeoTable();
+}
+
+document.getElementById('seoSearch').addEventListener('input', readSeoFilters);
+['seoScopeFilter', 'seoStatusFilter', 'seoRecommendationFilter', 'seoOriginFilter']
+    .forEach(id => document.getElementById(id).addEventListener('change', readSeoFilters));
+
+document.getElementById('resetSeoFiltersBtn').addEventListener('click', function () {
+    document.getElementById('seoSearch').value = '';
+    document.getElementById('seoScopeFilter').value = 'attention';
+    document.getElementById('seoStatusFilter').value = '';
+    document.getElementById('seoRecommendationFilter').value = '';
+    document.getElementById('seoOriginFilter').value = '';
+    readSeoFilters();
+});
+
+// --- Level 2: the work list ---------------------------------------------
 const SEO_GROUP_LABELS = {
     keep_indexed: 'Keep indexed',
     pause_watch_only: 'Pause Watch only',
@@ -2031,14 +2367,6 @@ const SEO_SAFE_APPLY_GROUPS = new Set([
     'noindex_only', 'noindex_and_pause_watch'
 ]);
 
-function appendSeoText(parent, tag, text, className) {
-    const node = document.createElement(tag);
-    node.textContent = text || '';
-    if (className) node.className = className;
-    parent.appendChild(node);
-    return node;
-}
-
 function formatSeoScheduleTime(value, timezone) {
     if (!value) return '';
     try {
@@ -2046,6 +2374,104 @@ function formatSeoScheduleTime(value, timezone) {
     } catch (_err) {
         return new Date(value).toLocaleString();
     }
+}
+
+function buildSeoEditorialControls(runId, pageId, template) {
+    const controls = document.createElement('div');
+    controls.className = 'seo-editorial-controls';
+    const select = document.createElement('select');
+    (template.options || ['keep_as_is', 'investigate']).forEach(value => {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = SEO_EDITORIAL_DECISION_LABELS[value] || value;
+        select.appendChild(option);
+    });
+    select.value = template.suggested_decision || 'keep_as_is';
+    const note = document.createElement('input');
+    note.type = 'text';
+    note.maxLength = 500;
+    note.placeholder = template.explanation || 'Optional note';
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'admin-btn secondary';
+    save.textContent = 'Confirm decision';
+    save.addEventListener('click', () => saveSeoEditorialDecision(
+        runId, pageId, select.value, note.value, save
+    ));
+    controls.append(select, note, save);
+    return controls;
+}
+
+function renderSeoReviewGroup(review, group, ids, pages) {
+    const label = SEO_GROUP_LABELS[group] || group;
+    const editorial = group === 'manual_improvement';
+    const box = document.createElement('div');
+    box.className = 'seo-review-group';
+    const head = document.createElement('div');
+    head.className = 'seo-review-group-head';
+    appendSeoText(head, 'strong', `${label} (${ids.length})`);
+    if (editorial) {
+        // One button for the whole group instead of three interactions per row.
+        const suggested = ids
+            .map(id => ({ id, template: (pages.get(id) || {}).editorial_decision_template || {} }))
+            .filter(item => item.template.suggested_decision);
+        if (suggested.length) {
+            const bulk = document.createElement('button');
+            bulk.type = 'button';
+            bulk.className = 'admin-btn secondary';
+            bulk.textContent = `Confirm ${suggested.length} suggested decisions`;
+            bulk.addEventListener('click', () => confirmSuggestedSeoDecisions(
+                review.run_id,
+                suggested.map(item => ({
+                    pageId: item.id,
+                    decision: item.template.suggested_decision,
+                    title: (pages.get(item.id) || {}).title || (pages.get(item.id) || {}).url || item.id
+                })),
+                bulk
+            ));
+            head.appendChild(bulk);
+        }
+    } else {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = group === 'delete_candidate' ? 'admin-btn danger' : 'admin-btn secondary';
+        button.textContent = SEO_GROUP_BUTTONS[group] || label;
+        button.addEventListener('click', () => applySeoReviewGroup(review.run_id, group, box, button));
+        head.appendChild(button);
+    }
+    box.appendChild(head);
+    if (editorial) {
+        appendSeoText(box, 'p', SEO_GROUP_BUTTONS.manual_improvement, 'section-hint u-m-0');
+    }
+    const list = document.createElement('div');
+    list.className = 'seo-review-pages';
+    ids.forEach(id => {
+        const page = pages.get(id) || {};
+        const row = document.createElement(editorial ? 'div' : 'label');
+        row.className = 'seo-review-page';
+        if (editorial) {
+            appendSeoText(row, 'span', 'Decision');
+        } else {
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = true;
+            checkbox.dataset.pageId = id;
+            row.appendChild(checkbox);
+        }
+        appendSeoText(row, 'span', page.title || page.url || id);
+        const template = page.editorial_decision_template || {};
+        const judgeReason = ((page.portfolio_judge || {}).reason || '').trim();
+        appendSeoText(
+            row, 'small',
+            `${page.indexed ? 'indexed' : 'noindex'} · Watch ${page.watch_status || 'none'} · ${page.recommendation || ''}`
+                + (template.immutable_snapshot ? ' · immutable snapshot' : '')
+                + (judgeReason ? ` · Terra: ${judgeReason}` : '')
+        );
+        if (editorial) row.appendChild(buildSeoEditorialControls(review.run_id, id, template));
+        list.appendChild(row);
+    });
+    box.appendChild(list);
+    return box;
 }
 
 function renderSeoWeeklyReview(status) {
@@ -2068,8 +2494,10 @@ function renderSeoWeeklyReview(status) {
     document.getElementById('runSeoReviewBtn').disabled = !!status.running;
     document.getElementById('seoReviewSummary').textContent = review.summary || 'No weekly review yet.';
     renderSeoReviewDiagnostics(review);
+
     const groupsContainer = document.getElementById('seoReviewGroups');
     groupsContainer.textContent = '';
+    seoState.reviewGroupByPage = new Map();
     const pages = new Map((review.pages || []).map(page => [page.page_id, page]));
     const completed = new Map();
     (review.applied_actions || []).forEach(action => {
@@ -2095,84 +2523,22 @@ function renderSeoWeeklyReview(status) {
             pendingSafeCount += ids.length;
             if (group !== 'keep_indexed') pendingSafeOnlyReviews = false;
         }
-        const box = document.createElement('div');
-        box.className = 'seo-review-group';
-        const head = document.createElement('div');
-        head.className = 'seo-review-group-head';
-        appendSeoText(head, 'strong', `${label} (${ids.length})`);
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = group === 'delete_candidate' ? 'admin-btn danger' : 'admin-btn secondary';
-        button.textContent = SEO_GROUP_BUTTONS[group] || label;
-        if (group !== 'manual_improvement') {
-            button.addEventListener('click', () => applySeoReviewGroup(review.run_id, group, box, button));
-            head.appendChild(button);
-        }
-        box.appendChild(head);
-        const list = document.createElement('div');
-        list.className = 'seo-review-pages';
-        ids.forEach(id => {
-            const page = pages.get(id) || {};
-            const editorial = group === 'manual_improvement';
-            const row = document.createElement(editorial ? 'div' : 'label');
-            row.className = 'seo-review-page';
-            if (editorial) {
-                appendSeoText(row, 'span', 'Decision');
-            } else {
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = true;
-                checkbox.dataset.pageId = id;
-                row.appendChild(checkbox);
-            }
-            appendSeoText(row, 'span', page.title || page.url || id);
-            const template = page.editorial_decision_template || {};
-            const judgeReason = ((page.portfolio_judge || {}).reason || '').trim();
-            appendSeoText(
-                row, 'small',
-                `${page.indexed ? 'indexed' : 'noindex'} · Watch ${page.watch_status || 'none'} · ${page.recommendation || ''}`
-                    + (template.immutable_snapshot ? ' · immutable snapshot' : '')
-                    + (judgeReason ? ` · Terra: ${judgeReason}` : '')
-            );
-            if (editorial) {
-                const controls = document.createElement('div');
-                controls.className = 'seo-editorial-controls';
-                const select = document.createElement('select');
-                (template.options || ['keep_as_is', 'investigate']).forEach(value => {
-                    const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = SEO_EDITORIAL_DECISION_LABELS[value] || value;
-                    select.appendChild(option);
-                });
-                select.value = template.suggested_decision || 'keep_as_is';
-                const note = document.createElement('input');
-                note.type = 'text';
-                note.maxLength = 500;
-                note.placeholder = template.explanation || 'Optional note';
-                const save = document.createElement('button');
-                save.type = 'button';
-                save.className = 'admin-btn secondary';
-                save.textContent = 'Confirm decision';
-                save.addEventListener('click', () => saveSeoEditorialDecision(
-                    review.run_id, id, select.value, note.value, save
-                ));
-                controls.append(select, note, save);
-                row.appendChild(controls);
-            }
-            list.appendChild(row);
-        });
-        box.appendChild(list);
-        groupsContainer.appendChild(box);
+        ids.forEach(id => seoState.reviewGroupByPage.set(id, label));
+        groupsContainer.appendChild(renderSeoReviewGroup(review, group, ids, pages));
     });
+
     const applyAll = document.getElementById('applyAllSeoReviewBtn');
     applyAll.hidden = !review.run_id || pendingSafeCount === 0;
     applyAll.dataset.runId = review.run_id || '';
     applyAll.textContent = pendingSafeOnlyReviews
         ? `Mark ${pendingSafeCount} pages reviewed`
         : `Apply ${pendingSafeCount} safe recommendations`;
+    const openEditorial = ((review.groups || {}).manual_improvement || [])
+        .filter(id => !completed.has(id)).length;
     document.getElementById('seoReviewProgress').textContent = review.run_id
-        ? `${pendingSafeCount} safe actions still open · ${((review.groups || {}).manual_improvement || []).filter(id => !completed.has(id)).length} editorial decisions open · ${completed.size} pages completed · Telegram ${(review.telegram_notification || {}).status || 'pending'}.`
+        ? `${pendingSafeCount} safe actions still open · ${openEditorial} editorial decisions open · ${completed.size} pages completed · Telegram ${(review.telegram_notification || {}).status || 'pending'}.`
         : 'No review progress yet.';
+
     const completedPanel = document.getElementById('seoReviewCompleted');
     const completedList = document.getElementById('seoReviewCompletedList');
     completedList.textContent = '';
@@ -2189,6 +2555,13 @@ function renderSeoWeeklyReview(status) {
         row.title = entry.applied_at ? new Date(entry.applied_at).toLocaleString() : '';
     });
     renderSeoTopicBrief(review, pages);
+
+    const briefOpen = !document.getElementById('seoTopicBriefPanel').hidden;
+    const empty = document.getElementById('seoWorklistEmpty');
+    empty.hidden = groupsContainer.children.length > 0 || briefOpen;
+    empty.textContent = review.run_id
+        ? 'Nothing needs a decision right now.'
+        : 'No weekly review has run yet, so there is nothing to decide.';
 }
 
 function renderSeoFindingList(container, label, items) {
@@ -2209,7 +2582,7 @@ function describeSeoDelta(delta) {
     if (changed.length) parts.push(changed.length + ' status change' + (changed.length === 1 ? '' : 's'));
     if (added.length) parts.push(added.length + ' new');
     if (delta.removed) parts.push(delta.removed + ' gone');
-    return parts.join(' \u00b7 ');
+    return parts.join(' · ');
 }
 
 function describeSeoStatusCounts(counts) {
@@ -2233,7 +2606,7 @@ function renderSeoReviewDiagnostics(review) {
 
     const collection = review.collection || {};
     document.getElementById('seoReviewCollection').textContent = review.run_id
-        ? (collection.status || 'unknown') + ' \u00b7 '
+        ? (collection.status || 'unknown') + ' · '
             + (collection.metrics_written != null ? collection.metrics_written : '?') + ' rows written'
         : 'no review yet';
     document.getElementById('seoReviewCollectionMessage').textContent = review.run_id
@@ -2244,7 +2617,7 @@ function renderSeoReviewDiagnostics(review) {
                 : '',
             collection.gsc_rows_matched != null ? collection.gsc_rows_matched + ' GSC rows matched' : '',
             collection.message || ''
-        ].filter(Boolean).join(' \u00b7 ')
+        ].filter(Boolean).join(' · ')
         : '';
 
     const deltaCard = document.getElementById('seoReviewDelta');
@@ -2270,20 +2643,20 @@ function renderSeoReviewHistory(entries) {
         const box = document.createElement('div');
         box.className = 'seo-review-group';
         const when = entry.started_at ? new Date(entry.started_at).toLocaleString() : 'unknown time';
-        appendSeoText(box, 'strong', when + ' \u00b7 ' + entry.status
-            + (entry.trigger ? ' \u00b7 ' + entry.trigger : ''));
+        appendSeoText(box, 'strong', when + ' · ' + entry.status
+            + (entry.trigger ? ' · ' + entry.trigger : ''));
         appendSeoText(
             box, 'div',
-            entry.pages_reviewed + ' pages \u00b7 '
+            entry.pages_reviewed + ' pages · '
                 + (describeSeoStatusCounts(entry.status_counts) || 'no page data')
-                + ' \u00b7 ' + describeSeoDelta(entry.delta)
-                + ' \u00b7 judge ' + (entry.judge_called ? 'answered' : (entry.judge_error || 'not called'))
-                + ' \u00b7 Telegram ' + (entry.telegram_status || 'unknown'),
+                + ' · ' + describeSeoDelta(entry.delta)
+                + ' · judge ' + (entry.judge_called ? 'answered' : (entry.judge_error || 'not called'))
+                + ' · Telegram ' + (entry.telegram_status || 'unknown'),
             'section-hint'
         );
         appendSeoText(box, 'div', entry.summary || 'No summary.');
         const findings = ((entry.findings || {}).positive || []).map(item => '+ ' + item)
-            .concat(((entry.findings || {}).negative || []).map(item => '\u2212 ' + item));
+            .concat(((entry.findings || {}).negative || []).map(item => '− ' + item));
         if (findings.length) {
             const list = document.createElement('ul');
             findings.forEach(item => appendSeoText(list, 'li', item));
@@ -2298,7 +2671,7 @@ let seoReviewHistoryLoaded = false;
 async function loadSeoReviewHistory(force) {
     if (seoReviewHistoryLoaded && !force) return;
     const container = document.getElementById('seoReviewHistory');
-    container.textContent = 'Loading\u2026';
+    container.textContent = 'Loading…';
     try {
         const data = await shareAdminRequest('GET', '/api/admin/seo/reviews?limit=12');
         seoReviewHistoryLoaded = true;
@@ -2384,6 +2757,41 @@ async function saveSeoEditorialDecision(runId, pageId, decision, note, button) {
         seoStatus(err.message, true);
         button.disabled = false;
     }
+}
+
+// The endpoint is per page. Several calls are fine, but every one is
+// acknowledged on its own and partial failures have to be named.
+async function confirmSuggestedSeoDecisions(runId, entries, button) {
+    if (!runId || !entries.length) return;
+    const preview = entries.slice(0, 12).map(entry =>
+        `• ${entry.title}\n  ${SEO_EDITORIAL_DECISION_LABELS[entry.decision] || entry.decision}`
+    ).join('\n');
+    const more = entries.length > 12 ? `\n… and ${entries.length - 12} more` : '';
+    if (!confirm(
+        `Record the suggested decision for ${entries.length} pages?\n\n${preview}${more}`
+        + '\n\nThis records the follow-up for each page and does not mutate any immutable snapshot.'
+    )) return;
+    button.disabled = true;
+    let succeeded = 0;
+    const failures = [];
+    for (const entry of entries) {
+        try {
+            await shareAdminRequest(
+                'POST', `/api/admin/seo/reviews/${encodeURIComponent(runId)}/editorial-decision`,
+                { page_id: entry.pageId, decision: entry.decision, note: '' }
+            );
+            succeeded += 1;
+        } catch (err) {
+            failures.push(`${entry.title}: ${err.message}`);
+        }
+    }
+    seoStatus(
+        failures.length
+            ? `${succeeded} decisions recorded, ${failures.length} failed — ${failures.join(' · ')}`
+            : `${succeeded} suggested decisions recorded.`,
+        failures.length > 0
+    );
+    await loadSeoOverview();
 }
 
 document.getElementById('saveSeoReviewConfigBtn').addEventListener('click', async function () {
@@ -2479,10 +2887,12 @@ async function runSeoRecommendation(pageId, useContentJudge, button) {
 }
 
 function renderSeoConnection(result) {
+    seoState.connection = result;
     const state = document.getElementById('seoConnectionState');
     state.textContent = result.connected ? 'connected' : (result.status || 'connection failed').replaceAll('_', ' ');
     state.title = result.message || '';
     document.getElementById('seoConnectionMessage').textContent = result.message || '';
+    renderSeoAlerts();
 }
 
 async function loadSeoOverview() {

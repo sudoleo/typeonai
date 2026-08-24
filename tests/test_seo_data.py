@@ -570,6 +570,80 @@ def test_admin_seo_collect_action_is_hidden_until_admin_request_succeeds():
     assert "GSC_SERVICE_ACCOUNT_JSON" not in main_source
 
 
+def test_admin_seo_tab_keeps_every_control_reachable_after_the_layout_rework():
+    """The three levels may reorder the panel, but nothing may fall out of it."""
+    root = Path(__file__).resolve().parents[1]
+    template = (root / "templates" / "admin.html").read_text(encoding="utf-8")
+    module = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    seo_tab = template[template.index('<section id="tab-seo"'):]
+    seo_tab = seo_tab[: seo_tab.index("</section>")]
+
+    for element_id in (
+        # Search Console header
+        "checkSeoConnectionBtn", "collectSeoBtn", "reloadSeoBtn", "seoStatus",
+        "seoConfigState", "seoConfigMessage", "seoConnectionState", "seoConnectionMessage",
+        "seoCapturedCount", "seoLastRun", "seoLastRunMessage", "seoFinalDate",
+        "seoContentJudgeState", "seoDisclaimer",
+        # Weekly portfolio review
+        "seoReviewEnabled", "seoReviewInterval", "seoReviewTime", "seoReviewTimezone",
+        "saveSeoReviewConfigBtn", "runSeoReviewBtn", "seoReviewLast", "seoReviewNext",
+        "seoPortfolioJudge", "seoPublisherWatchCount", "seoReviewSummary",
+        "seoReviewJudgeState", "seoReviewJudgeError", "seoReviewCollection",
+        "seoReviewCollectionMessage", "seoReviewDelta", "seoReviewFindings",
+        "seoReviewFindingsPositive", "seoReviewFindingsNegative", "seoReviewProgress",
+        "applyAllSeoReviewBtn", "seoReviewGroups", "seoReviewCompleted",
+        "seoReviewCompletedList", "seoTopicBriefPanel", "seoTopicBriefStrength",
+        "seoTopicBriefReason", "seoTopicBriefEvidence", "seoCurrentTopicBrief",
+        "seoProposedTopicBrief", "acceptSeoTopicBriefBtn", "rejectSeoTopicBriefBtn",
+        "seoTopicBriefDecision", "seoReviewHistoryPanel", "seoReviewHistory", "seoSearchRules",
+        # Page inventory
+        "seoTableBody", "seoEmptyState", "seoRules",
+        # Added by the rework: alert strip, portfolio read-out, list filters
+        "seoAlerts", "seoStatusBar", "seoStatusLegend", "seoPortfolioLine",
+        "seoSearch", "seoScopeFilter", "seoStatusFilter", "seoRecommendationFilter",
+        "seoOriginFilter", "resetSeoFiltersBtn", "seoInventoryCount", "seoFilterEmptyState",
+    ):
+        assert f'id="{element_id}"' in seo_tab, element_id
+
+    # Editorial decisions stay confirmable one by one and in series; both use
+    # the same per-page endpoint.
+    assert "confirmSuggestedSeoDecisions" in module
+    assert "suggested decisions" in module
+    assert module.count("/editorial-decision`") == 2
+
+
+def test_admin_seo_alert_strip_covers_every_state_that_can_silence_the_pipeline():
+    """Configuration and the collection run now sit behind a fold.
+
+    That is only safe while the alert strip above catches every failure. The
+    Search Console credentials once sat under the wrong variable name and every
+    weekly run aborted as collection_failed for five weeks without a word in the
+    admin. tests/js/seo-admin-alerts.test.mjs drives the real code against
+    constructed data states; this pins that the conditions and that guard exist.
+    """
+    root = Path(__file__).resolve().parents[1]
+    module = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    strip = module[module.index("function renderSeoAlerts()"):]
+    strip = strip[: strip.index("\n}\n")]
+
+    assert "!config.configured" in strip
+    assert "connection && !connection.connected" in strip
+    assert "!connection && config.configured" in strip
+    assert "!run.started_at" in strip
+    assert "SEO_HEALTHY_RUN_STATUSES.has(runStatus)" in strip
+    assert "'collection_failed'" in strip and "'error'" in strip
+    assert "!review.judge_called && review.judge_error" in strip
+    assert "Number(data.captured_urls || 0) === 0" in strip
+    assert "SEO_HEALTHY_RUN_STATUSES = new Set(['success', 'partial'])" in module
+    # A check result must re-render the strip, or a failed check stays invisible.
+    assert "seoState.connection = result;" in module
+    assert "renderSeoAlerts();" in module[module.index("function renderSeoConnection("):]
+
+    guard = root / "tests" / "js" / "seo-admin-alerts.test.mjs"
+    assert guard.is_file(), "the alert-strip behaviour test must not be deleted"
+    assert "collection_failed" in guard.read_text(encoding="utf-8")
+
+
 def recommendation_page(*, observed_days=61):
     return {
         "page_id": page_id_for_url(PAGE_URL),

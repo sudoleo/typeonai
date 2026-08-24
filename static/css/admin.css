@@ -526,9 +526,19 @@
 .seo-summary-card strong { display: block; margin-top: 5px; font-size: var(--font-size-base); overflow-wrap: anywhere; }
 .seo-table-wrap { overflow-x: auto; }
 .seo-table { width: 100%; border-collapse: collapse; font-size: var(--font-size-sm); }
-.seo-table th, .seo-table td { padding: 10px 8px; border-bottom: 1px solid var(--input-border); text-align: right; white-space: nowrap; }
+.seo-table th, .seo-table td { padding: 10px 8px; border-bottom: 1px solid var(--input-border); text-align: right; white-space: nowrap; vertical-align: top; }
 .seo-table th:first-child, .seo-table td:first-child { min-width: 260px; text-align: left; white-space: normal; }
+/* Status, recommendation and actions read as prose, not as figures. */
+.seo-table th:nth-child(n + 7), .seo-table td:nth-child(n + 7) { text-align: left; white-space: normal; }
+.seo-table th small { display: block; margin-top: 2px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-normal); }
 .seo-table a { color: var(--text-color); overflow-wrap: anywhere; }
+.seo-metric-7d { margin-top: 3px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); }
+.seo-group-row td { padding-top: 18px; border-bottom: 1px solid var(--chip-border); text-align: left; white-space: normal; }
+.seo-group-row strong { text-transform: capitalize; }
+.seo-group-count { margin-left: 6px; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--chip-bg); color: var(--sidebar-text-muted); font-size: var(--font-size-xs); }
+.seo-group-rule { display: block; margin-top: 3px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); }
+.seo-status-note { margin-top: 4px; color: var(--partial); font-size: var(--font-size-xs); white-space: normal; }
+.seo-review-pill { display: inline-block; margin-top: 5px; padding: 2px 8px; border: 1px solid var(--partial); border-radius: var(--radius-pill); color: var(--partial); font-size: var(--font-size-xs); }
 .seo-status { display: inline-block; padding: 3px 8px; border: 1px solid var(--chip-border); border-radius: var(--radius-pill); }
 .seo-rules { margin: 14px 0 0; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); }
 .seo-action-stack { display: grid; gap: 6px; min-width: 160px; }
@@ -550,6 +560,62 @@
 .seo-topic-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
 .seo-topic-diff pre { margin: 5px 0; padding: 10px; max-height: 260px; overflow: auto; white-space: pre-wrap; border: 1px solid var(--input-border); border-radius: var(--radius-sm); font: inherit; font-size: var(--font-size-xs); }
 .seo-review-completed-list { display: grid; gap: 6px; margin-top: 8px; font-size: var(--font-size-sm); color: var(--sidebar-text-muted); }
+
+/* Level 0: failure states that must never sit quietly in a card. */
+.seo-alerts { display: grid; gap: 8px; margin: 14px 0; }
+.seo-alert { padding: 11px 13px; border: 1px solid var(--input-border); border-left-width: 3px; border-radius: var(--radius-sm); background: var(--chip-bg); font-size: var(--font-size-sm); }
+.seo-alert strong { display: block; }
+.seo-alert span { display: block; margin-top: 3px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
+.seo-alert.is-error { border-left-color: var(--dispute); background: var(--dispute-bg); }
+.seo-alert.is-error strong { color: var(--dispute); }
+.seo-alert.is-warning { border-left-color: var(--partial); background: var(--partial-bg); }
+.seo-alert.is-warning strong { color: var(--partial); }
+.seo-alert.is-notice { border-left-color: var(--input-border); }
+
+/* Level 1: how the collection stands as a whole. */
+.seo-portfolio { margin: 14px 0 18px; padding: 16px; border: var(--card-border); border-radius: var(--radius-md); background: var(--chip-bg); }
+.seo-portfolio-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.seo-block-title { margin: 0 0 4px; font-size: var(--font-size-base); }
+.seo-figures { display: flex; flex-wrap: wrap; gap: 20px; }
+.seo-figure span { display: block; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); }
+.seo-figure strong { display: block; margin-top: 3px; font-size: var(--font-size-base); overflow-wrap: anywhere; }
+.seo-status-bar { display: flex; gap: 2px; height: 10px; margin: 14px 0 9px; overflow: hidden; border-radius: var(--radius-pill); }
+.seo-status-segment { min-width: 4px; background: var(--input-border); }
+.seo-status-segment.is-winner, .seo-legend-item.is-winner .seo-legend-dot { background: var(--agree); }
+.seo-status-segment.is-opportunity, .seo-legend-item.is-opportunity .seo-legend-dot,
+.seo-status-segment.is-insufficient_data, .seo-legend-item.is-insufficient_data .seo-legend-dot { background: var(--partial); }
+.seo-status-segment.is-declining, .seo-legend-item.is-declining .seo-legend-dot { background: var(--dispute); }
+.seo-status-segment.is-invisible, .seo-legend-item.is-invisible .seo-legend-dot { background: var(--sidebar-text-muted); }
+.seo-status-legend { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.seo-legend-item {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px !important;
+    border: 1px solid var(--input-border) !important;
+    border-radius: var(--radius-pill) !important;
+    background: var(--input-bg) !important;
+    color: var(--sidebar-text-muted) !important;
+    font-size: var(--font-size-xs) !important;
+    cursor: pointer;
+    box-shadow: none !important;
+}
+.seo-legend-item:hover { color: var(--text-color) !important; }
+.seo-legend-item.is-active { border-color: var(--text-color) !important; color: var(--text-color) !important; }
+.seo-legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--input-border); }
+.seo-findings { margin-top: 12px; font-size: var(--font-size-sm); }
+.seo-findings ul { margin: 5px 0 10px; padding-left: 18px; color: var(--sidebar-text-muted); }
+.seo-details { margin-bottom: 18px; }
+.seo-details > summary { cursor: pointer; color: var(--sidebar-text-muted); font-size: var(--font-size-sm); }
+.seo-details > summary:hover { color: var(--text-color); }
+
+/* Level 2 and 3: the work list and the full inventory. */
+.seo-worklist-empty { margin: 12px 0 0; padding: 12px 14px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); color: var(--sidebar-text-muted); font-size: var(--font-size-sm); }
+.seo-worklist-empty[hidden] { display: none; }
+.seo-inventory { margin-top: 18px; }
+.seo-filter-bar { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.seo-filter-bar select, .seo-filter-search { min-width: 0; padding: 7px 9px; border: 1px solid var(--input-border); border-radius: var(--radius-xs); background: var(--input-bg); color: var(--text-color); font-size: var(--font-size-sm); }
+.seo-filter-search { flex: 1 1 220px; max-width: 320px; }
 
 .admin-tab-panel[hidden] { display: none; }
 
@@ -584,5 +650,7 @@
     .seo-summary-grid { grid-template-columns: 1fr; }
     .seo-editorial-controls { grid-template-columns: 1fr; }
     .seo-topic-diff { grid-template-columns: 1fr; }
+    .seo-figures { gap: 14px; }
+    .seo-filter-search { max-width: none; }
     .topic-admin-layout, .topic-form-grid, .topic-model-grid { grid-template-columns: 1fr; }
 }

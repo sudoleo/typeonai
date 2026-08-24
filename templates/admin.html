@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20260821-bookmarkpending1">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260812-auditfix">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260824-seolayout1">
 
-    <script type="module" src="/static/js/admin.js?v=20260824-seovisibility1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260824-seolayout1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -408,54 +408,73 @@
                 <div class="watch-admin-toolbar">
                     <button id="checkSeoConnectionBtn" type="button" class="admin-btn secondary" hidden>Check Search Console connection</button>
                     <button id="collectSeoBtn" type="button" class="admin-btn" hidden>Collect Search Console data now</button>
+                    <button id="runSeoReviewBtn" type="button" class="admin-btn">Run weekly review now</button>
                     <button id="reloadSeoBtn" type="button" class="admin-btn secondary">Reload</button>
                     <span id="seoStatus" class="admin-status-text" role="status"></span>
                 </div>
-                <div class="seo-summary-grid">
-                    <div class="seo-summary-card"><span>Configuration</span><strong id="seoConfigState">unknown</strong><span id="seoConfigMessage"></span></div>
-                    <div class="seo-summary-card"><span>Connection</span><strong id="seoConnectionState">not checked</strong><span id="seoConnectionMessage"></span></div>
-                    <div class="seo-summary-card"><span>Captured / eligible URLs</span><strong id="seoCapturedCount">0 / 0</strong></div>
-                    <div class="seo-summary-card"><span>Latest collection run</span><strong id="seoLastRun">No collection run yet</strong><span id="seoLastRunMessage"></span></div>
-                </div>
-                <p class="section-hint">Latest finalized date: <strong id="seoFinalDate">–</strong> · Optional content judge: <strong id="seoContentJudgeState">unknown</strong></p>
-                <p id="seoDisclaimer" class="section-hint"></p>
-                <div class="seo-review-panel">
-                    <div class="seo-review-group-head">
+
+                <div id="seoAlerts" class="seo-alerts" role="status" hidden></div>
+
+                <div class="seo-portfolio">
+                    <div class="seo-portfolio-head">
                         <div>
-                            <h3 class="seo-review-title">Weekly portfolio review</h3>
-                            <p class="section-hint u-m-0">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
+                            <h4 class="seo-block-title">Portfolio</h4>
+                            <p id="seoPortfolioLine" class="section-hint u-m-0">No SEO data loaded yet.</p>
                         </div>
-                        <div class="watch-admin-toolbar u-m-0">
-                            <label><input id="seoReviewEnabled" type="checkbox"> enabled</label>
-                            <label>Every <input id="seoReviewInterval" class="seo-review-interval-input" type="number" min="1" max="90" value="7"> days</label>
-                            <label>at <input id="seoReviewTime" type="time" value="09:00"></label>
-                            <label>timezone <input id="seoReviewTimezone" class="seo-review-timezone-input" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false"></label>
-                            <button id="saveSeoReviewConfigBtn" type="button" class="admin-btn secondary">Save schedule</button>
-                            <button id="runSeoReviewBtn" type="button" class="admin-btn">Run now</button>
+                        <div class="seo-figures">
+                            <div class="seo-figure"><span>Pages with stored data</span><strong id="seoCapturedCount">0 / 0</strong></div>
+                            <div class="seo-figure"><span>Change since previous review</span><strong id="seoReviewDelta">unknown</strong></div>
+                            <div class="seo-figure"><span>Last review</span><strong id="seoReviewLast">never</strong><span>Next: <span id="seoReviewNext">not scheduled</span></span></div>
                         </div>
                     </div>
-                    <div class="seo-summary-grid">
-                        <div class="seo-summary-card"><span>Last review</span><strong id="seoReviewLast">never</strong><span>Next: <span id="seoReviewNext">not scheduled</span></span></div>
-                        <div class="seo-summary-card"><span>Portfolio Judge</span><strong id="seoPortfolioJudge">unknown</strong></div>
-                        <div class="seo-summary-card"><span>Publisher Watches</span><strong id="seoPublisherWatchCount">0 / 12</strong></div>
-                        <div class="seo-summary-card"><span>Assessment at run time</span><strong id="seoReviewSummary">No weekly review yet.</strong></div>
-                        <div class="seo-summary-card"><span>Judge in last run</span><strong id="seoReviewJudgeState">unknown</strong><span id="seoReviewJudgeError"></span></div>
-                        <div class="seo-summary-card"><span>Data collection in last run</span><strong id="seoReviewCollection">unknown</strong><span id="seoReviewCollectionMessage"></span></div>
-                        <div class="seo-summary-card"><span>Change since previous review</span><strong id="seoReviewDelta">unknown</strong></div>
-                    </div>
-                    <div id="seoReviewFindings" class="seo-review-panel" hidden>
+                    <div id="seoStatusBar" class="seo-status-bar" aria-hidden="true"></div>
+                    <div id="seoStatusLegend" class="seo-status-legend"></div>
+                    <p class="section-hint u-m-0">Assessment at run time: <strong id="seoReviewSummary">No weekly review yet.</strong></p>
+                    <div id="seoReviewFindings" class="seo-findings" hidden>
                         <strong>What the judge observed</strong>
                         <div id="seoReviewFindingsPositive"></div>
                         <div id="seoReviewFindingsNegative"></div>
                     </div>
-                    <p id="seoReviewProgress" class="section-hint">No review progress yet.</p>
-                    <button id="applyAllSeoReviewBtn" type="button" class="admin-btn" hidden>Apply all safe recommendations</button>
-                    <div id="seoReviewGroups" class="seo-review-groups"></div>
-                    <details id="seoReviewCompleted" class="u-mt-12" hidden>
-                        <summary>Completed in this review</summary>
-                        <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
+                </div>
+
+                <details class="seo-details">
+                    <summary>Diagnostics &amp; configuration</summary>
+                    <div class="seo-summary-grid">
+                        <div class="seo-summary-card"><span>Configuration</span><strong id="seoConfigState">unknown</strong><span id="seoConfigMessage"></span></div>
+                        <div class="seo-summary-card"><span>Connection</span><strong id="seoConnectionState">not checked</strong><span id="seoConnectionMessage"></span></div>
+                        <div class="seo-summary-card"><span>Latest collection run</span><strong id="seoLastRun">No collection run yet</strong><span id="seoLastRunMessage"></span></div>
+                        <div class="seo-summary-card"><span>Data collection in last review</span><strong id="seoReviewCollection">unknown</strong><span id="seoReviewCollectionMessage"></span></div>
+                        <div class="seo-summary-card"><span>Portfolio Judge</span><strong id="seoPortfolioJudge">unknown</strong></div>
+                        <div class="seo-summary-card"><span>Judge in last review</span><strong id="seoReviewJudgeState">unknown</strong><span id="seoReviewJudgeError"></span></div>
+                        <div class="seo-summary-card"><span>Publisher Watches</span><strong id="seoPublisherWatchCount">0 / 12</strong></div>
+                        <div class="seo-summary-card"><span>Latest finalized date</span><strong id="seoFinalDate">–</strong><span>Optional content judge: <span id="seoContentJudgeState">unknown</span></span></div>
+                    </div>
+                    <div class="watch-admin-toolbar">
+                        <label><input id="seoReviewEnabled" type="checkbox"> enabled</label>
+                        <label>Every <input id="seoReviewInterval" class="seo-review-interval-input" type="number" min="1" max="90" value="7"> days</label>
+                        <label>at <input id="seoReviewTime" type="time" value="09:00"></label>
+                        <label>timezone <input id="seoReviewTimezone" class="seo-review-timezone-input" type="text" maxlength="64" value="Europe/Berlin" spellcheck="false"></label>
+                        <button id="saveSeoReviewConfigBtn" type="button" class="admin-btn secondary">Save schedule</button>
+                    </div>
+                    <p id="seoDisclaimer" class="section-hint"></p>
+                    <details class="u-mt-12">
+                        <summary>Read-only hard-coded search opportunity rules</summary>
+                        <p id="seoSearchRules" class="section-hint"></p>
                     </details>
-                    <div id="seoTopicBriefPanel" class="seo-review-panel" hidden>
+                </details>
+
+                <div class="seo-review-panel">
+                    <div class="seo-review-group-head">
+                        <div>
+                            <h3 class="seo-review-title">Decisions to make</h3>
+                            <p class="section-hint u-m-0">No action or Topic Brief change is automatic. Indexing and Watch status stay independent.</p>
+                        </div>
+                        <button id="applyAllSeoReviewBtn" type="button" class="admin-btn" hidden>Apply all safe recommendations</button>
+                    </div>
+                    <p id="seoReviewProgress" class="section-hint">No review progress yet.</p>
+                    <p id="seoWorklistEmpty" class="seo-worklist-empty" hidden>Nothing needs a decision right now.</p>
+                    <div id="seoReviewGroups" class="seo-review-groups"></div>
+                    <div id="seoTopicBriefPanel" class="seo-review-group u-mt-12" hidden>
                         <h4 class="u-mt-0">Publisher prompt decision</h4>
                         <p class="section-hint">Terra proposed a Topic Brief change from the collected SEO portfolio data. It is never applied automatically.</p>
                         <p id="seoTopicBriefStrength" class="section-hint"></p>
@@ -471,36 +490,59 @@
                             <span id="seoTopicBriefDecision" class="section-hint">Decision: pending</span>
                         </div>
                     </div>
+                    <details id="seoReviewCompleted" class="u-mt-12" hidden>
+                        <summary>Completed in this review</summary>
+                        <div id="seoReviewCompletedList" class="seo-review-completed-list"></div>
+                    </details>
                     <details id="seoReviewHistoryPanel" class="u-mt-12">
                         <summary>Review history</summary>
                         <div id="seoReviewHistory" class="seo-review-completed-list"></div>
                     </details>
+                </div>
+
+                <div class="seo-inventory">
+                    <div class="seo-review-group-head">
+                        <div>
+                            <h3 class="seo-review-title">All pages</h3>
+                            <p id="seoInventoryCount" class="section-hint u-m-0">No pages loaded.</p>
+                        </div>
+                    </div>
+                    <div class="seo-filter-bar">
+                        <input id="seoSearch" class="seo-filter-search" type="search" placeholder="Search URL or title" spellcheck="false" autocomplete="off">
+                        <select id="seoScopeFilter" title="Which pages the list shows by default">
+                            <option value="attention">Needs attention</option>
+                            <option value="all">All pages</option>
+                        </select>
+                        <select id="seoStatusFilter" title="Filter by performance status"><option value="">Any status</option></select>
+                        <select id="seoRecommendationFilter" title="Filter by latest recommendation"><option value="">Any recommendation</option></select>
+                        <select id="seoOriginFilter" title="Filter by page origin"><option value="">Any origin</option></select>
+                        <button id="resetSeoFiltersBtn" type="button" class="admin-btn secondary">Reset filters</button>
+                    </div>
+                    <div class="seo-table-wrap">
+                        <table class="seo-table">
+                            <thead>
+                                <tr>
+                                    <th>Page</th>
+                                    <th>Visibility</th>
+                                    <th>Clicks<small>28 d / 7 d</small></th>
+                                    <th>Impr.<small>28 d / 7 d</small></th>
+                                    <th>CTR<small>28 d / 7 d</small></th>
+                                    <th>Pos.<small>28 d / 7 d</small></th>
+                                    <th>Status</th>
+                                    <th>Recommendation</th>
+                                    <th>Read-only analysis</th>
+                                </tr>
+                            </thead>
+                            <tbody id="seoTableBody"></tbody>
+                        </table>
+                    </div>
+                    <p id="seoEmptyState" class="section-hint">No SEO metrics collected yet.</p>
+                    <p id="seoFilterEmptyState" class="section-hint" hidden>No page matches the current filter.</p>
                     <details class="u-mt-12">
-                        <summary>Read-only hard-coded search opportunity rules</summary>
-                        <p id="seoSearchRules" class="section-hint"></p>
+                        <summary>What the status classes mean</summary>
+                        <p id="seoRules" class="seo-rules"></p>
                     </details>
                 </div>
-                <div class="seo-table-wrap">
-                    <table class="seo-table">
-                        <thead>
-                            <tr>
-                                <th rowspan="2">Page</th>
-                                <th colspan="4">7 days</th>
-                                <th colspan="4">28 days</th>
-                                <th rowspan="2">Status</th>
-                                <th rowspan="2">Recommendation</th>
-                                <th rowspan="2">Read-only analysis</th>
-                            </tr>
-                            <tr>
-                                <th>Clicks</th><th>Impr.</th><th>CTR</th><th>Pos.</th>
-                                <th>Clicks</th><th>Impr.</th><th>CTR</th><th>Pos.</th>
-                            </tr>
-                        </thead>
-                        <tbody id="seoTableBody"></tbody>
-                    </table>
-                </div>
-                <p id="seoEmptyState" class="section-hint">No SEO metrics collected yet.</p>
-                <p id="seoRules" class="seo-rules"></p>
             </div>
         </section>
     </div>
