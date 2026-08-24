@@ -22,6 +22,10 @@
           "note": "Defines window.App.emailVerification before the Firebase module consumes it. It is listed directly so source-mode cache busting covers it."
         },
         "static/js/auth-session-state.js",
+        {
+          "file": "static/js/run-registry.js",
+          "note": "Browser-session RunContext owner. Must load before firebase.js so bookmark persistence and logout can address runs explicitly."
+        },
         "static/js/watch-state.js",
         {
           "file": "static/js/error-reporter.js",
@@ -98,6 +102,10 @@
         "static/js/consensus-insights.js",
         "static/js/chat-session.js",
         "static/js/consensus-run.js",
+        {
+          "file": "static/js/run-view.js",
+          "note": "Projects only runRegistry.visibleRunId into the shared DOM; must follow consensus-run.js (follow-up renderer) and precede query-send.js."
+        },
         "static/js/query-send.js",
         "static/js/composer-collapse.js",
         {

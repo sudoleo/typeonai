@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.core.config as cfg
+from app.api.routers import bookmarks as bookmarks_router
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
 from app.services.usage_repository import RunKind, UsageLimits
@@ -174,6 +175,52 @@ def resolve_payload():
     }
 
 
+class ResolveBookmarkSnapshot:
+    def __init__(self, bookmark_id, data):
+        self.id = bookmark_id
+        self._data = data
+
+    @property
+    def exists(self):
+        return self._data is not None
+
+    def to_dict(self):
+        return dict(self._data or {})
+
+
+class ResolveBookmarkRef:
+    def __init__(self, bookmark_id, data):
+        self.id = bookmark_id
+        self.data = data
+
+    def get(self):
+        return ResolveBookmarkSnapshot(self.id, self.data)
+
+    def set(self, patch_data, merge=False):
+        assert merge is True
+        for key, value in patch_data.items():
+            if key == "responses":
+                self.data.setdefault("responses", {}).update(value)
+            else:
+                self.data[key] = value
+
+
+class ResolveBookmarkDb:
+    def __init__(self, uid, bookmark_ref):
+        self.uid = uid
+        self.bookmark_ref = bookmark_ref
+
+    def collection(self, name):
+        assert name in {"users", "bookmarks"}
+        return self
+
+    def document(self, document_id):
+        if document_id == self.uid:
+            return self
+        assert document_id == self.bookmark_ref.id
+        return self.bookmark_ref
+
+
 def test_resolve_requires_auth():
     client = make_client()
     response = client.post("/resolve", json=resolve_payload())
@@ -275,3 +322,101 @@ def test_resolve_blocks_when_usage_limit_reached(fake_run_usage):
         response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
     assert response.status_code == 403
     assert response.json()["detail"]["error_code"] == "total_usage_limit_exceeded"
+
+
+def test_resolve_persists_only_the_server_result_on_the_bound_bookmark_revision():
+    uid = "uid-resolve-bookmark"
+    bookmark_id = "bookmark_resolve"
+    bookmark = {
+        "query": "When did it open?",
+        "chat_id": "a" * 32,
+        "turn_id": "b" * 32,
+        "share_result_id": "old-share-result",
+        "responses": {
+            "consensus": "Stored consensus",
+            "differences_data": {
+                "claims": [],
+                "differences": [{
+                    "claim": "Opening year",
+                    "type": "contradiction",
+                    "severity": "major",
+                    "positions": make_positions(),
+                }],
+                "best_model": "",
+                "models_compared": ["OpenAI", "Gemini"],
+            },
+        },
+    }
+    bookmark_ref = ResolveBookmarkRef(bookmark_id, bookmark)
+    database = ResolveBookmarkDb(uid, bookmark_ref)
+    payload = {
+        **resolve_payload(),
+        "bookmarkId": bookmark_id,
+        "expectedBookmarkVersion": bookmarks_router._bookmark_share_version(bookmark),
+    }
+    server_result = {
+        "claim": "Opening year",
+        "outcome": "resolved",
+        "results": [
+            {"model": "OpenAI", "decision": "maintain", "position": "1937", "reason": "Evidence", "prompt": "private"},
+            {"model": "Gemini", "decision": "revise", "position": "1937", "reason": "Corrected", "prompt": "private"},
+        ],
+    }
+
+    with patch.object(chat_router, "db_firestore", database):
+        persisted = chat_router._persist_resolve_bookmark(
+            uid,
+            payload,
+            "Opening year",
+            normalize_resolve_positions("Opening year", make_positions())[1],
+            server_result,
+        )
+
+    assert persisted is True
+    resolution = bookmark_ref.data["responses"]["differences_data"]["differences"][0]["resolution"]
+    assert resolution["outcome"] == "resolved"
+    assert [item["decision"] for item in resolution["results"]] == ["maintain", "revise"]
+    assert all("prompt" not in item for item in resolution["results"])
+    assert bookmark_ref.data["share_result_id"] == ""
+
+
+def test_resolve_does_not_persist_after_the_bookmark_revision_advanced():
+    uid = "uid-resolve-stale"
+    bookmark_id = "bookmark_resolve_stale"
+    old_bookmark = {
+        "query": "Old question",
+        "responses": {
+            "consensus": "Old consensus",
+            "differences_data": {
+                "claims": [],
+                "differences": [{
+                    "claim": "Opening year",
+                    "type": "contradiction",
+                    "severity": "major",
+                    "positions": make_positions(),
+                }],
+                "best_model": "",
+                "models_compared": ["OpenAI", "Gemini"],
+            },
+        },
+    }
+    newer_bookmark = {**old_bookmark, "query": "Newer follow-up"}
+    bookmark_ref = ResolveBookmarkRef(bookmark_id, newer_bookmark)
+    database = ResolveBookmarkDb(uid, bookmark_ref)
+    payload = {
+        **resolve_payload(),
+        "bookmarkId": bookmark_id,
+        "expectedBookmarkVersion": bookmarks_router._bookmark_share_version(old_bookmark),
+    }
+
+    with patch.object(chat_router, "db_firestore", database):
+        persisted = chat_router._persist_resolve_bookmark(
+            uid,
+            payload,
+            "Opening year",
+            normalize_resolve_positions("Opening year", make_positions())[1],
+            {"outcome": "resolved", "results": []},
+        )
+
+    assert persisted is False
+    assert "resolution" not in bookmark_ref.data["responses"]["differences_data"]["differences"][0]

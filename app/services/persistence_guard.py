@@ -36,6 +36,10 @@ class AccountDeletionInProgress(RuntimeError):
     """Raised when a user-owned write races full-account deletion."""
 
 
+class PersistenceConflictError(RuntimeError):
+    """Raised when an optimistic resource-version guard no longer matches."""
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -165,12 +169,16 @@ def _bookmark_bootstrap(bookmarks) -> tuple[int, int]:
     return count, total_bytes
 
 
-def write_bookmark(*, uid: str, doc_ref, patch: dict, db) -> dict:
+def write_bookmark(*, uid: str, doc_ref, patch: dict, db, current_guard=None) -> dict:
     """Merge one bookmark while enforcing persistent count/byte quotas."""
     if not hasattr(db, "transaction") and not hasattr(db, "run_transaction"):
         # Explicit seam for the route-level tiny fakes. Production Firestore
         # always exposes transactions; quota-access failures on a capable
         # client are deliberately not caught and therefore fail closed.
+        current_snapshot = _get(doc_ref)
+        current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
+        if current_guard is not None and not current_guard(current):
+            raise PersistenceConflictError("Bookmark changed during the operation.")
         doc_ref.set(patch, merge=True)
         return _get(doc_ref).to_dict() or {}
     bookmarks = db.collection("users").document(uid).collection("bookmarks")
@@ -182,6 +190,8 @@ def write_bookmark(*, uid: str, doc_ref, patch: dict, db) -> dict:
         ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
         current_snapshot = _get(doc_ref, tx)
         current = current_snapshot.to_dict() or {} if current_snapshot.exists else {}
+        if current_guard is not None and not current_guard(current):
+            raise PersistenceConflictError("Bookmark changed during the operation.")
         usage_snapshot = _get(usage_ref, tx)
         usage = usage_snapshot.to_dict() or {} if usage_snapshot.exists else {}
         count = int(usage.get("bookmark_count") or bootstrap[0])

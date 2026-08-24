@@ -40,6 +40,7 @@ def test_run_covers_every_phase_and_terminal_state():
     progress = read("static/js/consensus-progress.js")
     lifecycle = read("static/js/consensus-lifecycle.js")
     query = read("static/js/query-send.js")
+    view = read("static/js/run-view.js")
     demo = read("static/demo.js")
 
     # Four phases, in order, each with its own step.
@@ -49,12 +50,14 @@ def test_run_covers_every_phase_and_terminal_state():
     assert 'responseState === "complete"' in progress
     assert "onConsensusStart" in lifecycle
     assert "onConsensusEnd" in lifecycle
-    assert 'setAgentModeStatus("canceled")' in query
+    assert 'window.setAgentModeStatus("canceled")' in view
     assert "consensusPipeline?.onConsensusEnd" in demo
 
     # The run starts at /prepare, not at the fan-out: the gap between click
     # and first answer is exactly where a user needs to see something happen.
-    assert "consensusPipeline?.onPrepare" in query
+    # The run hands over its own start time, so a run reopened from the
+    # sidebar keeps counting instead of restarting its clock.
+    assert "pipeline.onPrepare?.(context.startedAt)" in view
     # The differences judge gets its own step, signalled from the stream.
     assert "onDifferencesStart" in read("static/js/consensus-run.js")
 
@@ -140,11 +143,13 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert "const insightRoot = window.App.consensusBodyEl?.() || document" in read(
         "static/js/consensus-insights.js"
     )
-    # Erst archivieren, dann uebernehmen: promote() macht die abgeschickte
-    # Nachricht zum Kopf des neuen Turns (siehe sentMessage in query-send.js).
-    archive_at = query.index("window.App.followup?.archiveCurrentExchange?.();")
-    assert archive_at < query.index("sentMessage.promote()", archive_at)
-    assert "window.App.setThreadQuestion?.(this.question)" in query
+    # Der RunContext uebernimmt die frozen completed Basis in seinen Verlauf;
+    # run-view projiziert erst den Verlauf und danach die neue aktive Frage.
+    append_at = query.index("context.historyTurns.push(basis.currentTurn)")
+    assert append_at < query.index("registry.update(context.runId", append_at)
+    view = read("static/js/run-view.js")
+    assert "followup?.renderStoredTurns?.(context.historyTurns || [])" in view
+    assert "window.App.setThreadQuestion?.(context.config?.agentMode === false ? \"\" : context.question)" in view
     assert "clearHistory?.()" in app_init
 
     # User-Turns stehen rechts; Consensus-Turns bleiben als Lesetext links.
@@ -172,24 +177,26 @@ def test_the_sent_message_leaves_the_field_before_prepare_runs():
     core = read("static/js/app-core.js")
     css = read("static/css/shell.css")
 
-    # Eigener Block, damit der aktive Kopf (und mit ihm die alte Antwort
-    # darunter) stehen bleiben kann, solange der Lauf noch scheitern darf.
+    # Die alten Pending-Knoten bleiben als Legacy-Markup vorhanden; der neue
+    # Multi-Run-Projektor zeigt die gesendete Frage direkt als aktiven Kopf.
     assert 'id="threadPendingAsk"' in template
     assert 'id="threadPendingAskText"' in template
     assert 'id="threadPendingAskAttachments"' in template
     assert template.index('id="threadAsk"') < template.index('id="threadPendingAsk"')
     assert template.index('id="threadPendingAsk"') < template.index('id="consensusRun"')
 
-    # Das Feld ist leer, bevor die erste Anfrage rausgeht.
-    hold_at = query.index("sentMessage.hold(question,")
-    assert hold_at < query.index("prepareWithUsageRetry(", hold_at)
-    assert hold_at < query.index("chatSession?.beginRun?.({", hold_at)
-    hold_block = query.split("hold(question,", 1)[1].split("promote()", 1)[0]
-    assert 'input.value = "";' in hold_block
-    assert "window.App.setPendingThreadQuestion?.(this.question" in hold_block
-
-    # Die letzte Antwort bleibt im Gespraech stehen, bis sie archiviert ist.
-    assert "if (!followupRequested) window.hideConsensusOutput?.();" in query
+    # Der synchrone Hand-off leert das Feld und projiziert den Context, bevor
+    # executeRun mit Token-/prepare-Awaits beginnt.
+    handoff_at = query.index("handComposerToRun(context);")
+    assert handoff_at < query.index("await executeRun(context);", handoff_at)
+    handoff = query.split("function handComposerToRun(context)", 1)[1].split(
+        "window.sendQuestion =", 1
+    )[0]
+    assert 'input.value = "";' in handoff
+    assert "registry.renderVisible();" in handoff
+    assert "window.App.setThreadQuestion?.(context.config?.agentMode === false ? \"\" : context.question)" in read(
+        "static/js/run-view.js"
+    )
 
     # Sie steht dort, wo sie gleich als Kopf weiterlebt: unter der bisherigen
     # Antwort, mit dem gefuehrten Lauf darunter.
@@ -217,28 +224,25 @@ def test_a_run_that_never_happens_gives_the_message_back():
     ins Feld, und der bisherige Turn bleibt, wo er ist."""
     query = read("static/js/query-send.js")
 
-    restore_block = query.split("restore() {", 1)[1].split("\n      }", 1)[0]
-    assert "window.App.clearPendingThreadQuestion?.();" in restore_block
+    restore_block = query.split("function restoreComposerAfterUnsentRun(context)", 1)[1].split(
+        "function finishFailed", 1
+    )[0]
+    assert "registry.isVisible(context.runId)" in restore_block
+    assert "registry.selectConversationBasis(context.basis)" in restore_block
     # Zurueck kommt der Composer-Stand, aus dem die Nachricht entstanden ist:
     # das Getippte im Feld, das Zitat wieder darueber.
-    assert "input.value = this.draft;" in restore_block
-    assert "window.App.quote?.set?.(this.quote)" in restore_block
-    # Ein inzwischen getippter Entwurf wird nie ueberschrieben.
-    assert "!input.value.trim()" in restore_block
+    assert "input.value = context.metadata.draftQuestion || context.question;" in restore_block
+    assert "window.App.quote?.set?.(context.metadata.quotedContext)" in restore_block
+    # Ein inzwischen vorbereiteter Entwurf (Text, Zitat oder Datei) wird nie
+    # von einem spaeter abgebrochenen Hintergrund-Run ueberschrieben.
+    assert "composerOccupied" in restore_block
+    assert "if (composerOccupied) return;" in restore_block
+    assert "composerAttachments.length > 0" in restore_block
 
-    # Jeder Pfad, der den Follow-up-Kontext zurueckgibt, gibt auch die
-    # Nachricht zurueck: beides gehoert zu demselben Lauf, der nicht
-    # stattgefunden hat.
-    lines = query.splitlines()
-    blocked = [i for i, line in enumerate(lines) if "restoreAfterBlockedRun?.()" in line]
-    assert blocked
-    for index in blocked:
-        # Grosszuegiges Fenster: im Abbruch-Pfad liegt die Ruecknahme der
-        # Antwortboxen dazwischen.
-        window = "\n".join(lines[max(0, index - 20):index])
-        assert "sentMessage.restore();" in window, (
-            f"line {index + 1} restores the context but not the message"
-        )
+    # Fehler vor Fan-out und Cancel waehrend prepare gehen durch denselben
+    # rungebundenen Restore-Pfad.
+    assert "if (failedBeforeFanout) restoreComposerAfterUnsentRun(context);" in query
+    assert 'if (registry.isVisible(context.runId) && context.phase === "prepare")' in query
 
 
 def test_the_new_message_is_scrolled_to_once_and_never_fights_the_reader():

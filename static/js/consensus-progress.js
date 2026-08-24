@@ -565,11 +565,16 @@
 
   // ---- Lifecycle hooks -----------------------------------------------
 
-  function onPrepare() {
+  // startedAtMs belongs to the run this block is about to describe. It is
+  // passed when an already running run is re-opened, so the clock keeps
+  // counting from the real start instead of from the moment it came back
+  // on screen.
+  function onPrepare(startedAtMs) {
     resetState();
     clearProvenance();
     setComposerRunNotice("");
-    startedAt = Date.now();
+    const owned = Number(startedAtMs);
+    startedAt = Number.isFinite(owned) && owned > 0 ? owned : Date.now();
     enter("prepare");
     show();
     startTicker();
@@ -683,7 +688,31 @@
   function dismiss() {
     resetState();
     stage = "idle";
+    // Render before hiding: data-stage is read by CSS and by anything that
+    // asks what the block is showing, and a hidden block still has to answer
+    // "nothing" rather than name the step it was on when it left.
+    render();
     hideNow();
+  }
+
+  // The block and the facts under the answer describe ONE run. When what is
+  // on screen is no longer that run -- a saved bookmark was opened while a
+  // run keeps going in the background -- both leave with it. The run itself
+  // is not touched: its progress stays readable in its sidebar row.
+  function detach() {
+    dismiss();
+    clearProvenance();
+  }
+
+  // The provenance facts of a finished run, handed over when that run is
+  // projected again after the view had moved elsewhere. null clears them,
+  // so no answer ever wears another run's numbers.
+  function setRunFacts(facts) {
+    const models = Number(facts?.models);
+    lastRunSummary = Number.isFinite(models) && models > 0
+      ? { models, durationMs: Math.max(0, Number(facts?.durationMs) || 0) }
+      : null;
+    renderProvenance();
   }
 
   // A fresh comparison with the same question follows the normal composer
@@ -770,6 +799,8 @@
     onDifferencesStart,
     onConsensusEnd,
     renderProvenance,
+    setRunFacts,
+    detach,
     dismiss
   };
 })();

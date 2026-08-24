@@ -1,5 +1,5 @@
 {
-  "sources": "cbfe95e3d429",
+  "sources": "96763e993c2f",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -59,6 +59,8 @@
     "static/js/memory-edit.js",
     "static/js/model-picker.js",
     "static/js/query-send.js",
+    "static/js/run-registry.js",
+    "static/js/run-view.js",
     "static/js/share-dialog.js",
     "static/js/sidebar-quota.js",
     "static/js/sources.js",
@@ -72,7 +74,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.40c79f710981.js",
+      "src": "/static/dist/head.e9307bc65f35.js",
       "module": false,
       "defer": false
     },
@@ -84,7 +86,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.2ce8706fb895.js",
+      "src": "/static/dist/firebase.e6215d096f9e.js",
       "module": true,
       "defer": false
     },
@@ -96,12 +98,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.b4bf23d99562.js",
+      "src": "/static/dist/app.7ff8390d2447.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.044f20dddeeb.css"
+    "app": "/static/dist/app.d2e349f0c6b1.css"
   }
 }

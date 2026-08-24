@@ -86,15 +86,17 @@ def test_run_is_blocked_before_it_appears_to_start():
     """Die Vorab-Pruefung liegt VOR onPrepare(). Sonst zeigt der gefuehrte
     Lauf einen Schritt, den es nicht gibt, und nimmt ihn gleich wieder weg."""
     query = read("static/js/query-send.js")
+    view = read("static/js/run-view.js")
 
     preflight = query.index("usageLimit?.blockIfExhausted")
-    prepare_ui = query.index("consensusPipeline?.onPrepare")
-    assert preflight < prepare_ui
+    admission = query.index("const context = beginContext", preflight)
+    assert preflight < admission
+    assert "pipeline.onPrepare?.(context.startedAt)" in view
 
     # Die Demo kostet nichts und darf nie am Kontingent haengen. Ein echtes
     # Follow-up mit dem Text "Demo" bleibt dagegen ein normaler, gezaehlter
     # Kontextlauf und darf den archivierten Turn nicht umgehen.
-    assert "if (!isDemoQuery(question) || followupRequested) {" in query
+    assert "if (isDemoQuery(question) && !registry.getSelectedConversationBasis())" in query
 
     # Der Server bleibt die Autoritaet: der /prepare-Zweig zeigt dieselbe
     # Karte, wenn die Vorab-Pruefung nichts wusste (Gast, frischer Tab).
@@ -107,18 +109,20 @@ def test_blocked_follow_up_gets_its_context_back():
     und ruft dabei reset(); ohne die gemerkte Kopie waere der Chip nach einer
     Kontingent-Absage weg und die naechste Frage ginge stillschweigend ohne
     Kontext raus."""
-    consensus = read("static/js/consensus-run.js")
     query = read("static/js/query-send.js")
+    registry = read("static/js/run-registry.js")
 
-    assert "spentExchange: null," in consensus
-    assert "this.spentExchange = spent;" in consensus
-    assert "restoreAfterBlockedRun()" in consensus
-    assert "if (!this.spentExchange) return;" in consensus
-    # reset() und ein durchgelaufener Lauf raeumen die Kopie wieder weg,
-    # sonst re-armt eine spaetere Absage einen alten Kontext.
-    assert consensus.count("this.spentExchange = null;") >= 2
-
-    assert "followup?.restoreAfterBlockedRun?.()" in query
+    # Die Basis wird vor Admission nur gelesen und danach als frozen Context-
+    # Feld behalten. Scheitert der Lauf vor Fan-out, stellt der sichtbare Run
+    # genau diese Basis zusammen mit Draft/Zitat wieder her.
+    assert "const basis = registry.getSelectedConversationBasis();" in query
+    restore = query.split("function restoreComposerAfterUnsentRun(context)", 1)[1].split(
+        "function finishFailed", 1
+    )[0]
+    assert "context.previousExchange && context.basis" in restore
+    assert "registry.selectConversationBasis(context.basis);" in restore
+    assert "selectedConversationBasis = null;" in registry
+    assert "if (failedBeforeFanout) restoreComposerAfterUnsentRun(context);" in query
 
 
 def test_preflight_stays_conservative():

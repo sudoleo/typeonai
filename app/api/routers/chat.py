@@ -3,6 +3,8 @@ import time
 import logging
 import re
 import hashlib
+import hmac
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -63,6 +65,7 @@ from app.services.llm.resolve_engine import (
 )
 from app.services.share_snapshots import (
     persist_pending_result,
+    sanitize_differences_data,
     sanitize_model_labels,
     sanitize_sources,
 )
@@ -83,7 +86,7 @@ from app.services.chat_context import (
     build_chat_context_system_prompt,
     resolved_context_cache_key,
 )
-from app.services import user_memory
+from app.services import persistence_guard, user_memory
 from app.services.user_memory import FirestoreUserMemoryRepository
 from app.services.differences_stats import record_differences_stats
 from app.services.usage_repository import (
@@ -1812,12 +1815,98 @@ def consensus(request: Request, data: dict = Body(...)):
     return response
 
 
+def _persist_resolve_bookmark(uid: str, data: dict, claim: str, positions: list, result: dict) -> bool:
+    """Attach a server-produced resolution to the exact bookmark revision."""
+    bookmark_id = str(data.get("bookmarkId") or "").strip()
+    expected_version = str(data.get("expectedBookmarkVersion") or "").strip().lower()
+    if not re.fullmatch(r"[A-Za-z0-9_]{1,100}", bookmark_id):
+        return False
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_version):
+        return False
+
+    # One revision algorithm serves Share and Resolve. The local import avoids
+    # coupling router import order.
+    from app.api.routers.bookmarks import _bookmark_share_version
+
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+    snapshot = doc_ref.get()
+    if not snapshot.exists:
+        return False
+    bookmark = snapshot.to_dict() or {}
+    if not hmac.compare_digest(expected_version, _bookmark_share_version(bookmark)):
+        return False
+    responses = bookmark.get("responses")
+    responses = deepcopy(responses) if isinstance(responses, dict) else {}
+    differences_data = responses.get("differences_data")
+    if not isinstance(differences_data, dict):
+        return False
+    differences = differences_data.get("differences")
+    if not isinstance(differences, list):
+        return False
+
+    match = None
+    for difference in differences:
+        if not isinstance(difference, dict):
+            continue
+        try:
+            stored_claim, stored_positions = normalize_resolve_positions(
+                difference.get("claim"), difference.get("positions")
+            )
+        except InvalidResolvePayload:
+            continue
+        if stored_claim == claim and stored_positions == positions:
+            if match is not None:
+                return False
+            match = difference
+    if match is None:
+        return False
+
+    match["resolution"] = {
+        "outcome": str(result.get("outcome") or "error"),
+        "results": [
+            {
+                "model": str(item.get("model") or ""),
+                "decision": str(item.get("decision") or "error"),
+                "position": str(item.get("position") or ""),
+                "reason": str(item.get("reason") or ""),
+            }
+            for item in result.get("results", []) if isinstance(item, dict)
+        ],
+    }
+    sanitized = sanitize_differences_data(differences_data)
+    if sanitized is None:
+        return False
+    responses["differences_data"] = sanitized
+
+    try:
+        persistence_guard.write_bookmark(
+            uid=uid,
+            doc_ref=doc_ref,
+            patch={"responses": responses, "share_result_id": ""},
+            db=db_firestore,
+            # Recheck inside the same quota transaction that applies the patch.
+            current_guard=lambda current: hmac.compare_digest(
+                expected_version, _bookmark_share_version(current)
+            ),
+        )
+    except (persistence_guard.PersistenceConflictError, persistence_guard.PersistenceLimitError):
+        return False
+    except Exception as exc:
+        logging.error("Resolve bookmark persistence failed category=%s", safe_exception(exc))
+        return False
+    return True
+
+
 @router.post("/resolve")
 @limiter.limit("3/minute")
 def resolve(request: Request, data: dict = Body(...)):
     """Resolve-Runde: konfrontiert die dissentierenden Modelle eines
     Widerspruchs (aus differences_data) gezielt mit der Gegenposition.
-    Kostet einen regulaeren Usage-Punkt; Ergebnis wird nicht persistiert."""
+    Kostet einen regulaeren Usage-Punkt; bei exakter Bookmark-Bindung wird das
+    serverseitige Ergebnis versionsgeschuetzt persistiert."""
     id_token = extract_id_token(request, data)
     use_own_keys = parse_boolean_flag(data.get("useOwnKeys", False))
 
@@ -1889,6 +1978,9 @@ def resolve(request: Request, data: dict = Body(...)):
     api_keys = build_engine_api_keys(data, use_own_keys)
 
     result = run_resolve_round(question, claim, positions, api_keys)
+    result["bookmark_persisted"] = _persist_resolve_bookmark(
+        uid, data, claim, positions, result
+    )
     if usage_result is not None:
         result.update(usage_response_fields(usage_result.snapshot, is_pro))
         result["usage_run_status"] = usage_result.status.value

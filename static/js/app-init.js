@@ -498,12 +498,31 @@
             const select = document.getElementById(selectId);
             return getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || "";
           };
-          const openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : selectedModelLabel("openaiModelSelect");
-          const mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : selectedModelLabel("mistralModelSelect");
-          const geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : selectedModelLabel("geminiModelSelect");
-          const claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : selectedModelLabel("claudeModelSelect");
-          const deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : selectedModelLabel("deepseekModelSelect");
-          const grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : selectedModelLabel("grokModelSelect");
+          let openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : selectedModelLabel("openaiModelSelect");
+          let mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : selectedModelLabel("mistralModelSelect");
+          let geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : selectedModelLabel("geminiModelSelect");
+          let claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : selectedModelLabel("claudeModelSelect");
+          let deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : selectedModelLabel("deepseekModelSelect");
+          let grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : selectedModelLabel("grokModelSelect");
+
+          // Picker and Deep-Think controls configure the next run. Headings in
+          // the selected result keep the model labels frozen at that run's
+          // start, even when those controls change while it is in background.
+          const visibleRun = window.App.runRegistry?.visible?.();
+          if (visibleRun) {
+            const labels = Object.fromEntries(
+              (visibleRun.config?.providers || []).map(provider => [
+                provider.provider,
+                provider.modelLabel || provider.modelId || provider.provider
+              ])
+            );
+            openaiModelText = labels.OpenAI || openaiModelText;
+            mistralModelText = labels.Mistral || mistralModelText;
+            geminiModelText = labels.Gemini || geminiModelText;
+            claudeModelText = labels.Anthropic || claudeModelText;
+            deepseekModelText = labels.DeepSeek || deepseekModelText;
+            grokModelText = labels.Grok || grokModelText;
+          }
 
           const setModelText = (id, txt) => {
             const el = document.getElementById(id);
@@ -686,12 +705,17 @@
             const data = await resp.json();
             setCurrentUsageLimits(data.is_pro === true, data);
 
-            window.App.renderUsageDisplay({
+            const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.({
+              uid: window.auth?.currentUser?.uid || null,
+              generation: window.App.authState?.generation,
+              user: window.auth?.currentUser || null
+            }, data, { authoritative: true }) || {
               remaining: data.remaining,
               deepRemaining: data.deep_remaining,
               totalLimit: currentMaxLimit,
               deepLimit: currentDeepLimit
-            });
+            };
+            window.App.renderUsageDisplay(usageView);
 
           } catch (e) { console.error(e); }
         }
@@ -931,14 +955,10 @@
           trackAppEvent("app_sidebar_toggle", { open: !sidebar.classList.contains("collapsed") });
         }
 
-        // "New comparison": derselbe saubere Ausgangszustand, den auch der
-        // Logout herstellt (firebase.js::resetLoadedRunAfterLogout) — laufende
-        // Streams abbrechen, Lauf + Share-/Bookmark-Kontext leeren, zurück in
-        // den Hero-Zustand. Auf der Overlay-Sidebar schließt sie sich danach,
-        // sonst verdeckt sie das Eingabefeld, in dem man tippen soll.
+        // "New comparison" detaches the main view from the selected run. Any
+        // background run keeps its private context and remains reachable from
+        // the sidebar; only logout tears down the complete registry.
         document.getElementById("newRunButton")?.addEventListener("click", function () {
-          window.cancelCurrentQuery?.();
-          window.cancelCurrentConsensus?.();
           window.clearResponseBoxes?.({ silent: true });
           window.clearPreparedBookmarkShareResult?.();
           window.App.state.set("currentEvidenceSources", [], "evidence");
@@ -1325,6 +1345,9 @@
                 model: selectedLabel
               });
               updateAgentModeUI();
+              if (window.App.runRegistry?.visible?.()) {
+                window.App.runRegistry.renderVisible();
+              }
             });
           }
         });
@@ -1742,6 +1765,9 @@
 
         window.clearResponseBoxes = function (options = {}) {
           if (!options.silent) trackAppEvent("app_responses_cleared");
+          if (options.keepRunSelection !== true) {
+            window.App.runRegistry?.clearVisible?.();
+          }
           document.body.classList.remove("direct-comparison-active");
           const boxIds = [
             "openaiResponse",
@@ -1807,6 +1833,7 @@
           window.clearPreparedBookmarkShareResult?.();
 
           setAgentModeStatus("idle");
+          window.App.syncSendButtonRunning?.();
         }
 
         // getActiveMode lebt jetzt in static/js/query-send.js (einziger Aufrufer war sendQuestion).

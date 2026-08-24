@@ -586,7 +586,426 @@
   };
   window.App.followup = followup;
 
+  // ------------------------------------------------------------------
+  // RunContext consensus path. Unlike the legacy compatibility function
+  // below, this path never reads response boxes, current bookmark globals or
+  // the visible chat session. Query-send passes the exact owning context.
+  function contextConsensusRenderer(context, target) {
+    const RENDER_INTERVAL = 120;
+    let timer = null;
+    let lastRender = 0;
+    function render() {
+      timer = null;
+      lastRender = Date.now();
+      if (window.App.runRegistry.isVisible(context.runId)) {
+        window.App.runRegistry.renderVisible();
+      }
+    }
+    function schedule() {
+      if (!window.App.runRegistry.isVisible(context.runId)) return;
+      const elapsed = Date.now() - lastRender;
+      if (elapsed >= RENDER_INTERVAL) render();
+      else if (!timer) timer = window.setTimeout(render, RENDER_INTERVAL - elapsed);
+    }
+    return {
+      append(chunk) {
+        if (!window.App.runRegistry.isExecuting(context.runId)) return;
+        const text = String(chunk || "");
+        if (!text) return;
+        if (target === "consensus") {
+          context.consensus.status = "streaming";
+          context.consensus.streamText += text;
+        } else if (target === "consensus-final") {
+          context.consensus.text = text;
+          context.consensus.streamText = text;
+          context.consensus.status = "differences";
+          context.phase = "differences";
+        } else {
+          context.consensus.status = "differences";
+          context.phase = "differences";
+        }
+        schedule();
+      },
+      markReasoning() {
+        if (!window.App.runRegistry.isExecuting(context.runId)) return;
+        if (target === "differences") {
+          context.consensus.status = "differences";
+          context.phase = "differences";
+        }
+        schedule();
+      },
+      stop() {
+        if (timer) window.clearTimeout(timer);
+        timer = null;
+      }
+    };
+  }
+
+  function runAnswer(context, provider) {
+    const result = context.modelResults?.[provider];
+    return result?.status === "complete" ? String(result.text || "").trim() : "";
+  }
+
+  function runSources(context, provider) {
+    const sources = context.modelResults?.[provider]?.sources;
+    return Array.isArray(sources) ? sources.map(source => ({ ...source })) : [];
+  }
+
+  function runModelAnswers(context) {
+    return Object.fromEntries(Object.entries(context.modelResults || {})
+      .filter(([, result]) => result?.status === "complete" && String(result.text || "").trim())
+      .map(([provider, result]) => [provider, {
+        provider,
+        model_label: result.modelLabel || provider,
+        answer: result.text,
+        sources: runSources(context, provider)
+      }]));
+  }
+
+  function updateContextUsage(context, data) {
+    const detail = data?.detail && typeof data.detail === "object" ? data.detail : {};
+    const status = data?.usage_run_status || detail.usage_run_status;
+    if (status && context.usage) context.usage.status = status;
+    if (!window.App.runRegistry.isAuthCurrent(context)) return;
+    const usageView = window.App.runRegistry.reconcileUsageSnapshot?.(context, {
+      remaining: data?.free_usage_remaining ?? detail.free_usage_remaining,
+      deepRemaining: data?.deep_remaining ?? detail.deep_remaining,
+      totalLimit: data?.limit ?? detail.limit ?? window.currentMaxLimit,
+      deepLimit: data?.deep_limit ?? detail.deep_limit ?? window.currentDeepLimit
+    }) || {
+      remaining: data?.free_usage_remaining ?? detail.free_usage_remaining,
+      deepRemaining: data?.deep_remaining ?? detail.deep_remaining,
+      totalLimit: data?.limit ?? detail.limit ?? window.currentMaxLimit,
+      deepLimit: data?.deep_limit ?? detail.deep_limit ?? window.currentDeepLimit
+    };
+    window.App.renderUsageDisplay?.(usageView);
+  }
+
+  function contextCitationMeta(context) {
+    let url = window.location.href;
+    try {
+      const parsed = new URL(window.location.href);
+      url = parsed.origin + parsed.pathname;
+    } catch (_) {}
+    return {
+      question: context.question,
+      includedModels: (context.config.providers || [])
+        .filter(provider => runAnswer(context, provider.provider))
+        .map(provider => `${provider.provider}: ${provider.modelLabel || provider.modelId}`),
+      consensusModel: context.config.consensusModelLabel || context.config.consensusModel,
+      dateISO: new Date().toISOString(),
+      url
+    };
+  }
+
+  function consensusErrorMessage(result, data) {
+    const detail = data?.detail;
+    if (detail && typeof detail === "object") {
+      return String(detail.error || detail.message || `Consensus HTTP ${result.status}`);
+    }
+    return String(data?.error || detail || `Consensus HTTP ${result.status}`);
+  }
+
+  window.App.executeConsensusRun = async function (context, options = {}) {
+    const registry = window.App.runRegistry;
+    if (!context || !registry.isExecuting(context.runId)) return null;
+    if (["pending", "streaming", "differences"].includes(context.consensus.status)) return null;
+
+    const trigger = String(options.trigger || "auto");
+    let dispositionOnly = options.dispositionOnly === true;
+    const controller = new AbortController();
+    context.controllers.consensus = controller;
+    context.phase = "consensus";
+    context.consensus.status = "pending";
+    context.consensus.error = null;
+    registry.update(context.runId, () => {});
+
+    const successfulAnswers = Object.values(context.modelResults || {})
+      .filter(result => result?.status === "complete" && String(result.text || "").trim()).length;
+    if (!dispositionOnly && successfulAnswers < 2 && context.chatSession?.pendingTurnId) {
+      dispositionOnly = true;
+    }
+    if (!dispositionOnly && successfulAnswers < 2) {
+      context.consensus.status = "error";
+      context.consensus.error = { message: "At least two completed model answers are required." };
+      context.credentials = null;
+      context.attachments = [];
+      registry.setStatus(context.runId, "failed", context.consensus.error);
+      return null;
+    }
+
+    trackAppEvent("app_consensus_started", {
+      trigger,
+      included_models: successfulAnswers,
+      excluded_models: Math.max(0, 6 - (context.config.providers || []).length),
+      custom_credentials: context.config.useOwnKeys,
+      logged_in: true
+    });
+
+    try {
+      let idToken = null;
+      try { idToken = await context.auth.user?.getIdToken?.(); } catch (_) {}
+      if (!idToken || !registry.isAuthCurrent(context) || !registry.isExecuting(context.runId)) {
+        throw new Error("Authentication changed while generating the consensus.");
+      }
+
+      const chatTurnIds = await context.chatSession?.ensurePendingTurn?.({
+        idToken,
+        question: context.question,
+        consensusModel: context.config.consensusModel,
+        signal: controller.signal
+      }) || null;
+      if (!registry.isExecuting(context.runId)) return null;
+
+      const modelLabels = Object.fromEntries((context.config.providers || []).map(provider => [
+        provider.provider,
+        provider.modelLabel || provider.modelId || provider.provider
+      ]));
+      const modelSources = Object.fromEntries((context.config.providers || []).map(provider => [
+        provider.provider,
+        runSources(context, provider.provider)
+      ]));
+      const payload = {
+        id_token: idToken,
+        useOwnKeys: context.config.useOwnKeys,
+        usage_run_key: context.usage?.key || null,
+        deep_search: context.config.deepSearch,
+        question: context.question,
+        answer_openai: runAnswer(context, "OpenAI"),
+        answer_mistral: runAnswer(context, "Mistral"),
+        answer_claude: runAnswer(context, "Anthropic"),
+        answer_gemini: runAnswer(context, "Gemini"),
+        answer_deepseek: runAnswer(context, "DeepSeek"),
+        answer_grok: runAnswer(context, "Grok"),
+        model_sources: modelSources,
+        model_labels: modelLabels,
+        consensus_model: context.config.consensusModel,
+        excluded_models: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+          .filter(provider => !context.config.providers.some(item => item.provider === provider)),
+        openai_key: context.credentials?.openaiKey || "",
+        mistral_key: context.credentials?.mistralKey || "",
+        anthropic_key: context.credentials?.anthropicKey || "",
+        gemini_key: context.credentials?.geminiKey || "",
+        deepseek_key: context.credentials?.deepseekKey || "",
+        grok_key: context.credentials?.grokKey || "",
+        keepalive: true
+      };
+      if (chatTurnIds) {
+        payload.chat_id = chatTurnIds.chatId;
+        payload.turn_id = chatTurnIds.turnId;
+        if (chatTurnIds.contextVersionId) payload.context_version_id = chatTurnIds.contextVersionId;
+        payload.turn_sources = context.evidenceSources.map(source => ({ ...source }));
+      }
+
+      const requestResult = await streamSSERequest("/consensus", payload, controller.signal, {
+        "consensus.delta": contextConsensusRenderer(context, "consensus"),
+        "consensus.final": contextConsensusRenderer(context, "consensus-final"),
+        "differences.delta": contextConsensusRenderer(context, "differences")
+      });
+      const data = requestResult.data || {};
+      if (!data.consensus_response && context.consensus.text) data.consensus_response = context.consensus.text;
+      updateContextUsage(context, data);
+      if (!registry.isExecuting(context.runId)) return data;
+
+      const disposition = data?.chat_turn_state
+        ? data
+        : (data?.detail && typeof data.detail === "object" && data.detail.chat_turn_state ? data.detail : null);
+      if (disposition) {
+        context.chatSession?.handleConsensusResult?.({
+          chatId: disposition.chat_id,
+          turnId: disposition.turn_id,
+          chatPersisted: disposition.chat_persisted === true,
+          chatTurnState: disposition.chat_turn_state
+        });
+        context.chatTurnState = disposition.chat_turn_state;
+        context.keepConversationLock = disposition.chat_turn_state === "pending";
+      } else if (chatTurnIds) {
+        context.chatSession?.markPendingUncertain?.();
+        context.keepConversationLock = true;
+      }
+
+      const failedChatTurn = disposition?.chat_turn_state === "failed";
+      const pendingChatTurn = disposition?.chat_turn_state === "pending";
+      if (!requestResult.ok || !data.consensus_response || failedChatTurn || pendingChatTurn) {
+        const message = failedChatTurn || pendingChatTurn
+          ? String(
+              disposition?.error
+              || disposition?.message
+              || (pendingChatTurn
+                ? "The consensus was generated, but its conversation turn did not receive a final server status. Reload before continuing."
+                : data.consensus_response)
+              || "The consensus could not be completed."
+            )
+          : consensusErrorMessage(requestResult, data);
+        context.consensus.status = "error";
+        context.consensus.error = { message };
+        context.consensus.text = context.consensus.text || context.consensus.streamText;
+        context.phase = "failed";
+        context.bookmark.status = "failed";
+        context.credentials = null;
+        context.attachments = [];
+        registry.setStatus(context.runId, "failed", context.consensus.error);
+        trackAppEvent("app_consensus_completed", { status: "error", trigger, included_models: successfulAnswers });
+        return data;
+      }
+
+      if (Array.isArray(data.sources)) context.evidenceSources = data.sources.map(source => ({ ...source }));
+      context.consensus.status = "complete";
+      context.consensus.text = String(data.consensus_response || context.consensus.text || "");
+      context.consensus.streamText = context.consensus.text;
+      context.consensus.differences = String(data.differences || "");
+      context.consensus.differencesData = data.differences_data || null;
+      context.consensus.sources = context.evidenceSources.map(source => ({ ...source }));
+      context.consensus.resultId = data.result_id || null;
+      context.consensus.modelLabels = modelLabels;
+      context.consensus.citationMeta = contextCitationMeta(context);
+
+      const modelAnswers = data.model_answers && typeof data.model_answers === "object"
+        && Object.keys(data.model_answers).length
+        ? data.model_answers
+        : runModelAnswers(context);
+      const completedTurn = {
+        turn_id: data.turn_id || chatTurnIds?.turnId || "",
+        question: context.question,
+        consensus: context.consensus.text,
+        differences: context.consensus.differences,
+        differences_data: context.consensus.differencesData,
+        sources: context.evidenceSources.map(source => ({ ...source })),
+        model_answers: modelAnswers,
+        attachments: context.attachmentMeta.map(item => ({ ...item }))
+      };
+      context.consensus.completedTurn = completedTurn;
+
+      const conversation = {
+        runId: context.runId,
+        auth: context.auth,
+        bookmarkId: context.bookmark.id,
+        chatId: data.chat_persisted === true && data.chat_turn_state === "completed"
+          ? data.chat_id : null,
+        turnId: data.chat_persisted === true && data.chat_turn_state === "completed"
+          ? data.turn_id : null,
+        sources: context.evidenceSources.map(source => ({ ...source })),
+        modelResponses: Object.fromEntries(Object.entries(modelAnswers).map(([provider, item]) => [
+          provider,
+          typeof item === "string" ? item : String(item?.answer || "")
+        ]))
+      };
+      context.consensus.bookmarkPayload = {
+        question: context.question,
+        resultId: context.consensus.resultId,
+        previousQuestion: context.previousExchange?.question || "",
+        previousTurn: context.previousExchange?.turn || null,
+        consensusText: context.consensus.text,
+        differencesText: context.consensus.differences,
+        differencesData: context.consensus.differencesData,
+        conversation
+      };
+
+      const completedBasis = {
+        bookmarkId: context.bookmark.id,
+        chatId: conversation.chatId || context.chatSession?.activeChatId || "",
+        turnId: conversation.turnId || context.chatSession?.activeTurnId || completedTurn.turn_id,
+        question: context.question,
+        consensus: context.consensus.text,
+        currentTurn: completedTurn,
+        historyTurns: context.historyTurns,
+        title: context.bookmark.title || context.question
+      };
+      context.completedBasis = completedBasis;
+      context.phase = "done";
+      context.bookmark.status = "succeeded";
+
+      let savePromise = null;
+      if (registry.isAuthCurrent(context) && data.chat_replayed !== true) {
+        // Enqueue the authoritative consensus snapshot before publishing the
+        // terminal status. Otherwise an older model snapshot from the same
+        // bookmark can briefly make the sidebar row look fully persisted.
+        savePromise = window.saveBookmarkConsensus?.(
+          context.question,
+          context.consensus.text,
+          context.consensus.differences,
+          context.consensus.differencesData,
+          context.consensus.resultId,
+          context.config.consensusModel,
+          modelLabels,
+          context.previousExchange?.question || "",
+          context.previousExchange?.turn || null,
+          conversation
+        );
+        context.persistence.consensusPromise = savePromise || null;
+        savePromise?.catch?.(() => undefined);
+      } else if (data.chat_replayed === true) {
+        context.persistence.consensusWrite = true;
+      }
+
+      context.credentials = null;
+      context.attachments = [];
+      registry.setStatus(context.runId, "succeeded");
+      registry.setCompletedBasis(context.runId, completedBasis);
+
+      if (registry.isAuthCurrent(context) && data.chat_replayed !== true) {
+        const best = context.consensus.differencesData?.best_model || parseBestModel(context.consensus.differences);
+        if (best) window.recordModelVote?.(best, "BestModel", context.consensus.resultId);
+      }
+      if (registry.isVisible(context.runId) && data.chat_replayed !== true) {
+        window.App.watch?.showFeatureNudge?.();
+      }
+      trackAppEvent("app_consensus_completed", {
+        status: data.error ? "partial" : "success",
+        trigger,
+        included_models: successfulAnswers
+      });
+      return data;
+    } catch (error) {
+      if (isAbortError(error) || !registry.isExecuting(context.runId)) return null;
+      context.chatSession?.markPendingUncertain?.();
+      if (context.chatSession?.pendingTurnId) context.keepConversationLock = true;
+      context.consensus.status = "error";
+      context.consensus.error = { message: error?.message || "The consensus request failed." };
+      context.consensus.text = context.consensus.text || context.consensus.streamText;
+      context.phase = "failed";
+      context.bookmark.status = "failed";
+      context.credentials = null;
+      context.attachments = [];
+      registry.setStatus(context.runId, "failed", context.consensus.error);
+      window.App.reportCriticalError?.({
+        type: "consensus_failed",
+        phase: "consensus_connection",
+        message: "The consensus request ended without a confirmed result.",
+        details: `run ${context.requestIdentity}`
+      });
+      trackAppEvent("app_consensus_completed", {
+        status: context.consensus.text ? "partial" : "error",
+        trigger,
+        included_models: successfulAnswers
+      });
+      return null;
+    } finally {
+      context.controllers.consensus = null;
+      if (registry.isVisible(context.runId)) registry.renderVisible();
+      window.App.syncSendButtonRunning?.();
+    }
+  };
+
   window.getConsensus = async function (trigger = "manual") {
+    const boundContext = window.App.runRegistry?.visible?.();
+    if (boundContext && window.App.runRegistry.isExecuting(boundContext.runId)) {
+      return await window.App.executeConsensusRun(boundContext, {
+        trigger,
+        dispositionOnly: trigger === "disposition"
+      });
+    }
+    // Production execution is RunContext-only. The implementation below is
+    // retained as a compatibility reference for old snapshots, but no user
+    // action may start its DOM/singleton lifecycle: it would bypass the
+    // registry's max-two admission, targeted logout cleanup and persistence
+    // ownership.
+    if (window.App.runRegistry) {
+      if (trigger === "manual") {
+        window.App.showPopup?.("Open a comparison that has answers ready before generating a consensus.");
+      }
+      return null;
+    }
     const replayPendingTurn = trigger === "replay";
     const dispositionOnly = trigger === "disposition";
     if (consensusLifecycle.isRunning()) {

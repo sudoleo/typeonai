@@ -31,14 +31,14 @@ def test_usage_storage_busy_is_retried_and_stops_before_model_fanout():
     limits = read("static/js/usage-limit.js")
 
     assert '=== "usage_storage_busy"' in query
-    assert "async function prepareWithUsageRetry" in query
-    assert "const maxAttempts = 3;" in query
+    assert "async function prepareWithRetry(payload, signal)" in query
+    assert "for (let attempt = 1; attempt <= 3; attempt += 1)" in query
     assert "window.App.usageLimit?.showTemporaryStorageBusy?.();" in query
     assert "function showTemporaryStorageBusy()" in limits
     assert "No model was asked; please try this question again in a moment." in limits
 
-    busy_branch = query.index("if (isUsageStorageBusyError(prepareData))")
-    fanout = query.index("const deepSearchActive", busy_branch)
+    busy_branch = query.index("if (!prepared.response.ok && isUsageStorageBusy(prepared.data))")
+    fanout = query.index("context.config.providers.map(provider => runProvider", busy_branch)
     assert busy_branch < fanout
 
 

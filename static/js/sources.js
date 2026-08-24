@@ -353,9 +353,11 @@ function normalizeEvidenceUrl(url) {
   }
 }
 
-function mergeEvidenceSources(incomingSources) {
-  const evidenceSources = Array.isArray(window.currentEvidenceSources)
-    ? [...window.currentEvidenceSources]
+// Pure run-local merge. Parallel callbacks pass the Evidence list from their
+// RunContext; only the visible-view adapter writes the compatibility global.
+function mergeEvidenceSourcesInto(existingSources, incomingSources) {
+  const evidenceSources = Array.isArray(existingSources)
+    ? existingSources.map(source => ({ ...source }))
     : [];
   const idMap = {};
   (incomingSources || []).forEach((src, idx) => {
@@ -381,11 +383,16 @@ function mergeEvidenceSources(incomingSources) {
     idMap[String(idx + 1)] = globalNumber;
   });
 
-  window.App.state.set("currentEvidenceSources", evidenceSources, "evidence");
+  return { evidenceSources, idMap };
+}
+
+function mergeEvidenceSources(incomingSources) {
+  const merged = mergeEvidenceSourcesInto(window.currentEvidenceSources, incomingSources);
+  window.App.state.set("currentEvidenceSources", merged.evidenceSources, "evidence");
   if (window.renderEvidenceSources) {
-    window.renderEvidenceSources(evidenceSources);
+    window.renderEvidenceSources(merged.evidenceSources);
   }
-  return idMap;
+  return merged.idMap;
 }
 
 function rewriteSourceTags(markdown, idMap) {
@@ -408,9 +415,10 @@ function registerResponseSources(markdown, incomingSources) {
   return rewriteSourceTags(markdown || "", idMap);
 }
 
-function prepareResponseSources(markdown, incomingSources) {
+function prepareResponseSourcesForEvidence(markdown, incomingSources, existingSources) {
   const sources = Array.isArray(incomingSources) ? incomingSources : [];
-  const idMap = mergeEvidenceSources(sources);
+  const merged = mergeEvidenceSourcesInto(existingSources, sources);
+  const idMap = merged.idMap;
   const mappedSources = [];
   const seen = new Set();
 
@@ -437,9 +445,24 @@ function prepareResponseSources(markdown, incomingSources) {
 
   return {
     markdown: rewriteSourceTags(markdown || "", idMap),
-    sources: mappedSources
+    sources: mappedSources,
+    evidenceSources: merged.evidenceSources
   };
 }
+
+function prepareResponseSources(markdown, incomingSources) {
+  const prepared = prepareResponseSourcesForEvidence(
+    markdown,
+    incomingSources,
+    window.currentEvidenceSources
+  );
+  window.App.state.set("currentEvidenceSources", prepared.evidenceSources, "evidence");
+  window.renderEvidenceSources?.(prepared.evidenceSources);
+  return prepared;
+}
+
+window.App = window.App || {};
+window.App.prepareResponseSourcesForEvidence = prepareResponseSourcesForEvidence;
 
 function renderModelResponseWithSources(outputEl, markdown, incomingSources) {
   const prepared = prepareResponseSources(markdown, incomingSources || []);

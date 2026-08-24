@@ -104,19 +104,22 @@ def test_share_requests_use_auth_snapshots_abort_controllers_and_view_epochs():
 def test_complete_model_failure_is_an_error_and_marker_legend_is_not_cleared():
     query = read("static/js/query-send.js")
 
-    assert 'markQueryBlockingError("All selected model requests failed.")' in query
-    assert 'status: "error"' in query
-    assert 'document.getElementById("consensusAnswerBody")' in query
+    assert 'finishFailed(context, "All selected model requests failed.")' in query
+    assert 'type: "run_failed"' in query
+    # Query callbacks mutate only their RunContext. The selected-view adapter
+    # owns all response/consensus DOM writes.
+    assert 'document.getElementById("consensusAnswerBody")' not in query
     assert 'document.getElementById("consensusResponse").querySelector("p")' not in query
 
 
 def test_minimum_model_count_is_rechecked_after_attachment_filter_before_usage():
     query = read("static/js/query-send.js")
-    filtered_check = query.index("selectedProviderConfigsForRun.length < 2")
-    usage_start = query.index("window.App.usageRun.start", filtered_check)
+    filtered_check = query.index("if (providers.length < 2)")
+    usage_start = query.index("const usage = createUsage", filtered_check)
 
     assert filtered_check < usage_start
-    assert 'reason: "minimum_models_after_filters"' in query
+    assert "const providers = selectedProviders(attachments.length, deepSearch);" in query
+    assert 'provider === "DeepSeek" && attachmentCount > 0' in query
 
 
 def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
@@ -162,9 +165,13 @@ def test_bookmark_restore_uses_owned_run_state_and_token_wait_is_fenced():
 
     assert 'window.App.state.set("lastQuestion", displayQuestion, "run")' in firebase
     assert "lastQuestion = displayQuestion" not in firebase
-    token_wait = section(query, "validIdToken = await queryAuthUser.getIdToken()", "if (!validIdToken)")
-    assert "isActiveQueryRun(queryRunId)" in token_wait
-    assert "queryAuthIsCurrent()" in token_wait
+    token_wait = section(
+        query,
+        "idToken = await context.auth.user?.getIdToken?.()",
+        "if (!idToken)",
+    )
+    assert "runIsCurrent(context)" in token_wait
+    assert "registry.isAuthCurrent(context)" in query
 
 
 def test_bookmark_load_failure_has_a_visible_retry_state():

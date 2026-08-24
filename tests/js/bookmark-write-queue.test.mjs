@@ -55,4 +55,26 @@ describe("bookmark write queue", () => {
     await Promise.allSettled([failedModel, consensus]);
     expect(events).toEqual(["model", "consensus"]);
   });
+
+  it("serializes the same account resource across rapid auth generations", async () => {
+    const { enqueueBookmarkWrite } = queueHarness();
+    const events = [];
+    let releaseOldLogin;
+    const oldLoginGate = new Promise(resolve => { releaseOldLogin = resolve; });
+
+    const oldWrite = enqueueBookmarkWrite("same-uid", 1, "bookmark", async () => {
+      events.push("old:start");
+      await oldLoginGate;
+      events.push("old:end");
+    });
+    const newWrite = enqueueBookmarkWrite("same-uid", 2, "bookmark", () => {
+      events.push("new");
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(events).toEqual(["old:start"]);
+    releaseOldLogin();
+    await Promise.all([oldWrite, newWrite]);
+    expect(events).toEqual(["old:start", "old:end", "new"]);
+  });
 });

@@ -214,7 +214,8 @@ behalten die bisherige Policy während der weiteren Style-Migration.
 
 Geladen werden (Reihenfolge ist Vertrag, steht in `static/js/bundles.json`,
 siehe §8): zuerst die synchronen `app-bootstrap.js`, `app-state.js`,
-`auth-session-state.js`, `watch-state.js` und `error-reporter.js` (Gruppe
+`auth-session-state.js`, `run-registry.js`, `watch-state.js` und
+`error-reporter.js` (Gruppe
 `head`, render-blockierend, weil sie den First Paint seeden), dann CDN-Libs
 (`marked`, `DOMPurify`, KaTeX + Auto-Render), der same-origin
 `email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
@@ -236,12 +237,24 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Configwerte sowie den sicheren Umami-Wrapper und stellt Agent-/Auth-/Skeleton-
   First-Paint ohne Inline-Skript her.
 - **`app-state.js`** — einzige Schreibschnittstelle für laufbezogene Frage,
-  Evidence, Citation-/Share-Kontext, Tierlimits und Spinner-Markup. Legacy-
-  `window.*`-Namen bleiben als read-only Getter erhalten; direkte Schreiber
-  werfen, jeder State-Key akzeptiert nur seinen deklarierten Owner.
+  Evidence, Citation-/Share-Kontext, Tierlimits und Spinner-Markup der
+  **gerade projizierten Ansicht**. Der autoritative State eines aktiven Laufs
+  liegt dagegen in dessen `RunContext`. Legacy-`window.*`-Namen bleiben als
+  read-only Getter erhalten; direkte Schreiber werfen, jeder State-Key
+  akzeptiert nur seinen deklarierten Owner.
 - **`auth-session-state.js`** — besitzt UID, Auth-Generation und den bekannten
   Auth-Zustand; Firebase publiziert darüber `consensio:auth-state`, asynchrone
   UI-Antworten prüfen denselben Snapshot.
+- **`run-registry.js`** — session-lokale Autorität für parallele Browser-Läufe.
+  `window.App.runRegistry` besitzt höchstens zwei gleichzeitig ausführende
+  `RunContext`s, eindeutige Run-/Request-IDs, Status/Phase, eingefrorene
+  Provider-/Modell-/Mode-/Deep-Search-/Own-Key-Konfiguration, Auth-Snapshot,
+  private ChatSession, Usage-Key, Attachments, Evidence, Modell-/Consensus-
+  Puffer, AbortController, Bookmark-/Persistenzstatus und Fehler. Es trennt
+  `visibleRunId`, `selectedConversationBasis` und eine geöffnete gespeicherte
+  Ansicht; Sichtwechsel ändern niemals die Ausführung. Pro Chat-/Bookmark-
+  Basis verhindert ein Lock zwei gleichzeitige Follow-ups; bei unklarer
+  serverseitiger Turn-Disposition bleibt der Fence bis zum Session-Reset.
 - **`watch-state.js`** — besitzt Telegram-, Limit-, Request- und Session-Epoch-
   State des Watch-Frontends. `watch.js` hält nur Rendering und Produktaktionen.
 - **`app-dom-events.js`** — zentrale Event-Delegation für Bookmarks, Send,
@@ -263,9 +276,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `trackAppEvent`, `exitHeroMode`) sowie den zentralen
   `window.App.renderUsageDisplay`-Renderer. Dieser ignoriert fehlende Usage-Felder
   aus parallelen Antworten und bewahrt den DOM-/Layout-Vertrag (Label links,
-  fetter Wert rechts). `window.App.usageRun` hält einen logischen
-  Idempotency-Key pro UI-Lauf, geteilt von `/prepare`, allen `/ask_*` und
-  `/consensus`. `setAppTitle` setzt den Standardtitel oder
+  fetter Wert rechts). Jeder `RunContext.usage` hält seinen logischen
+  Idempotency-Key, geteilt von `/prepare`, allen `/ask_*` und `/consensus` genau
+  dieses Laufs; `window.App.usageRun` ist nur die Legacy-/UI-Brücke.
+  `setAppTitle` setzt den Standardtitel oder
   einen gekürzten, fragebezogenen Browser-Tab-Titel; `exitHeroMode` schaltet
   Antwortbereich und Input vom zentrierten Leerzustand in den Laufzustand.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
@@ -344,10 +358,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   pflegt aria/title auf allen. Eine geschlossene Sidebar wird zusätzlich
   `inert` + `aria-hidden`, damit ihre offscreen liegenden Controls weder in der
   Tab-Reihenfolge noch im Accessibility-Tree bleiben. Darunter liegt
-  `#newRunButton` („New comparison“) liegt darunter als vollbreites
-  Navigationselement: derselbe saubere Ausgangszustand wie
-  `firebase.js::resetLoadedRunAfterLogout` (Streams abbrechen, Lauf +
-  Share-/Bookmark-Kontext leeren, `is-hero` zurück).
+  `#newRunButton` („New comparison“) als vollbreites Navigationselement. Er
+  leert über `runRegistry.clearVisible()` nur die aktuelle Projektion samt
+  Fortsetzungsbasis und kehrt in `is-hero` zurück; aktive Runs und deren
+  Bookmark-Saves laufen weiter. Nur
+  `firebase.js::resetLoadedRunAfterLogout` cancelt/verwirft sämtliche Contexts.
 - **Reading Chrome** — `app-init.js` beobachtet beim lesbaren Consensus den
   Window-Scroll und im geöffneten Watch-Dashboard dessen eigenen
   Scroll-Container. Nach deutlichem Abwärtsscrollen fahren der fixierte
@@ -1031,7 +1046,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Vorher fiel jeder Turn beim Rutschen in den Verlauf auf den Judge-Freitext
   zurück — inklusive dessen `BestModel:`-Zeile (User-Befund 2026-08-17).
   Die Archivfassung ist statisch: keine `.diff-jump-link`s (sie zeigten auf die
-  Antwortboxen des NEUESTEN Laufs) und kein Resolve-Knopf (eine Resolve-Runde
+  Antwortboxen des aktuell projizierten Laufs) und kein Resolve-Knopf (eine Resolve-Runde
   läuft gegen die Modelle des aktiven Laufs), ein persistiertes
   `diff.resolution` bleibt als Ergebnis sichtbar. Die Modellnamen kommen über
   `storedModelLabeller(turnData.model_answers)` aus dem Turn selbst statt aus
@@ -1075,17 +1090,33 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`consensus-run.js`** — `window.getConsensus`: baut `/consensus`-Payload, fährt
   den SSE-Stream, rendert Ergebnis + Citation/Share-Meta und archiviert jeden
   abgeschlossenen Turn inklusive turnbezogener Quellen, Differences und
-  Modellantworten. `parseBestModel`.
-- **`chat-session.js`** — session-lokaler `window.App.chatSession`-State für
-  completed aktive Basis, pending Turn/Context, stabile `client_request_id`,
-  zugehörigen Usage-Key und whitelisted Run-Metadaten. Das Modul hält keine
-  Provider-Keys oder Antworten, kapselt Chat-/Turn-Anlage, Context-Build samt
-  begrenztem 202-Retry und owner-gebundene Turn-Reconciliation und muss nach
-  `app-core.js`, aber vor `consensus-run.js` geladen werden.
+  Modellantworten. Der Multi-Run-Pfad ist
+  `window.App.executeConsensusRun(context, options)`: Payload, Stream,
+  Turn-Disposition und Persistenz bleiben am übergebenen `RunContext`; nur
+  dessen sichtbare Projektion darf den Haupt-DOM ändern. `window.getConsensus`
+  bleibt als Legacy-Brücke für Demo/alte gespeicherte Ansichten. `parseBestModel`.
+- **`chat-session.js`** — `window.App.createChatSession(initial)` erzeugt pro
+  `RunContext` eine private Chat-Zustandsmaschine für completed Basis, pending
+  Turn/Context, stabile `client_request_id`, Usage-Key und whitelisted
+  Run-Metadaten. Sie hält keine Provider-Antworten, kapselt Chat-/Turn-Anlage,
+  Context-Build samt begrenztem 202-Retry und owner-gebundene Turn-
+  Reconciliation. `window.App.chatSession` bleibt nur der Kompatibilitäts-
+  Spiegel der sichtbaren Ansicht. Das Modul muss nach `app-core.js`, aber vor
+  `consensus-run.js` geladen werden.
+- **`run-view.js`** — einziger Projektor von `runRegistry.visibleRunId` in den
+  gemeinsam genutzten Ergebnis-DOM und die Kompatibilitäts-Globals. Er baut
+  Modellboxen, Quellen, Consensus/Differences, Chat-Verlauf, Pipeline und
+  gefrorene Mode-/Modell-Labels aus dem Context wieder auf. Registry-Ereignisse
+  dürfen für Hintergrundläufe nur deren anklickbare Sidebar-Zeile aktualisieren
+  (Preparing/Models answering/Writing consensus/Completed/Failed/Canceled).
 - **`query-send.js`** — `window.sendQuestion`: `/prepare` + `/ask_*`-Fan-out,
   vorgelagerte Turn-/Context-Bindung, Streaming-Rendering, Usage/Tier-UI,
-  Agent-Mode-gebundener Auto-Consensus-Trigger, Query-Run-State
-  (`isQueryRequestRunning`, `cancelCurrentQuery`). Ein valider Agent-Mode-Lauf
+  Agent-Mode-gebundener Auto-Consensus-Trigger und vollständiger RunContext-
+  Lifecycle. Vor dem ersten `await` werden Frage, Mode, Provider-/Modelllabels,
+  Consensus-Engine, Flags, Auth, Attachments, Conversation-Basis und lokale
+  Credentials gesnapshottet. Jeder Callback und jedes Save adressiert danach
+  explizit `runId`/Context; `cancelCurrentQuery(runId)` bricht gezielt nur
+  dessen Controller ab. Ein valider Agent-Mode-Lauf
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand; der
   Direktvergleich behält den Hero-/Screenshot-Aufbau. Vor
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
@@ -1164,10 +1195,15 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   sechs Modell-Writes und repariert als autoritativer Vollsnapshot auch einen
   fehlgeschlagenen Modell-Write. Die Firestore-Transaktion behält zusätzlich
   ein erhöhtes Konflikt-Retry-Budget für alte, noch parallel schreibende Clients.
-  Ab Sendestart reserviert `window.App.bookmarkSession` für eingeloggte Nutzer
-  sofort einen gesperrten, animierten Bookmark-Rahmen in der Sidebar. Modell-
-  und Consensus-Saves aktualisieren darin nur die Metadaten; anklickbar wird
-  der Eintrag erst, wenn weder Query/Consensus noch ein zugehöriger Save läuft.
+  Im Multi-Run-Pfad tragen `saveBookmark`/`saveBookmarkConsensus` explizit
+  `runId`, Bookmark-ID, Auth-Snapshot, Quellen, Attachments und Chat-Bindung.
+  Die Queue zählt offene Writes im zugehörigen `RunContext`; weder aktuelle
+  Globals noch ein später ausgewählter Bookmark dürfen Ziel oder Payload
+  ändern. Ab Sendestart reserviert jeder Context für eingeloggte Nutzer sofort
+  einen eigenen gesperrten, animierten Bookmark-Rahmen in der Sidebar. Modell-
+  und Consensus-Saves aktualisieren nur diese Zeile; endgültig bereit wird sie
+  erst nach terminalem Erfolg, bestätigtem Consensus-Write und null offenen
+  Writes.
   Scheitert ein neuer Lauf vor dem ersten Save, verschwindet nur der lokale
   Platzhalter; bei Follow-ups wird stattdessen das vorige Bookmark restauriert.
   Beim Restore stammen die
@@ -1175,9 +1211,9 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   gespeicherten `model_labels`; die aktuellen Modell-Selects und `localStorage`
   bleiben unverändert und werden erst für einen neuen Lauf wieder in die UI
   gespiegelt. Alte Bookmarks ohne Provenienz zeigen keinen erfundenen aktuellen
-  Modellnamen. `window.App.bookmarkSession` hält eine stabile Bookmark-ID vom
-  ersten Turn bis zu „New comparison“/Logout; dadurch aktualisieren Modell- und
-  Consensus-Dual-Writes dasselbe Sidebar-Element. Chat-gebundene Bookmarks laden
+  Modellnamen. `window.App.bookmarkSession` ist nur der Kompatibilitäts-Spiegel
+  der sichtbaren Context-/Bookmark-Ansicht; die stabile ID selbst gehört dem
+  jeweiligen `RunContext`. Chat-gebundene Bookmarks laden
   beim Öffnen alle completed Transcript-Seiten, rendern alle Vorgänger per
   `renderStoredTurns()` und stellen die letzte completed Chat-/Turn-Basis wieder
   her. Transiente 429/5xx werden einmal wiederholt; fehlende oder zyklische
@@ -1193,8 +1229,10 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   Erfolgszustand, ohne einen Probe-Login mit dem eingesendeten Legacy-Passwort.
   Logout löscht zuerst erfolgreich die HttpOnly-Session und wartet danach
   Firebase `signOut()` ab; erst dann wird der ausgeloggte Zustand gezeigt.
-  Dabei werden laufende Query-/Consensus-Streams abgebrochen, Run-, Usage-,
-  Watch-, Bookmark-/Share-UI und Detail-Caches sowie lokal gespeicherte eigene
+  Dabei ruft der Client `runRegistry.clearAll("logout")` auf: alle laufenden
+  Query-/Consensus-Streams werden abgebrochen, alle Conversation-Fences und
+  Contexts verworfen sowie Usage-, Watch-, Bookmark-/Share-UI und Detail-Caches
+  und lokal gespeicherte eigene
   Provider-API-Keys geleert und der Hero-
   Ausgangszustand wiederhergestellt. UID/Auth-Generation schützen nach jedem
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
@@ -1211,16 +1249,48 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
 - **`static/app-ui.js`** — alleiniger Binder für System-Prompt-/Help-Modal
   (keine zweite Bindung mehr in `app-init.js`) + App-Width-Resizer.
 
-**Abhängigkeitsrichtung**: Bootstrap-/State-Owner → `app-core.js` → Feature-
-Module → `app-init.js`/`app-dom-events.js`. Classic-Script-Module kommunizieren
-weiter über `window.App`; die verbliebenen `window.*`-Namen sind überwiegend
-Kompatibilitäts-Getter oder schmale Funktionsbrücken. DOM bleibt für View-State
-wie `.excluded` und Ergebnis-Datasets maßgeblich, nicht mehr für entfernte
-Controls wie `#consensusButton`, `#toggleAllButton` oder `#apiTestArea`.
+**Abhängigkeitsrichtung**: Bootstrap-/State-Owner + `run-registry.js` →
+`app-core.js` → Feature-Module/`run-view.js` →
+`app-init.js`/`app-dom-events.js`. Classic-Script-Module kommunizieren weiter
+über `window.App`; die verbliebenen `window.*`-Namen sind überwiegend
+Kompatibilitäts-Getter oder schmale Funktionsbrücken. DOM-/Control-State wie
+`.excluded` konfiguriert den **nächsten** Lauf. Ergebnis-Datasets und Globals
+sind nur Projektion der sichtbaren Ansicht und dürfen nie als Quelle für einen
+laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
+`#consensusButton`, `#toggleAllButton` oder `#apiTestArea` sind kein Vertrag.
 
 ---
 
 ## 4. Kern-Flows
+
+### Browser-Run-Lifecycle und Sichtwechsel
+
+- Ein Send erzeugt vor dem ersten Netzwerk-`await` genau einen `RunContext` im
+  `runRegistry`. In einer Browser-Session dürfen höchstens **zwei** Contexts im
+  Status `starting|running` sein; ein dritter Start wird vor `/prepare`
+  abgewiesen. Ein schneller zweiter Klick innerhalb desselben Gestenfensters
+  startet beziehungsweise cancelt nicht versehentlich erneut.
+- Ausführung, sichtbare Ergebnisansicht und Fortsetzungsbasis sind drei
+  getrennte Zustände. „New comparison“ ruft `clearVisible()` auf und leert nur
+  Projektion/Conversation-Auswahl; laufende Fetches gehen im Hintergrund weiter.
+  Ein Klick auf `.bookmark.run-entry[data-run-id]` setzt `visibleRunId` und
+  projiziert den exakten Zwischen-/Endstand dieses Contexts zurück. Nur Logout
+  beziehungsweise ein Auth-Reset cancelt und verwirft alle Runs.
+- Jeder asynchrone Callback prüft Run- und Auth-Identität, mutiert ausschließlich
+  den eigenen Context und rendert den Haupt-DOM nur, wenn dessen `runId` gerade
+  sichtbar ist. Quellen-Mapping arbeitet auf expliziten Listen statt
+  `window.currentEvidenceSources`; `/consensus`, Resolve und Bookmark-Saves
+  bauen ihre Payloads aus dem gebundenen Context, nie aus Antwortboxen oder
+  „current“-Globals.
+- Cancel ist run-spezifisch: Haupt-Send/Cancel betrifft nur den sichtbaren Run;
+  Registry- und Lifecycle-APIs akzeptieren eine `runId`. Provider-Controller,
+  Consensus-Controller und sensible Credentials/Attachment-Bytes bleiben pro
+  Context und werden bei terminalem Ende bereinigt.
+- Zwei frische Vergleiche dürfen parallel laufen. Zwei Follow-ups derselben
+  Conversation-/Bookmark-Basis sind gesperrt, weil serverseitige Turn-Reihenfolge
+  und Bookmark-Mutation seriell bleiben müssen. Ein normal terminaler Turn gibt
+  das Lock frei; ein abgebrochener/fehlgeschlagener Turn mit unbekannter
+  serverseitiger Disposition behält den Fence bis zum Reload/Session-Reset.
 
 ### Anfrage an Modelle (Streaming)
 1. Frontend `sendQuestion` (`query-send.js`) ruft zuerst **`POST /prepare`**:
@@ -1285,8 +1355,14 @@ Controls wie `#consensusButton`, `#toggleAllButton` oder `#apiTestArea`.
 Nach jedem erfolgreichen Consensus kann derselbe owner-gebundene Chat um eine
 weitere Frage ergänzt werden. Es gibt keine harte Turn-2-Sperre mehr: Turn 2,
 Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Version.
-- Frontend: `window.App.followup` (in `consensus-run.js`) hält **nur noch
-  State, keine Fläche**. **Seit 2026-08-07 hat der Composer überhaupt keine
+- Frontend: Die autoritative Fortsetzungsbasis liegt getrennt von der Ansicht
+  in `runRegistry.selectedConversationBasis`; ein neuer `RunContext` erhält
+  davon einen Snapshot und eine eigene `ChatSession`. `window.App.followup`
+  (in `consensus-run.js`) hält **nur noch den Kompatibilitäts-/DOM-State der
+  sichtbaren Projektion, keine Ausführungsautorität und keine eigene Fläche**.
+  `run-view.js` baut ihn bei jedem Sichtwechsel aus `historyTurns` und der
+  completed Basis des gewählten Contexts neu auf. **Seit 2026-08-07 hat der
+  Composer überhaupt keine
   Follow-up-Affordance mehr** (User-Vorgabe: „Das Follow-up-Feature ist
   überflüssig, Chats sollten standardmäßig fortführbar sein"): der frühere
   Kontext-Chip (`#followupChipBar`, `.followup-chip`, `discard()`/`arm()`) und
@@ -1294,43 +1370,41 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   entfallen, ebenso der leere `#followupBar` in der Provenance-Zeile. Davor war
   bereits (2026-08-06) das **Composer-Gate** (`#composerGate`,
   `body.composer-locked`, Zwangswahl) gefallen. `isArmed()` ist jetzt schlicht
-  „es gibt einen fortsetzbaren Turn": `offer()` merkt sich das Paar, die
-  nächste Frage geht mit seinem Kontext raus, der Platzhalter wird zu „Ask a
-  follow-up question". Der **einzige Ausstieg ist `#newRunButton`** in der
-  Sidebar. Er räumt über `clearResponseBoxes` auch `#threadHistory`
-  (`clearHistory()`) — die Modelle sehen die archivierten Turns nicht, also
-  darf der Thread sie nicht behaupten. **Für alle Nutzer offen** (seit
+  „die sichtbare Projektion enthält einen fortsetzbaren Turn". Die nächste
+  Frage liest jedoch ausschließlich die gewählte Registry-Basis. Der **einzige
+  Ausstieg ist `#newRunButton`** in der Sidebar: Er leert über
+  `clearResponseBoxes` Sichtprojektion, Fortsetzungsbasis und `#threadHistory`,
+  ohne einen Hintergrundlauf abzubrechen. **Für alle Nutzer offen** (seit
   2026-08-04): kein Pro-Gate (Badge, Teaser-Modal, 403 `pro_required`), ein
   Follow-up zählt als ein normaler Lauf gegen das Tagesbudget.
-  Ein restauriertes Bookmark landet über denselben `offer()`-Pfad direkt im
-  fortsetzbaren Zustand.
+  Ein restauriertes Bookmark setzt über `showSavedView(view, basis)` dieselbe
+  getrennte Fortsetzungsbasis und projiziert sie anschließend über `offer()`.
   `syncInputLock()` zieht nur noch die Login-Schranke nach und setzt den
   Platzhalter passend zum Kontext-Zustand; `updateQuestionInputAccess` ruft es
   am Ende selbst auf, sonst überschriebe es den Follow-up-Platzhalter nach
   jedem Auth-Update.
-  `query-send.js` konsumiert den UI-State beim Senden. Hat
-  `chat-session.js` eine bestätigte `activeChatId` plus `activeTurnId`, wird
+  `query-send.js` snapshottet die Registry-Basis beim Senden. Hat die neu
+  erzeugte private `ChatSession` eine bestätigte `activeChatId` plus
+  `activeTurnId`, wird
   **kein** Legacy-`context` gesendet. Stattdessen entsteht nach erfolgreichem
   `/prepare` der pending Follow-up-Turn; der Browser baut vor dem Provider-Fan-out genau
   einmal `/context` und hängt dasselbe
   `{chat_id, turn_id, context_version_id}` an alle sechs `/ask_*` sowie später
   an `/consensus`. `ready` und `degraded` sind gleichermaßen verwendbare,
   autoritative Versionen; `202 building` wird begrenzt wiederholt.
-  Erst nachdem `/prepare` und der optionale Context-Build erfolgreich waren, archiviert
-  `archiveCurrentExchange()` die bisherige Frage und den bereits gerenderten
-  Consensus samt Agreement als statischen Turn in `#threadHistory`; erst danach
-  uebernimmt `sentMessage.promote()` die neue Frage in den aktiven
-  `#threadAsk`. Sichtbar ist sie da laengst — als `#threadPendingAsk` an
-  derselben Stelle im Thread, sodass die Uebernahme nichts verschiebt. Der alte Live-Renderbaum wird
-  geleert und für die neue Antwort wiederverwendet, sodass IDs einmalig bleiben
-  und die vorherige Antwort trotzdem sichtbar bleibt. Interaktive Marker der
-  Archivkopie werden zu reinen Anzeigeelementen. Das archivierte Agreement
+  Der Context übernimmt den vorherigen completed Turn in `historyTurns`; der
+  Projektor rendert ihn als statischen Turn in `#threadHistory` und die neue
+  Frage in `#threadAsk`. Sichtwechsel bauen beide Bereiche vollständig aus dem
+  gewählten Context neu auf; der alte Live-Renderbaum ist nie die Datenquelle.
+  Interaktive Marker der Archivkopie werden zu reinen Anzeigeelementen. Das
+  archivierte Agreement
   nutzt mit einem wachsenden `.verdict-main` die volle Threadbreite; die
   Judge-Fußnote bleibt wie im Live-Footer kompakt inline. Differences, Quellen
   und Modellantworten werden mit dem Turn gespeichert und in der Archivkopie
   turnbezogen gerendert; Citation-Auflösung verwendet nicht den globalen
   `window.currentEvidenceSources`-Stand eines späteren Turns. „New comparison“/
-  `clearResponseBoxes` leert auch den Verlauf.
+  `clearResponseBoxes` leert nur den sichtbaren Verlauf; der Context eines
+  laufenden Hintergrund-Runs bleibt erhalten.
 - Alte Bookmark-Restores bzw. Reloads ohne aktive Chat-Zuordnung bleiben bis
   zur späteren History-Migration bewusst im Legacy-Pfad: `context` enthält
   genau das letzte `{previous_question, previous_consensus}`-Paar. Dieser Pfad
@@ -1363,20 +1437,26 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   strittige **Thema** statt einer Zählung (deterministisch aus
   `differences[].claim`, kein zusätzlicher LLM-Call). Hintergrund und
   Entscheidungen: `docs/consensus-inline-confidence-brief.md`.
-- `getConsensus` (`consensus-run.js`) sammelt die vorhandenen Modellantworten +
-  `excluded_models` + `consensus_model` und ruft **`POST /consensus`**
-  (`stream:true`) mit demselben `usage_run_key`. Der Endpoint validiert/
-  konsumiert den Run idempotent und erzeugt keine zweite Usage-Einheit.
+- `executeConsensusRun(context)` (`consensus-run.js`) liest Modellantworten,
+  `excluded_models`, Modelllabels, Quellen und `consensus_model` ausschließlich
+  aus dem gebundenen Context und ruft **`POST /consensus`** (`stream:true`) mit
+  dessen `usage_run_key`. Ein späterer Sicht-/Picker-Wechsel kann den Payload
+  deshalb nicht verändern. Der Endpoint validiert/konsumiert den Run
+  idempotent und erzeugt keine zweite Usage-Einheit. `getConsensus` delegiert
+  für einen aktiven Registry-Run dorthin; sein DOM-basierter Pfad ist nur noch
+  Legacy/Demo.
 - **Chat-Turn-Persistenz und Context-Verdrahtung (Sessions 5–6):** Nach
   erfolgreichem `/prepare` legt `query-send.js` den logischen Run fest. Nur bei
-  einer aktiven Fortsetzung erzeugt `chat-session.js` den pending Turn bereits
+  einer aktiven Fortsetzung erzeugt die private ChatSession des Contexts den
+  pending Turn bereits
   **vor** Context-Build und Provider-Fan-out, weil der autoritative Context an
   diesen Ziel-Turn gebunden wird. Bei einer frischen Frage entstehen Chat und
   Turn erst, wenn `getConsensus` tatsächlich aufgerufen wird; ein Lauf ohne
   Consensus hinterlässt dadurch keinen Turn-1-Orphan. Bei einer Fortsetzung
   wird ausschließlich die durch den letzten completed Turn bestätigte
-  `activeChatId` verwendet. `activeChatId` + `activeTurnId` bezeichnen immer
-  eine completed Basis; der neue Lauf liegt bis zur autoritativen Completion
+  `activeChatId` verwendet. `activeChatId` + `activeTurnId` bezeichnen innerhalb
+  genau dieser ChatSession immer eine completed Basis; der neue Lauf liegt bis
+  zur autoritativen Completion
   separat in `pendingChatId`/`pendingTurnId`. Der Turn-Request enthält nur
   `question`, `mode`, `deep_search`, `selected_models`, `consensus_model` und die
   pro logischem Run stabile `client_request_id`.
@@ -1391,7 +1471,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   lokalen Keybestand. Keys gehen nie an `/prepare`. Erst nach einer fertigen
   `ready|degraded`-Version beginnt der Fan-out; alle `/ask_*` laden dieselbe
   Version und komprimieren nicht selbst.
-- Mit Chat-IDs sendet `getConsensus` zusätzlich globale `turn_sources` sowie
+- Mit Chat-IDs sendet `executeConsensusRun` zusätzlich die contextgebundenen
+  `turn_sources` sowie
   bei fortgesetzten Turns dieselbe `context_version_id`.
   `/consensus` akzeptiert IDs nur paarweise im 32-Hex-Format, prüft UID,
   Chat/Turn, Status, normalisierte Frage und die exakte Context-Verknüpfung
@@ -1607,13 +1688,18 @@ kostet 1 eigenen persistenten Run (außer `useOwnKeys`), Eingaben werden wie bei
 `/consensus` serverseitig gekappt (`normalize_resolve_positions`), Ergebnis
 wird **nicht** persistiert. Frontend: „Resolve with the models"-Button an
 Contradiction-Karten in `consensus-insights.js` (nur bei ≥2 beteiligten
-Modellen).
+Modellen). Vor dem ersten `await` bindet der Handler Run-ID, Auth, Frage,
+Providerpositionen, Credentials und Bookmark-ID. Eine späte Resolve-Antwort
+mutiert nur die Differences dieses Contexts, rendert nur bei weiterhin
+sichtbarer Run-ID und schreibt eine optionale Bookmark-Aktualisierung explizit
+an dessen Bookmark statt an die inzwischen geöffnete Ansicht.
 
 ### Agent Mode
 `agent-mode.js` koppelt Auto-Consensus: nach Abschluss aller Modellantworten löst
-`query-send.js` automatisch `getConsensus` aus. Run-State/Gating läuft über
-`consensus-lifecycle.js` (`startRun()→{runId,signal}`, `isActiveRun`, `finishRun`,
-`setSynthesizing`, `cancelCurrentConsensus`). Agent Mode ist die **einzige** Stelle,
+`query-send.js` automatisch `executeConsensusRun(context)` aus. Run-State/Gating
+läuft für Registry-Runs über deren Status/Controller und die kompatible
+`consensus-lifecycle.js`-Brücke (`isActiveRun`, `finishRun`, `setSynthesizing`,
+`cancelCurrentConsensus(runId)`). Agent Mode ist die **einzige** Stelle,
 die den Auto-Consensus-Toggle erzwingt/sperrt: aktiv = an, inaktiv = aus; der
 gekoppelte Settings-Schalter ist in beiden Zustaenden read-only. Standardmäßig bleiben die sechs
 Einzelantwortboxen verborgen; `#agentModeAnswersToggle` setzt ausschließlich die
@@ -2621,7 +2707,11 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   ```
   `tests/js/helpers/appWindow.mjs` lädt die Klassik-Skripte als `<script>` in ein
   frisches jsdom — sie sind keine ES-Module und lassen sich nicht importieren.
-  Deckt bisher `app-state.js`, `composer-quote.js`, `consensus-anchor.js` ab.
+  Deckt unter anderem `app-state.js`, `composer-quote.js`,
+  `consensus-anchor.js`, `run-registry.js`, `run-view.js`, getrennte
+  ChatSessions und quelllistenreines Evidence-Mapping ab. Die Multi-Run-Tests
+  prüfen Admission (max. 2), eingefrorene Config, Sichtwechsel, gezielten
+  Cancel, Logout-Cleanup, Conversation-Locks und späte Hintergrund-Callbacks.
   Hierhin gehören schrittweise die Teilstring-Prüfungen aus `test_*_ui.py`.
 - **Frontend-Build** (`npm run build`, esbuild): siehe
   `docs/frontend-build.md`. `npm run build:check` meldet ein veraltetes
@@ -2633,7 +2723,11 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   Consensus→Differences+Score inkl. Inline-Marken (`.cx-claim.is-major` als
   eigenes Steuerelement mit aria-label, keine `.cx-marker`-Punkte mehr),
   zugeklapptem `#consensusDifferencesPanel` und markenfreiem Copy-Text, Watch-Dialog mit Pflicht-Sichtbarkeit/Condition-
-  Feld, Exclude, Theme, Picker-Persistenz). Startet einen eigenen uvicorn auf
+  Feld, Exclude, Theme, Picker-Persistenz). Ein deterministischer Race-Test hält
+  zwei komplette Ask-/Consensus-Fan-outs gleichzeitig an, löst sie in
+  umgekehrter Reihenfolge, wechselt die sichtbare Run-Zeile, cancelt gezielt
+  nur einen Lauf und verifiziert getrennte Consensus-/Bookmark-Payloads sowie
+  Restore nach einer Metadaten-Aktualisierung. Startet einen eigenen uvicorn auf
   Port 8031 mit `E2E_TEST_MODE=1`, `MOCK_LLM=1` (deterministische Fixtures in
   `app/services/llm/mock_llm.py`, Seams: `_run_ask`,
   `_call_engine_text`/`_stream_engine_text`),
@@ -2859,9 +2953,11 @@ ersten Check statt eines leeren Consensus-Panels.
   ohnehin erst nach dem Parsen, ihre Position im Dokument war nie die
   Reihenfolge. Details: `docs/frontend-build.md`. Die Zwänge selbst gelten
   unverändert:
-  `app-bootstrap.js` setzt Config, die drei State-Owner laden vor Firebase und
-  den Feature-Modulen; `app-core.js` ergänzt den bestehenden `window.App`-Bus;
+  `app-bootstrap.js` setzt Config, die State-Owner und `run-registry.js` laden
+  vor Firebase und den Feature-Modulen; `app-core.js` ergänzt den bestehenden
+  `window.App`-Bus;
   `chat-session.js` muss vor `consensus-run.js` und `query-send.js` laufen;
+  `run-view.js` muss nach `consensus-run.js`, aber vor `query-send.js` laufen;
   `composer-quote.js` liegt bei `memory-edit.js` (dessen Auswahlmenü es füllt)
   und muss vor `query-send.js` stehen, das beim Senden `window.App.quote`
   abfragt;
@@ -2887,38 +2983,44 @@ ersten Check statt eines leeren Consensus-Panels.
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.App.reportCriticalError`.
+- **`window.App.runRegistry`** ist der einzige Owner paralleler Browser-Runs
+  (`create/get/update/setStatus/show/showSavedView/clearVisible/cancel/clearAll`).
+  Jeder Netzwerk-Callback erhält oder schließt über eine konkrete `runId`; ein
+  Vergleich gegen `visibleRunId` entscheidet ausschließlich über Rendering,
+  nie darüber, ob der Hintergrundlauf weiterarbeiten oder speichern darf.
 - **`window.App.emailVerification`** wird im render-blockierenden Head-Bundle
   definiert und von `firebase.js` konsumiert. Die Brücke hält
   `email-verify.js` im content-gehashten Manifest statt hinter einem separaten,
   manuell versionierten ESM-Import.
-- **`window.App.followup`** (definiert in `consensus-run.js`) ist der
-  Follow-up-Kontext- und Verlauf-State (`offer/consume/reset/render`,
+- **`window.App.followup`** (definiert in `consensus-run.js`) ist nur der
+  Follow-up-Kompatibilitäts- und Verlauf-State der sichtbaren Projektion
+  (`offer/consume/reset/render`,
   `isArmed/hasContinuableExchange/markContinuationUnavailable/
   archiveCurrentExchange/renderStoredTurn/renderStoredTurns/clearHistory`).
-  `query-send.js` (consume + archivieren beim Senden), `app-init.js` (reset in
+  `run-view.js` speist ihn aus dem gewählten Context; `query-send.js` darf ihn
+  nicht als Fortsetzungsquelle verwenden. `app-init.js` (reset in
   `clearResponseBoxes`) und `user-tier.js` (render bei Tier-Wechsel) hängen
-  daran; einziges DOM-Ziel ist `#threadHistory` in `index.html` — `render()`
-  zieht nur noch Login-Schranke und Platzhalter nach.
-- **`window.App.chatSession`** (definiert in `chat-session.js`) hält nur die
-  laufzeitlokale Chat-Zuordnung (`activeChatId` + `activeTurnId` ausschließlich
+  weiterhin daran; einziges DOM-Ziel ist `#threadHistory` in `index.html`.
+- **`window.App.createChatSession(initial)`** (definiert in `chat-session.js`)
+  erzeugt die laufzeitlokale Chat-Zuordnung jedes Contexts (`activeChatId` +
+  `activeTurnId` ausschließlich
   als completed Basis, `pendingChatId`/`pendingTurnId`/
   `pendingContextVersionId`, stabile pending Request-/Usage-ID und whitelisted
-  logische Run-Metadaten). `query-send.js` startet den State nach `/prepare`,
+  logische Run-Metadaten). `query-send.js` startet diesen privaten State nach
+  `/prepare`,
   erzeugt bei aktiven Fortsetzungen Turn und Context vor dem Provider-Fan-out
   und reconciliert mehrdeutige
   Abbrüche; `consensus-run.js` verändert ihn nur anhand der autoritativen
-  `chat_turn_state`-Disposition. `app-init.js`
-  und `firebase.js` resetten aktiven wie pending State bei Clear/Logout;
-  ein Legacy-Bookmark-Restore resetet ihn ebenfalls. Ein owner-gebundenes
-  Chat-Bookmark darf nach vollständigem Transcript-Load dagegen über
-  `restoreCompletedChat(chatId, turnId)` genau seine letzte completed Basis
-  wiederherstellen.
-- **`window.App.bookmarkSession`** (definiert in `firebase.js`) hält die stabile
-  Bookmark-Dokument-ID der sichtbaren Unterhaltung und den rein lokalen
-  Pending-Zustand (`setRunActive` plus Save-Zähler) des Sidebar-Eintrags.
-  `query-send.js` beginnt sie beim ersten Turn und synchronisiert Query- sowie
-  Consensus-Lauf; alle Bookmark-Saves verwenden dieselbe ID, ein Bookmark-
-  Restore übernimmt sie. Clear/New comparison/Logout resetten beides.
+  `chat_turn_state`-Disposition. `window.App.chatSession` bleibt nur ein durch
+  `run-view.js` gesetzter Legacy-Spiegel und ist keine Ausführungsquelle.
+  Ein owner-gebundenes Chat-Bookmark setzt nach vollständigem Transcript-Load
+  über `showSavedView` die letzte completed Basis für den nächsten Context.
+- **`window.App.bookmarkSession`** (definiert in `firebase.js`) spiegelt nur die
+  Bookmark-Dokument-ID der sichtbaren Unterhaltung. Im Multi-Run-Pfad gehören
+  ID, Pending-/Save-Zähler und Fehler zu `RunContext.bookmark`/
+  `RunContext.persistence`; alle Save-Aufrufe müssen `runId` und Bookmark-ID
+  explizit tragen. „New comparison“ ändert die Projektion, nicht diese
+  Hintergrund-Persistenz; Logout verwirft alle Contexts.
 - **`window.App.setAppTitle(question?)`** (definiert in `app-core.js`) hält den
   Standard- bzw. fragebezogenen Browser-Tab-Titel bei Query-Send, Bookmark-Open
   und Clear synchron zur aktuellen Ansicht.
@@ -2937,8 +3039,9 @@ ersten Check statt eines leeren Consensus-Panels.
   stillschweigend hinter einer zugeklappten Zeile.
 - **`window.App.consensusLifecycle.*`** ist die gezielte Run-State-Brücke
   (`startRun/isActiveRun/finishRun/setSynthesizing/isRunning/
-  markPendingCanceled/initAutoConsensusToggle`). Run-ID-Gating nicht umgehen, sonst
-  rendern alte Läufe in neue.
+  markPendingCanceled/initAutoConsensusToggle`). Für Registry-Contexts delegiert
+  sie Status, Synthese und Cancel an die explizite Run-ID; der Singleton-Pfad
+  ist nur Legacy. Run-ID-Gating nicht umgehen, sonst rendern alte Läufe in neue.
 - **`window.App.watch.showFeatureNudge()`** wird nach einem erfolgreichen
   Consensus-Final aufgerufen und zeigt den einmaligen, lokal dismissbaren
   Consensus-Watch-Hinweis nur für eingeloggte Nutzer mit `result_id`;
@@ -2946,11 +3049,14 @@ ersten Check statt eines leeren Consensus-Panels.
 - **`window.App.sharedModal.open(mode)` / `.close()`** koordinieren den gemeinsam
   genutzten `#shareModal` für Share und Watch einschließlich Modusklasse,
   Background-Scroll-Lock und Rückgabe des Fokus an den Auslöser.
-- **DOM-als-State**: `dataset.consensusAnswer`, `dataset.consensusSources`,
-  `dataset.responseState`, `.excluded`-Klassen sowie die session-lokalen
+- **DOM-als-View/Next-Run-State**: `dataset.consensusAnswer`,
+  `dataset.consensusSources` und `dataset.responseState` spiegeln nur den
+  sichtbaren Context; `.excluded`-Klassen konfigurieren die nächste
+  Run-Aufstellung. Die session-lokalen
   `.agent-mode-show-answers`-, `.direct-comparison-active`- und die persistente
   `.agreement-score-hidden`-/`.agreement-verdict-hidden`-Body-Klassen
-  u. a. sind echte State-Quellen.
+  u. a. bleiben UI-/Darstellungs-State, sind aber keine Ausführungsquelle eines
+  bereits gestarteten Runs.
   Vorsicht beim Umbauen von Markup. Alte, nicht vorhandene Control-IDs
   `#consensusButton`, `#toggleAllButton` und `#apiTestArea` sind kein Vertrag mehr.
 - **Jinja↔JS-Brücke**: Config geht nur über die escaped `data-*`-Attribute von

@@ -241,13 +241,14 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
         'streamSSERequest("/consensus", consensusPayload'
     )
     assert "window.saveBookmarkConsensus(" in consensus
-    assert query.count("window.saveBookmark(") == 6
+    assert "window.saveBookmark?.(" in query
+    assert "context.config.providers.map(provider => runProvider(" in query
     assert "window.App?.chatSession?.reset?.();" in firebase
     assert "window.App.chatSession?.reset?.();" in app_init
-    assert "chatSession?.beginRun?.({" in query
-    assert query.count("attachConversationContext(payload);") == 6
-    assert "followupContext && !authoritativeContinuation" in query
-    assert "Object.assign(payload, authoritativeContextBinding)" in query
+    assert "context.chatSession.beginRun({" in query
+    assert "function conversationPayload(context, payload)" in query
+    assert "context.previousExchange && !context.basis?.chatId" in query
+    assert "Object.assign(payload, binding)" in query
     assert "memory_api_key" not in query
     offer_block = consensus.split("offer(question, consensusText", 1)[1].split(
         "arm()", 1
@@ -290,34 +291,36 @@ def test_session6_frontend_replay_disposition_and_ui_ordering_contracts():
     assert "if (!completedReplay && bestModelFromConsensus)" in consensus
     assert 'const dispositionOnly = trigger === "disposition";' in consensus
     assert "replayPendingTurn || dispositionOnly" in consensus
-    assert 'window.getConsensus("disposition")' in query
+    assert 'trigger: "disposition", dispositionOnly: true' in query
+    assert "context.keepConversationLock = true" in query
 
     # Own-key completeness is checked before /prepare, follow-up consumption,
     # pending-turn creation, and all provider calls.
-    own_key_check = query.index("const requiredOwnKeyProviders")
-    assert own_key_check < query.index("window.App.followup?.consume?.()")
-    assert own_key_check < query.index("chatSession?.beginRun?.({")
-    assert own_key_check < query.index('prepareWithUsageRetry(')
+    begin_context = query.split("function beginContext(", 1)[1].split(
+        "function handComposerToRun", 1
+    )[0]
+    own_key_check = begin_context.index("const missing = validateOwnKeys")
+    assert own_key_check < begin_context.index("registry.create({")
+    send_flow = query.split("window.sendQuestion =", 1)[1]
+    assert send_flow.index("beginContext(") < send_flow.index("executeRun(context)")
 
-    # A context failure must leave the live completed predecessor untouched.
-    # rindex: the reconciliation replay above archives too, but it runs on an
-    # already-completed server turn and never builds a context.
-    context_build = query.index("await chatSession.ensureContext({")
-    archive = query.rindex("window.App.followup?.archiveCurrentExchange?.()")
-    destructive_reset = query.index("delete box.dataset.consensusAnswer")
-    evidence_reset = query.index(
-        'window.App.state.set("currentEvidenceSources", [], "evidence")'
+    # Context construction and every provider callback stay on the private
+    # session/RunContext; query-send contains no response-box resets.
+    context_build = query.index("await context.chatSession.ensureContext({")
+    provider_fanout = query.index(
+        "context.config.providers.map(provider => runProvider(context, provider, idToken"
     )
-    assert context_build < archive < destructive_reset
-    assert context_build < evidence_reset
+    assert context_build < provider_fanout
+    assert "delete box.dataset.consensusAnswer" not in query
 
-    # Fresh Turn 1 remains lazy; query-send creates an early turn only inside
-    # the authoritative-continuation branch. consensus-run retains late create.
-    lifecycle = query.split("let authoritativeContextBinding = null;", 1)[1].split(
-        "function attachConversationContext", 1
+    # Fresh Turn 1 remains lazy; only a follow-up with a frozen authoritative
+    # chat basis creates its pending turn before fanout. consensus-run retains
+    # late creation for a fresh run.
+    lifecycle = query.split("context.chatSession.beginRun({", 1)[1].split(
+        'context.phase = "answers";', 1
     )[0]
     assert lifecycle.count("ensurePendingTurn") == 1
-    assert lifecycle.index("if (authoritativeContinuation)") < lifecycle.index(
+    assert lifecycle.index("if (context.previousExchange && context.basis?.chatId)") < lifecycle.index(
         "ensurePendingTurn"
     )
     assert "ensurePendingTurn" in consensus
@@ -596,12 +599,13 @@ const run = (overrides = {{}}) => session.beginRun({{
 
   // Ein unbekannter/voruebergehender Fehler bleibt ohne eigenen Text, damit
   // der Aufrufer auf den generischen Retry-Hinweis zurueckfaellt.
-  run({{ question: "Question three" }});
+  run({{ question: "Question three", isFollowup: true }});
   nextResponse = {{ ok: false, status: 503, json: async () => ({{}}) }};
   await session.ensurePendingTurn({{
     idToken: "token", question: "Question three", consensusModel: "Gemini"
   }});
   assert.strictEqual(session.lastPersistenceError, "");
+  assert.strictEqual(session.hasUncertainTurn(), true);
 
   // reset() raeumt den Grund ebenfalls ab.
   session.lastPersistenceError = "stale";
@@ -624,7 +628,7 @@ const run = (overrides = {{}}) => session.beginRun({{
 def test_query_send_shows_the_real_reason_instead_of_a_dead_end_retry():
     send = (ROOT / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
 
-    assert "chatSession?.lastPersistenceError" in send
+    assert "context.chatSession.lastPersistenceError" in send
     # Der generische Hinweis bleibt der Fallback, nicht die einzige Antwort.
     assert '|| "The conversation turn could not be prepared. Please retry."' in send
 

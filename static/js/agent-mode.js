@@ -37,6 +37,9 @@
   let agentModeTimerStartedAt = null;
   let agentModeTimerElapsedMs = 0;
   let agentModeTimerInterval = null;
+  // When a RunContext is selected, the panel is a projection of that frozen
+  // run rather than a reflection of the controls that configure the next run.
+  let projectedRunContext = null;
   // Session-only disclosure: every new grouped run starts in the clean view.
   let modelAnswersVisible = false;
 
@@ -268,6 +271,28 @@
   }
 
   function getActiveAgentModels() {
+    // Only a projected run describes itself here. Without a run -- a saved
+    // bookmark was opened, or the view was cleared -- the chips come from the
+    // controls again; reading `?.config?.agentMode !== false` off nothing was
+    // true for null as well and threw on the very next line, which aborted
+    // the bookmark restore mid-way and left the previous run on screen.
+    if (projectedRunContext && projectedRunContext.config?.agentMode !== false) {
+      return (projectedRunContext.config?.providers || []).map(function (provider) {
+        const pref = window.App.modelPrefs.find(item => item.key === provider.provider);
+        if (!pref) return null;
+        const result = projectedRunContext.modelResults?.[provider.provider] || {};
+        return {
+          pref,
+          label: pref.label,
+          model: String(provider.modelLabel || provider.modelId || pref.label),
+          responseState: String(result.status || "pending"),
+          hasAnswer: Boolean(String(result.text || result.streamText || "").trim()),
+          // A projected run is immutable. Render its frozen label instead of a
+          // picker wired to the controls for the next comparison.
+          usesDeepThinkModel: true
+        };
+      }).filter(Boolean);
+    }
     const deepSearchActive = !!document.getElementById("deepSearchToggle")?.checked;
     return window.App.modelPrefs
       .filter(pref => document.getElementById(pref.checkId)?.checked)
@@ -334,7 +359,9 @@
   }
 
   function updateAgentModeUI() {
-    const enabled = isAgentModeEnabled();
+    const enabled = projectedRunContext
+      ? projectedRunContext.config?.agentMode !== false
+      : isAgentModeEnabled();
     const panel = document.getElementById("agentModePanel");
     const switchEl = document.getElementById("agentModeSwitch");
     const menuSwitchEl = document.getElementById("agentModeMenuSwitch");
@@ -524,6 +551,9 @@
       }
     }
     updateAgentModeUI();
+    if (window.App.runRegistry?.visible?.()) {
+      window.App.runRegistry.renderVisible();
+    }
   }
 
   function setAgentModeStatus(status, message = "") {
@@ -567,6 +597,68 @@
     } else {
       window.App?.consensusPipeline?.dismiss?.();
     }
+  }
+
+  function projectAgentModeRun(context) {
+    const switched = (projectedRunContext?.runId || null) !== (context?.runId || null);
+    projectedRunContext = context || null;
+    stopAgentProgressTicker();
+    window.clearInterval(agentModeTimerInterval);
+    agentModeTimerInterval = null;
+    resetModelProgress();
+
+    if (!context || context.config?.agentMode === false) {
+      agentModeStatus = "idle";
+      agentModeStatusMessage = "";
+      agentModeTimerStartedAt = null;
+      agentModeTimerElapsedMs = 0;
+      if (switched) modelAnswersVisible = false;
+      updateAgentModeUI();
+      return;
+    }
+
+    if (switched) modelAnswersVisible = false;
+    if (context.status === "failed") {
+      agentModeStatus = "error";
+      agentModeStatusMessage = context.error?.message
+        || context.consensus?.error?.message
+        || "The run failed.";
+    } else if (context.status === "canceled") {
+      agentModeStatus = "canceled";
+      agentModeStatusMessage = "";
+    } else if (context.status === "succeeded" || context.phase === "answers_ready") {
+      agentModeStatus = "complete";
+      agentModeStatusMessage = "";
+    } else {
+      agentModeStatus = "running";
+      agentModeStatusMessage = "";
+    }
+
+    (context.config.providers || []).forEach(function (provider) {
+      const result = context.modelResults?.[provider.provider] || {};
+      const textLength = String(result.text || result.streamText || "").trim().length;
+      let progress = 0;
+      if (["complete", "error"].includes(result.status)) progress = 1;
+      else if (result.status === "streaming") {
+        progress = Math.min(0.92, 0.12 + (1 - Math.exp(-textLength / 420)) * 0.8);
+      } else if (result.status === "reasoning") progress = 0.04;
+      modelProgress.set(provider.provider, progress);
+      modelStreamStartedAt.set(provider.provider, Number(context.startedAt || Date.now()));
+    });
+
+    const startedAt = Number(context.startedAt || context.createdAt || Date.now());
+    if (agentModeStatus === "running") {
+      agentModeTimerStartedAt = startedAt;
+      agentModeTimerElapsedMs = 0;
+      updateAgentModeTimerDisplay();
+      agentModeTimerInterval = window.setInterval(updateAgentModeTimerDisplay, 1000);
+      startAgentProgressTicker();
+    } else {
+      agentModeTimerStartedAt = null;
+      agentModeTimerElapsedMs = Math.max(0, Number(context.finishedAt || Date.now()) - startedAt);
+      updateAgentModeTimerDisplay();
+    }
+    updateAgentModeUI();
   }
 
   function setModelAnswersVisible(visible, options = {}) {
@@ -621,6 +713,7 @@
   }
 
   window.setAgentModeStatus = setAgentModeStatus;
+  window.projectAgentModeRun = projectAgentModeRun;
   window.updateAgentModeUI = updateAgentModeUI;
   window.isAgentModeEnabled = isAgentModeEnabled;
   window.setAgentMode = setAgentMode;

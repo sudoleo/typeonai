@@ -134,7 +134,12 @@
     );
   }
 
-  const chatSession = {
+  // Every browser run owns one of these sessions.  The exported
+  // window.App.chatSession remains the selected-view compatibility session;
+  // run callbacks use a private instance created at start and therefore can
+  // never be rebound by opening another bookmark.
+  function createChatSession(initial = {}) {
+    const chatSession = {
     activeChatId: null,
     activeTurnId: null,
     pendingChatId: null,
@@ -144,6 +149,7 @@
     pendingUsageRunKey: null,
     logicalRun: null,
     _turnPromise: null,
+    _turnRequestUncertain: false,
     _contextPromise: null,
     _chatCreationAttempted: false,
     _persistenceDisabled: false,
@@ -243,6 +249,7 @@
       this.pendingClientRequestId = secureRequestId();
       this.pendingUsageRunKey = cleanString(usageRunKey) || null;
       this._turnPromise = null;
+      this._turnRequestUncertain = false;
       this._contextPromise = null;
       this._chatCreationAttempted = followup;
       this._persistenceDisabled = prepareSucceeded !== true || !this.pendingClientRequestId;
@@ -352,14 +359,21 @@
         const data = await responseJson(response);
         const turnId = data?.turn?.id;
         if (!response.ok || !ID_RE.test(turnId || "")) {
+          // A definitive client error happened before a valid create. A 5xx (or
+          // a malformed success) can occur after the server transaction
+          // committed but before its response read completed, so keep the
+          // conversation fenced just like a transport loss.
+          this._turnRequestUncertain = response.status >= 500 || response.ok;
           diagnostic("create_turn", response.status);
           this.lastPersistenceError = persistenceErrorMessage(data);
           return null;
         }
+        this._turnRequestUncertain = false;
         this.pendingChatId = chatId;
         this.pendingTurnId = turnId;
         return { chatId, turnId };
       } catch (_) {
+        this._turnRequestUncertain = true;
         diagnostic("create_turn");
         return null;
       }
@@ -474,6 +488,10 @@
       }
     },
 
+    hasUncertainTurn() {
+      return this._turnRequestUncertain === true || this._needsReconcile === true;
+    },
+
     async inspectPendingTurn({ idToken, signal }) {
       if (!this._needsReconcile) return null;
       if (!ID_RE.test(this.pendingChatId || "") || !ID_RE.test(this.pendingTurnId || "")) {
@@ -536,6 +554,7 @@
       this.pendingClientRequestId = null;
       this.pendingUsageRunKey = null;
       this._turnPromise = null;
+      this._turnRequestUncertain = false;
       this._contextPromise = null;
       this._needsReconcile = false;
     },
@@ -550,13 +569,25 @@
       this.pendingUsageRunKey = null;
       this.logicalRun = null;
       this._turnPromise = null;
+      this._turnRequestUncertain = false;
       this._contextPromise = null;
       this._chatCreationAttempted = false;
       this._persistenceDisabled = false;
       this._needsReconcile = false;
       this.lastPersistenceError = "";
     }
-  };
+    };
 
+    const initialChatId = cleanString(initial.activeChatId);
+    const initialTurnId = cleanString(initial.activeTurnId);
+    if (ID_RE.test(initialChatId) && ID_RE.test(initialTurnId)) {
+      chatSession.activeChatId = initialChatId;
+      chatSession.activeTurnId = initialTurnId;
+    }
+    return chatSession;
+  }
+
+  const chatSession = createChatSession();
+  window.App.createChatSession = createChatSession;
   window.App.chatSession = chatSession;
 })();

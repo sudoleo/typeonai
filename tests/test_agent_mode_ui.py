@@ -29,22 +29,23 @@ def test_answer_disclosure_is_agent_mode_only():
 
 def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     query = (ROOT / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
+    view = (ROOT / "static" / "js" / "run-view.js").read_text(encoding="utf-8")
     agent = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
     core = (ROOT / "static" / "js" / "app-core.js").read_text(encoding="utf-8")
     input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
 
-    assert 'const agentModeAtStart = isAgentModeEnabled?.() === true;' in query
+    assert 'const agentMode = window.isAgentModeEnabled?.() === true;' in query
+    assert "const config = {\n      agentMode," in query
     # Die Vergleichsansicht wird an EINER Stelle aufgebaut, damit ein frisch
     # gesendeter und ein aus einem Bookmark geladener Direktvergleich nicht
     # auseinanderlaufen.
-    assert 'window.enterDirectComparisonView?.();' in query
+    assert 'if (context.config?.agentMode === false)' in view
+    assert 'window.enterDirectComparisonView?.();' in view
     assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
-    assert 'window.App.followup?.reset?.();' in query
-    assert 'window.App.chatSession?.reset?.();' in query
-    assert 'window.App?.consensusPipeline?.dismiss?.();' in query
-    assert 'const autoConsensusOn = agentModeAtStart' in query
-    assert '&& isAgentModeEnabled?.() === true' in query
-    assert 'if (!autoConsensusOn) return;' in query
+    assert 'followup?.reset?.();' in view
+    assert 'window.App.chatSession?.reset?.();' in view
+    assert 'pipeline.dismiss?.();' in view
+    assert 'if (context.config.agentMode && context.config.autoConsensus)' in query
     assert 'autoToggle.checked = !!enabled;' in agent
     assert 'autoToggle.disabled = true;' in agent
     assert 'if (isAgentModeEnabled()) {' in agent

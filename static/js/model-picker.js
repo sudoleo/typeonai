@@ -175,6 +175,9 @@
           excludeBtn.title = checked ? "Exclude answer" : "Include answer";
           excludeBtn.setAttribute("aria-label", checked ? "Exclude answer" : "Include answer");
         }
+        if (window.App.runRegistry?.visible?.()) {
+          window.App.runRegistry.renderVisible();
+        }
       };
 
       if (animate) {

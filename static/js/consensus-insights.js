@@ -1667,25 +1667,30 @@
             tagRow.appendChild(chip);
           }
 
-          // Nach einer Resolve-Runde das aktualisierte differences_data erneut
-          // ins Consensus-Bookmark schreiben, damit der gelöste Zustand beim
-          // Wiederöffnen erhalten bleibt.
-          function persistResolutionToBookmark() {
-            const payload = window.lastConsensusBookmarkPayload;
-            if (!payload || !payload.question || !window.auth?.currentUser) return;
-            if (typeof window.saveBookmarkConsensus !== "function") return;
-            window.saveBookmarkConsensus(
-              payload.question,
-              payload.consensusText,
-              payload.differencesText,
-              payload.differencesData,
-              payload.resultId || null,
-              "",
-              null,
-              payload.previousQuestion || "",
-              payload.previousTurn || null,
-              payload.conversation || null
-            );
+          // Resolve is bound to one immutable bookmark revision before its
+          // first await. The server persists only its own model result and
+          // rechecks that revision inside the bookmark transaction.
+          function resolutionBindingIsWritable(binding) {
+            if (!binding?.bookmarkId) return false;
+            if (window.App.bookmarkUi?.canWrite?.(binding.bookmarkId, binding.auth?.uid) === false) {
+              return false;
+            }
+            const registry = window.App.runRegistry;
+            if (!registry) return true;
+            const owner = binding.runId ? registry.get?.(binding.runId) : null;
+            if (binding.runId && (!owner || owner.bookmark?.deleted === true)) return false;
+            const ownerCreatedAt = Number(binding.ownerCreatedAt || owner?.createdAt || 0);
+            const boundary = ownerCreatedAt || Number(binding.boundAt || 0);
+            // A follow-up created from the same bookmark is a newer resource
+            // mutation. A late Resolve round from the predecessor may still be
+            // shown in that predecessor's view, but must never roll persistence
+            // back to its older chat/turn snapshot.
+            return !(registry.list?.() || []).some(function (context) {
+              return context.runId !== binding.runId
+                && context.bookmark?.id === binding.bookmarkId
+                && context.bookmark?.deleted !== true
+                && Number(context.createdAt || 0) > boundary;
+            });
           }
 
           function showResolveProTeaser() {
@@ -1701,19 +1706,127 @@
               window.App?.showPopup?.("Please log in to resolve contradictions.");
               return;
             }
-            let idToken = null;
+            // Bind everything before the first await. A different run or
+            // bookmark may become visible while /resolve is still in flight.
+            const boundContext = window.App.runRegistry?.visible?.() || null;
+            const boundPayload = boundContext?.consensus?.bookmarkPayload
+              || window.lastConsensusBookmarkPayload;
+            const boundUser = boundContext?.auth?.user || window.auth.currentUser;
+            const preparedShareContext = window.currentBookmarkShareResultContext;
+            const boundConversation = boundPayload?.conversation || {};
+            const boundBookmarkId = boundContext?.bookmark?.id
+              || boundPayload?.conversation?.bookmarkId
+              || window.App.runRegistry?.getSelectedConversationBasis?.()?.bookmarkId
+              || null;
+            const syntheticBookmark = {
+              query: boundContext?.question || boundPayload?.question || "",
+              chat_id: boundConversation.chatId || boundContext?.completedBasis?.chatId || "",
+              turn_id: boundConversation.turnId || boundContext?.completedBasis?.turnId || "",
+              share_result_id: boundPayload?.previousQuestion
+                ? ""
+                : (boundPayload?.resultId || boundContext?.consensus?.resultId || ""),
+              responses: {
+                consensus: boundContext?.consensus?.text || boundPayload?.consensusText || "",
+                differences_data: boundPayload?.differencesData
+                  || boundContext?.consensus?.differencesData
+                  || null
+              }
+            };
+            const binding = {
+              runId: boundContext?.runId || null,
+              bookmarkId: boundBookmarkId,
+              payload: boundPayload,
+              auth: boundContext?.auth || {
+                user: boundUser,
+                uid: boundUser?.uid || null,
+                generation: window.App.authState?.generation
+              },
+              question: String(boundContext?.question || boundPayload?.question || "").trim(),
+              useOwnKeys: boundContext?.config?.useOwnKeys
+                ?? ($("useOwnKeysSwitch")?.checked === true),
+              credentials: boundContext?.credentials
+                ? Object.assign({}, boundContext.credentials)
+                : Object.fromEntries(
+                    ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]
+                      .map(function (key) { return [key, localStorage.getItem(key) || ""]; })
+                  ),
+              boundAt: Date.now(),
+              ownerCreatedAt: Number(boundContext?.createdAt || 0),
+              // A live run receives the exact, server-sanitized revision from
+              // its queued consensus save. A prepared saved-bookmark view is
+              // already bound to its own exact version. Synthetic parts are a
+              // fail-safe fallback and can only fail the server-side guard.
+              versionParts: Array.isArray(boundContext?.persistence?.consensusVersionParts)
+                ? boundContext.persistence.consensusVersionParts.slice()
+                : (!boundContext && preparedShareContext?.bookmarkId === boundBookmarkId
+                    && Array.isArray(preparedShareContext.versionParts)
+                  ? preparedShareContext.versionParts.slice()
+                  : null),
+              syntheticBookmark: syntheticBookmark
+            };
+            const actionController = new AbortController();
+            let registryAction = null;
             try {
-              idToken = await window.auth.currentUser.getIdToken();
+              registryAction = window.App.runRegistry?.beginAction?.({
+                key: binding.bookmarkId
+                  ? "resolve"
+                  : `resolve:${JSON.stringify([diff.claim, diff.positions])}`,
+                ownerRunId: binding.runId,
+                bookmarkId: binding.bookmarkId,
+                auth: binding.auth,
+                controller: actionController
+              }) || null;
+            } catch (error) {
+              window.App?.showPopup?.(error?.message || "This Resolve round cannot start yet.");
+              return;
+            }
+            const finishRegistryAction = function () {
+              if (registryAction) {
+                window.App.runRegistry?.finishAction?.(registryAction.actionId);
+                registryAction = null;
+              }
+            };
+            const authIsCurrent = function () {
+              if (boundContext) return window.App.runRegistry?.isAuthCurrent?.(boundContext) === true;
+              return window.auth?.currentUser === boundUser
+                && window.auth?.currentUser?.uid === binding.auth.uid
+                && window.App.authState?.generation === binding.auth.generation;
+            };
+            const viewStillOwnsResult = function () {
+              if (binding.runId) return window.App.runRegistry?.isVisible?.(binding.runId) === true;
+              const basis = window.App.runRegistry?.getSelectedConversationBasis?.();
+              return !window.App.runRegistry?.visible?.()
+                && Boolean(binding.bookmarkId)
+                && basis?.bookmarkId === binding.bookmarkId;
+            };
+            let idToken = null;
+            let expectedBookmarkVersion = "";
+            try {
+              [idToken] = await Promise.all([
+                boundUser.getIdToken(),
+                Promise.resolve(boundContext?.persistence?.consensusPromise).catch(() => undefined)
+              ]);
+              if (Array.isArray(boundContext?.persistence?.consensusVersionParts)) {
+                binding.versionParts = boundContext.persistence.consensusVersionParts.slice();
+              }
+              if (!Array.isArray(binding.versionParts)) {
+                binding.versionParts = window.App.bookmarkUi?.versionParts?.(binding.syntheticBookmark)
+                  || [];
+              }
+              expectedBookmarkVersion = resolutionBindingIsWritable(binding)
+                ? await window.App.bookmarkUi?.versionForParts?.(binding.versionParts)
+                : "";
             } catch (e) {
               console.error("Token refresh error in resolve:", e);
             }
-            if (!idToken) {
+            if (!idToken || !authIsCurrent()) {
+              finishRegistryAction();
               window.App?.showPopup?.("Please log in to resolve contradictions.");
               return;
             }
 
-            const question = (window.lastQuestion || $("questionInput")?.value || "").trim();
-            const useOwnKeys = !!$("useOwnKeysSwitch")?.checked;
+            const question = binding.question;
+            const useOwnKeys = binding.useOwnKeys;
             const resolveUsageRunKey = useOwnKeys
               ? null
               : (globalThis.crypto?.randomUUID?.()
@@ -1742,15 +1855,19 @@
                   question: question,
                   claim: diff.claim,
                   positions: diff.positions,
-                  openai_key: localStorage.getItem("openaiKey") || "",
-                  mistral_key: localStorage.getItem("mistralKey") || "",
-                  anthropic_key: localStorage.getItem("anthropicKey") || "",
-                  gemini_key: localStorage.getItem("geminiKey") || "",
-                  deepseek_key: localStorage.getItem("deepseekKey") || "",
-                  grok_key: localStorage.getItem("grokKey") || ""
-                })
+                  bookmarkId: expectedBookmarkVersion ? binding.bookmarkId : null,
+                  expectedBookmarkVersion: expectedBookmarkVersion || null,
+                  openai_key: binding.credentials.openaiKey || "",
+                  mistral_key: binding.credentials.mistralKey || "",
+                  anthropic_key: binding.credentials.anthropicKey || "",
+                  gemini_key: binding.credentials.geminiKey || "",
+                  deepseek_key: binding.credentials.deepseekKey || "",
+                  grok_key: binding.credentials.grokKey || ""
+                }),
+                signal: actionController.signal
               });
               const data = await response.json().catch(() => ({}));
+              if (!authIsCurrent()) return;
               if (!response.ok) {
                 const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
                 if (detail?.error_code === "pro_required") {
@@ -1768,34 +1885,106 @@
                 throw new Error(message);
               }
 
-              window.App.renderUsageDisplay({
+              const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.(binding.auth, {
                 remaining: data.free_usage_remaining,
                 deepRemaining: data.deep_remaining,
                 totalLimit: data.limit ?? window.currentMaxLimit,
                 deepLimit: data.deep_limit ?? window.currentDeepLimit
-              });
+              }) || {
+                remaining: data.free_usage_remaining,
+                deepRemaining: data.deep_remaining,
+                totalLimit: data.limit ?? window.currentMaxLimit,
+                deepLimit: data.deep_limit ?? window.currentDeepLimit
+              };
+              window.App.renderUsageDisplay(usageView);
 
-              renderResolveResult(resultBox, data);
-              // Ladezustand beenden und Button entfernen (das [hidden] greift
-              // erst durch die zugehoerige CSS-Regel, siehe Stylesheet).
-              button.classList.remove("is-loading");
-              button.hidden = true;
               // Ergebnis am Widerspruch merken und Karte kennzeichnen; über
               // das Bookmark persistieren, damit es beim Wiederöffnen bleibt.
               // Prompt-Feld vor der Persistenz strippen: Bookmarks/Shares
               // bleiben schlank, die Prompt-Ansicht gibt es nur live.
-              diff.resolution = {
+              const persistedResolution = {
                 outcome: data.outcome,
                 results: (Array.isArray(data.results) ? data.results : []).map(function (r) {
-                  const copy = Object.assign({}, r);
-                  delete copy.prompt;
-                  return copy;
+                  return {
+                    model: String(r?.model || ""),
+                    decision: String(r?.decision || "error"),
+                    position: String(r?.position || ""),
+                    reason: String(r?.reason || "")
+                  };
                 })
               };
-              markCardResolved(resultBox.closest(".diff-card"), data.outcome);
-              persistResolutionToBookmark();
-              window.trackUmamiEvent?.("app_resolve_completed", { outcome: data.outcome });
+              diff.resolution = persistedResolution;
+              if (boundContext) {
+                boundContext.consensus.differencesData = binding.payload?.differencesData
+                  || boundContext.consensus.differencesData;
+                window.App.runRegistry?.update?.(boundContext.runId, function () {}, {
+                  render: false,
+                  eventType: "post-action"
+                });
+              }
+              if (viewStillOwnsResult()) {
+                renderResolveResult(resultBox, data);
+                // Ladezustand beenden und Button entfernen (das [hidden]
+                // greift erst durch die zugehoerige CSS-Regel).
+                button.classList.remove("is-loading");
+                button.hidden = true;
+                markCardResolved(resultBox.closest(".diff-card"), data.outcome);
+              }
+              if (data.bookmark_persisted === true && binding.bookmarkId) {
+                window.App.bookmarkUi?.invalidate?.(binding.bookmarkId);
+                window.clearPreparedBookmarkShareResult?.();
+                let resolvedBookmark = null;
+                const persistedBookmark = boundContext?.persistence?.consensusBookmark;
+                if (persistedBookmark) {
+                  try {
+                    resolvedBookmark = structuredClone(persistedBookmark);
+                  } catch (_) {
+                    try { resolvedBookmark = JSON.parse(JSON.stringify(persistedBookmark)); } catch (_) {}
+                  }
+                }
+                if (!resolvedBookmark) resolvedBookmark = syntheticBookmark;
+                const persistedDifferences = resolvedBookmark?.responses?.differences_data?.differences;
+                const diffKey = JSON.stringify([
+                  String(diff.claim || "").trim(),
+                  Array.isArray(diff.positions) ? diff.positions : []
+                ]);
+                if (Array.isArray(persistedDifferences)) {
+                  const persistedDiff = persistedDifferences.find(function (item) {
+                    return JSON.stringify([
+                      String(item?.claim || "").trim(),
+                      Array.isArray(item?.positions) ? item.positions : []
+                    ]) === diffKey;
+                  });
+                  if (persistedDiff) persistedDiff.resolution = persistedResolution;
+                }
+                resolvedBookmark.share_result_id = "";
+                const resolvedVersionParts = window.App.bookmarkUi?.versionParts?.(resolvedBookmark) || [];
+                if (boundContext) {
+                  boundContext.consensus.resultId = null;
+                  if (boundContext.consensus.bookmarkPayload) {
+                    boundContext.consensus.bookmarkPayload.resultId = null;
+                  }
+                  boundContext.persistence.consensusBookmark = resolvedBookmark;
+                  boundContext.persistence.consensusVersionParts = resolvedVersionParts.slice();
+                  const exactDifferences = resolvedBookmark?.responses?.differences_data;
+                  if (exactDifferences) {
+                    boundContext.consensus.differencesData = exactDifferences;
+                    if (boundContext.consensus.bookmarkPayload) {
+                      boundContext.consensus.bookmarkPayload.differencesData = exactDifferences;
+                    }
+                  }
+                }
+                window.currentBookmarkShareResultContext = {
+                  bookmarkId: binding.bookmarkId,
+                  versionParts: resolvedVersionParts
+                };
+              }
+              window.trackUmamiEvent?.("app_resolve_completed", {
+                outcome: data.outcome,
+                bookmark_persisted: data.bookmark_persisted === true
+              });
             } catch (error) {
+              if (error?.name === "AbortError" || !authIsCurrent()) return;
               console.error("Resolve round failed:", error);
               resultBox.innerHTML = "";
               const note = document.createElement("div");
@@ -1807,6 +1996,8 @@
               button.classList.remove("is-loading");
               setLabel(originalLabel);
               window.trackUmamiEvent?.("app_resolve_completed", { outcome: "request_error" });
+            } finally {
+              finishRegistryAction();
             }
           }
 
@@ -2126,7 +2317,7 @@
             if (diffP) diffP.hidden = false;
           }
 
-          function renderConsensusInsights(data, includedCount) {
+          function renderConsensusInsights(data, includedCount, options = {}) {
             resetConsensusInsights();
             if (!data || typeof data !== "object") return false;
 
@@ -2146,7 +2337,9 @@
             renderVerdictHeader(differences, modelCount, agreement, judge);
             // Karten zuerst: die Inline-Marker verlinken per Index auf sie.
             renderDifferenceCards(differences, modelCount);
-            const marks = renderInlineMarkers(claims, differences, modelsCompared) || {};
+            const marks = renderInlineMarkers(claims, differences, modelsCompared, {
+              sources: Array.isArray(options.sources) ? options.sources : undefined
+            }) || {};
             window.trackUmamiEvent?.("app_consensus_insights_rendered", {
               claims: claims.length,
               // Wie viele Claims wirklich IM Text markiert wurden statt nur in

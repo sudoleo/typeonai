@@ -396,8 +396,881 @@ def test_all_model_failures_end_in_error_without_consensus(browser, phase4_serve
         context.close()
 
 
+def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
+    browser, phase4_server
+):
+    """Reverse completion order must never mix two live RunContexts."""
+
+    context, page = _real_firebase_page(browser, phase4_server)
+    bookmark_state = {}
+    consensus_bookmark_bodies = []
+    chat_counter = 0
+    turn_counter = 100
+
+    def bookmark_document(body, consensus=False):
+        bookmark_id = body.get("bookmarkId") or "missing-bookmark-id"
+        state = bookmark_state.setdefault(bookmark_id, {
+            "responses": {},
+            "sources": [],
+            "attachments": [],
+        })
+        if consensus:
+            state["responses"].update(body.get("modelResponses") or {})
+            state["responses"]["consensus"] = body.get("consensusText") or ""
+            state["responses"]["differences"] = body.get("differencesText") or ""
+            state["responses"]["differences_data"] = body.get("differencesData")
+            state["sources"] = body.get("sources") or []
+        else:
+            state["responses"][body.get("modelName") or "Unknown"] = (
+                body.get("response") or ""
+            )
+            state["sources"] = body.get("sources") or state["sources"]
+            state["attachments"] = body.get("attachments") or state["attachments"]
+        return {
+            "id": bookmark_id,
+            "query": body.get("question") or "",
+            "title": body.get("question") or "",
+            "mode": body.get("mode") or "Standard",
+            "responses": dict(state["responses"]),
+            "sources": list(state["sources"]),
+            "attachments": list(state["attachments"]),
+            "chat_id": body.get("chatId"),
+            "turn_id": body.get("turnId"),
+            "consensus_model": body.get("consensusModel") or "",
+            "model_labels": body.get("modelLabels") or {},
+        }
+
+    def prepare_route(route):
+        _json(route, {
+            "system_prompt": "Prepared multi-run prompt",
+            "usage_run_status": "reserved",
+            "free_usage_remaining": 3,
+            "limit": 3,
+            "deep_limit": 0,
+        })
+
+    def create_chat_route(route):
+        nonlocal chat_counter
+        chat_counter += 1
+        _json(route, {"chat": {"id": f"{chat_counter:032x}"}})
+
+    def create_turn_route(route):
+        nonlocal turn_counter
+        turn_counter += 1
+        _json(route, {"turn": {"id": f"{turn_counter:032x}", "status": "pending"}})
+
+    def model_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        _json(route, {"bookmark": bookmark_document(body)})
+
+    def consensus_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        consensus_bookmark_bodies.append(body)
+        _json(route, {"bookmark": bookmark_document(body, consensus=True)})
+
+    try:
+        page.route("**/prepare", prepare_route)
+        page.route("**/chats", create_chat_route)
+        page.route("**/chats/*/turns", create_turn_route)
+        page.route("**/bookmark", model_bookmark_route)
+        page.route("**/bookmark/consensus", consensus_bookmark_route)
+
+        page.wait_for_function(
+            "() => window.App?.runRegistry"
+            " && typeof window.sendQuestion === 'function'"
+            " && typeof window.App.executeConsensusRun === 'function'"
+        )
+        page.evaluate(
+            """() => {
+              window.setAgentMode(true, {persist: true});
+              const included = new Set(["OpenAI", "Mistral"]);
+              window.App.modelPrefs.forEach(pref => {
+                window.App.setModelSelectionState(
+                  pref,
+                  included.has(pref.key),
+                  {persist: false, syncCheckbox: true, animate: false}
+                );
+              });
+              window.updateQuestionInputAccess?.();
+
+              const nativeFetch = window.fetch.bind(window);
+              const held = [];
+              const aborted = [];
+              const calls = [];
+              const response = data => new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {"Content-Type": "application/json"}
+              });
+              window.fetch = (input, options = {}) => {
+                const url = new URL(String(input), window.location.href);
+                const isAsk = url.pathname.startsWith("/ask_");
+                const isConsensus = url.pathname === "/consensus";
+                if (!isAsk && !isConsensus) return nativeFetch(input, options);
+                const body = JSON.parse(options.body || "{}");
+                const kind = isConsensus ? "consensus" : "ask";
+                return new Promise((resolve, reject) => {
+                  const entry = {
+                    kind,
+                    path: url.pathname,
+                    question: body.question,
+                    body,
+                    resolve,
+                    reject,
+                    settled: false
+                  };
+                  held.push(entry);
+                  calls.push({kind, path: entry.path, question: entry.question, body});
+                  const abort = () => {
+                    if (entry.settled) return;
+                    entry.settled = true;
+                    aborted.push(`${kind}|${entry.question}`);
+                    reject(new DOMException("Aborted", "AbortError"));
+                  };
+                  if (options.signal?.aborted) abort();
+                  else options.signal?.addEventListener("abort", abort, {once: true});
+                });
+              };
+              window.__runGate = {
+                pending(kind, question) {
+                  return held.filter(item => !item.settled
+                    && item.kind === kind && item.question === question).length;
+                },
+                resolveAsks(question) {
+                  held.filter(item => !item.settled
+                    && item.kind === "ask" && item.question === question)
+                    .forEach(item => {
+                      item.settled = true;
+                      const provider = item.path.replace("/ask_", "");
+                      item.resolve(response({
+                        response: `${question} ${provider} answer`,
+                        sources: [],
+                        usage_run_status: "consumed",
+                        free_usage_remaining: 2,
+                        limit: 3,
+                        deep_limit: 0
+                      }));
+                    });
+                },
+                resolveConsensus(question) {
+                  held.filter(item => !item.settled
+                    && item.kind === "consensus" && item.question === question)
+                    .forEach(item => {
+                      item.settled = true;
+                      item.resolve(response({
+                        consensus_response: `Consensus for ${question}`,
+                        differences: `Differences for ${question}`,
+                        differences_data: null,
+                        sources: [],
+                        result_id: question.endsWith("B") ? "result-b" : "result-a",
+                        chat_id: item.body.chat_id,
+                        turn_id: item.body.turn_id,
+                        chat_persisted: true,
+                        chat_turn_state: "completed",
+                        usage_run_status: "consumed",
+                        free_usage_remaining: 1,
+                        limit: 3,
+                        deep_limit: 0
+                      }));
+                    });
+                },
+                aborted: () => aborted.slice(),
+                calls: (kind, question) => calls.filter(item =>
+                  (!kind || item.kind === kind) && (!question || item.question === question))
+              };
+              window.__runPromises = [];
+            }"""
+        )
+        assert page.evaluate("() => window.App.getSelectedModelCount()") == 2
+
+        question_a = "Parallel isolation run A"
+        question_b = "Parallel isolation run B"
+
+        page.evaluate(
+            """question => {
+              document.getElementById("questionInput").value = question;
+              window.__runPromises.push(window.sendQuestion());
+            }""",
+            question_a,
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('ask', question) === 2",
+            arg=question_a,
+        )
+        run_a = page.evaluate(
+            "question => window.App.runRegistry.list()"
+            ".find(run => run.question === question).runId",
+            question_a,
+        )
+
+        page.evaluate("() => document.getElementById('newRunButton').click()")
+        page.wait_for_timeout(500)  # leave the intentional duplicate-click window
+        page.evaluate(
+            """question => {
+              const input = document.getElementById("questionInput");
+              input.value = question;
+              input.dispatchEvent(new Event("input", {bubbles: true}));
+              window.__runPromises.push(window.sendQuestion());
+            }""",
+            question_b,
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('ask', question) === 2",
+            arg=question_b,
+        )
+        run_b = page.evaluate(
+            "question => window.App.runRegistry.list()"
+            ".find(run => run.question === question).runId",
+            question_b,
+        )
+        assert run_a != run_b
+        assert page.evaluate("() => window.App.runRegistry.activeCount()") == 2
+        expect(page.locator("[data-run-id]")).to_have_count(2)
+        page.evaluate("() => window.loadBookmarks()")
+        expect(page.locator("[data-run-id]")).to_have_count(2)
+
+        page.locator(f'[data-run-id="{run_a}"]').click()
+        assert page.evaluate("() => window.App.runRegistry.visible().runId") == run_a
+        expect(page.locator("#threadAskText")).to_have_text(question_a)
+        expect(page.locator(f'[data-run-id="{run_a}"]')).to_have_attribute("role", "button")
+
+        page.evaluate("question => window.__runGate.resolveAsks(question)", question_b)
+        page.wait_for_function(
+            "question => window.__runGate.pending('consensus', question) === 1",
+            arg=question_b,
+        )
+        assert page.evaluate(
+            "id => ({status: App.runRegistry.get(id).status, phase: App.runRegistry.get(id).phase})",
+            run_b,
+        ) == {"status": "running", "phase": "consensus"}
+        expect(page.locator("#openaiResponse")).not_to_contain_text(question_b)
+        expect(page.locator("#consensusAnswerBody")).not_to_contain_text(
+            f"Consensus for {question_b}"
+        )
+
+        page.evaluate("question => window.__runGate.resolveAsks(question)", question_a)
+        page.wait_for_function(
+            "question => window.__runGate.pending('consensus', question) === 1",
+            arg=question_a,
+        )
+        expect(page.locator("#sendButton")).to_have_attribute("aria-label", "Cancel this run")
+        page.click("#sendButton")
+        page.wait_for_function(
+            "id => window.App.runRegistry.get(id).status === 'canceled'",
+            arg=run_a,
+        )
+
+        assert page.evaluate("id => App.runRegistry.get(id).status", run_b) == "running"
+        assert page.evaluate("() => App.runRegistry.activeCount()") == 1
+        aborted = page.evaluate("() => window.__runGate.aborted()")
+        assert f"consensus|{question_a}" in aborted
+        assert f"consensus|{question_b}" not in aborted
+        expect(page.locator(f'[data-run-id="{run_a}"]')).to_contain_text("Canceled")
+        expect(page.locator(f'[data-run-id="{run_b}"]')).to_contain_text(
+            "Writing consensus"
+        )
+
+        page.evaluate("question => window.__runGate.resolveConsensus(question)", question_b)
+        page.wait_for_function(
+            "id => window.App.runRegistry.get(id).status === 'succeeded'",
+            arg=run_b,
+        )
+        assert page.evaluate("() => window.App.runRegistry.visible().runId") == run_a
+        expect(page.locator("#threadAskText")).to_have_text(question_a)
+        expect(page.locator("#consensusAnswerBody")).not_to_contain_text(
+            f"Consensus for {question_b}"
+        )
+
+        page.locator(f'[data-run-id="{run_b}"]').click()
+        assert page.evaluate("() => window.App.runRegistry.visible().runId") == run_b
+        expect(page.locator("#threadAskText")).to_have_text(question_b)
+        expect(page.locator("#openaiResponse")).to_contain_text(
+            f"{question_b} openai answer"
+        )
+        expect(page.locator("#mistralResponse")).to_contain_text(
+            f"{question_b} mistral answer"
+        )
+        expect(page.locator("#consensusAnswerBody")).to_contain_text(
+            f"Consensus for {question_b}"
+        )
+
+        calls_a = page.evaluate(
+            "question => window.__runGate.calls('consensus', question)", question_a
+        )
+        calls_b = page.evaluate(
+            "question => window.__runGate.calls('consensus', question)", question_b
+        )
+        assert len(calls_a) == len(calls_b) == 1
+        assert calls_a[0]["body"]["question"] == question_a
+        assert question_a in calls_a[0]["body"]["answer_openai"]
+        assert question_a in calls_a[0]["body"]["answer_mistral"]
+        assert question_b not in calls_a[0]["body"]["answer_openai"]
+        assert calls_b[0]["body"]["question"] == question_b
+        assert question_b in calls_b[0]["body"]["answer_openai"]
+        assert question_b in calls_b[0]["body"]["answer_mistral"]
+        assert question_a not in calls_b[0]["body"]["answer_openai"]
+        assert [body["question"] for body in consensus_bookmark_bodies] == [question_b]
+    finally:
+        context.close()
+
+
+def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
+    browser, phase4_server
+):
+    """Both runs finish and persist without replacing the saved chat view."""
+
+    context, page = _real_firebase_page(browser, phase4_server)
+    saved_bookmark_id = "saved_bookmark_a"
+    saved_chat_id = "a" * 32
+    saved_turn_id = "b" * 32
+    saved_question = "Saved bookmark A question"
+    saved_consensus = "Saved bookmark A consensus"
+    saved_source = {
+        "id": "S1",
+        "title": "Saved bookmark A source",
+        "url": "https://saved.example.invalid/a",
+        "provider": "Saved",
+    }
+    saved_turn = {
+        "id": saved_turn_id,
+        "status": "completed",
+        "position": 1,
+        "question": saved_question,
+        "mode": "Standard",
+        "consensus_model": "saved-consensus-model",
+        "consensus": saved_consensus,
+        "differences": "Saved bookmark A differences",
+        "differences_data": None,
+        "sources": [saved_source],
+        "attachments": [{
+            "name": "saved-a.pdf",
+            "mime": "application/pdf",
+            "size": 321,
+        }],
+        "model_answers": {
+            "OpenAI": {
+                "provider": "OpenAI",
+                "model_label": "Saved OpenAI",
+                "answer": "Saved bookmark A OpenAI answer",
+                "sources": [saved_source],
+            },
+            "Mistral": {
+                "provider": "Mistral",
+                "model_label": "Saved Mistral",
+                "answer": "Saved bookmark A Mistral answer",
+                "sources": [saved_source],
+            },
+        },
+    }
+    saved_bookmark = {
+        "id": saved_bookmark_id,
+        "query": saved_question,
+        "title": "Saved bookmark A",
+        "mode": "Standard",
+        "created_at": "2026-08-24T08:00:00Z",
+        "responses": {
+            "OpenAI": "Saved bookmark A OpenAI answer",
+            "Mistral": "Saved bookmark A Mistral answer",
+            "consensus": saved_consensus,
+            "differences": "Saved bookmark A differences",
+            "differences_data": None,
+        },
+        "sources": [saved_source],
+        "attachments": list(saved_turn["attachments"]),
+        "chat_id": saved_chat_id,
+        "turn_id": saved_turn_id,
+        "consensus_model": "saved-consensus-model",
+        "model_labels": {
+            "OpenAI": "Saved OpenAI",
+            "Mistral": "Saved Mistral",
+        },
+    }
+
+    bookmark_state = {}
+    model_bookmark_bodies = []
+    consensus_bookmark_bodies = []
+    turn_assignments = {}
+    chat_counter = 0
+    turn_counter = 200
+
+    def bookmark_document(body, consensus=False):
+        bookmark_id = body.get("bookmarkId") or "missing-bookmark-id"
+        state = bookmark_state.setdefault(bookmark_id, {
+            "responses": {},
+            "sources": [],
+            "attachments": [],
+        })
+        if consensus:
+            state["responses"].update(body.get("modelResponses") or {})
+            state["responses"]["consensus"] = body.get("consensusText") or ""
+            state["responses"]["differences"] = body.get("differencesText") or ""
+            state["responses"]["differences_data"] = body.get("differencesData")
+            state["sources"] = body.get("sources") or []
+        else:
+            state["responses"][body.get("modelName") or "Unknown"] = (
+                body.get("response") or ""
+            )
+            state["sources"] = body.get("sources") or state["sources"]
+            state["attachments"] = body.get("attachments") or state["attachments"]
+        return {
+            "id": bookmark_id,
+            "query": body.get("question") or "",
+            "title": body.get("question") or "",
+            "mode": body.get("mode") or "Standard",
+            "responses": dict(state["responses"]),
+            "sources": list(state["sources"]),
+            "attachments": list(state["attachments"]),
+            "chat_id": body.get("chatId"),
+            "turn_id": body.get("turnId"),
+            "consensus_model": body.get("consensusModel") or "",
+            "model_labels": body.get("modelLabels") or {},
+        }
+
+    def prepare_route(route):
+        _json(route, {
+            "system_prompt": "Prepared reverse-order prompt",
+            "usage_run_status": "reserved",
+            "free_usage_remaining": 3,
+            "limit": 3,
+            "deep_limit": 0,
+        })
+
+    def create_chat_route(route):
+        nonlocal chat_counter
+        chat_counter += 1
+        _json(route, {"chat": {"id": f"{chat_counter:032x}"}})
+
+    def create_turn_route(route):
+        nonlocal turn_counter
+        body = json.loads(route.request.post_data or "{}")
+        chat_id = route.request.url.split("/chats/", 1)[1].split("/", 1)[0]
+        turn_counter += 1
+        turn_id = f"{turn_counter:032x}"
+        turn_assignments[body["question"]] = {
+            "chat_id": chat_id,
+            "turn_id": turn_id,
+        }
+        _json(route, {"turn": {"id": turn_id, "status": "pending"}})
+
+    def model_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        model_bookmark_bodies.append(body)
+        _json(route, {"bookmark": bookmark_document(body)})
+
+    def consensus_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        consensus_bookmark_bodies.append(body)
+        _json(route, {"bookmark": bookmark_document(body, consensus=True)})
+
+    def assert_saved_view_unchanged(expected_snapshot):
+        assert page.evaluate("() => window.__captureSavedBookmarkView()") == expected_snapshot
+        assert page.evaluate("() => window.App.runRegistry.visible()") is None
+        expect(page.locator("#threadAskText")).to_have_text(saved_question)
+        expect(page.locator("#consensusAnswerBody")).to_contain_text(saved_consensus)
+        expect(page.locator("#openaiResponse .collapsible-content")).to_contain_text(
+            "Saved bookmark A OpenAI answer"
+        )
+
+    try:
+        page.route("**/prepare", prepare_route)
+        page.route("**/chats", create_chat_route)
+        page.route("**/chats/*/turns", create_turn_route)
+        page.route("**/bookmark", model_bookmark_route)
+        page.route("**/bookmark/consensus", consensus_bookmark_route)
+        page.route(
+            f"**/bookmarks/{saved_bookmark_id}",
+            lambda route: _json(route, {"bookmark": saved_bookmark}),
+        )
+        page.route(
+            f"**/bookmarks/{saved_bookmark_id}/conversation?*",
+            lambda route: _json(route, {
+                "bookmark_id": saved_bookmark_id,
+                "chat_id": saved_chat_id,
+                "turns": [saved_turn],
+                "next_cursor": None,
+                "has_more": False,
+            }),
+        )
+
+        page.wait_for_function(
+            "() => window.App?.runRegistry"
+            " && typeof window.sendQuestion === 'function'"
+            " && typeof window.App.executeConsensusRun === 'function'"
+        )
+        page.evaluate(
+            """() => {
+              window.setAgentMode(true, {persist: true});
+              const included = new Set(["OpenAI", "Mistral"]);
+              window.App.modelPrefs.forEach(pref => {
+                window.App.setModelSelectionState(
+                  pref,
+                  included.has(pref.key),
+                  {persist: false, syncCheckbox: true, animate: false}
+                );
+              });
+              window.updateQuestionInputAccess?.();
+
+              const nativeFetch = window.fetch.bind(window);
+              const held = [];
+              const calls = [];
+              const response = data => new Response(JSON.stringify(data), {
+                status: 200,
+                headers: {"Content-Type": "application/json"}
+              });
+              const slug = question => question.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+              window.fetch = (input, options = {}) => {
+                const url = new URL(String(input), window.location.href);
+                const isAsk = url.pathname.startsWith("/ask_");
+                const isConsensus = url.pathname === "/consensus";
+                if (!isAsk && !isConsensus) return nativeFetch(input, options);
+                const body = JSON.parse(options.body || "{}");
+                const kind = isConsensus ? "consensus" : "ask";
+                return new Promise((resolve, reject) => {
+                  const entry = {
+                    kind,
+                    path: url.pathname,
+                    question: body.question,
+                    body,
+                    resolve,
+                    reject,
+                    settled: false
+                  };
+                  held.push(entry);
+                  calls.push({kind, path: entry.path, question: entry.question, body});
+                  const abort = () => {
+                    if (entry.settled) return;
+                    entry.settled = true;
+                    reject(new DOMException("Aborted", "AbortError"));
+                  };
+                  if (options.signal?.aborted) abort();
+                  else options.signal?.addEventListener("abort", abort, {once: true});
+                });
+              };
+              window.__runGate = {
+                pending(kind, question) {
+                  return held.filter(item => !item.settled
+                    && item.kind === kind && item.question === question).length;
+                },
+                resolveAsks(question) {
+                  held.filter(item => !item.settled
+                    && item.kind === "ask" && item.question === question)
+                    .forEach(item => {
+                      item.settled = true;
+                      const provider = item.path.replace("/ask_", "");
+                      item.resolve(response({
+                        response: `${question} ${provider} answer [S1]`,
+                        sources: [{
+                          id: "S1",
+                          title: `${question} ${provider} source`,
+                          url: `https://runs.example.invalid/${slug(question)}/${provider}`,
+                          provider
+                        }],
+                        usage_run_status: "consumed",
+                        free_usage_remaining: 2,
+                        limit: 3,
+                        deep_limit: 0
+                      }));
+                    });
+                },
+                resolveConsensus(question) {
+                  held.filter(item => !item.settled
+                    && item.kind === "consensus" && item.question === question)
+                    .forEach(item => {
+                      item.settled = true;
+                      item.resolve(response({
+                        consensus_response: `Consensus for ${question}`,
+                        differences: `Differences for ${question}`,
+                        differences_data: null,
+                        sources: [{
+                          id: "S1",
+                          title: `${question} consensus source`,
+                          url: `https://runs.example.invalid/${slug(question)}/consensus`,
+                          provider: "Consensus"
+                        }],
+                        result_id: `result-${slug(question)}`,
+                        chat_id: item.body.chat_id,
+                        turn_id: item.body.turn_id,
+                        chat_persisted: true,
+                        chat_turn_state: "completed",
+                        usage_run_status: "consumed",
+                        free_usage_remaining: 1,
+                        limit: 3,
+                        deep_limit: 0
+                      }));
+                    });
+                },
+                calls: (kind, question) => calls.filter(item =>
+                  (!kind || item.kind === kind) && (!question || item.question === question))
+              };
+              window.__runPromises = [];
+              window.__settledRunQuestions = [];
+              window.__finishedRunQuestions = [];
+              window.addEventListener("consensio:run-registry-change", event => {
+                if (event.detail?.type === "finished"
+                    && event.detail?.context?.status === "succeeded") {
+                  window.__finishedRunQuestions.push(event.detail.context.question);
+                }
+              });
+            }"""
+        )
+        assert page.evaluate("() => window.App.getSelectedModelCount()") == 2
+
+        question_first = "Parallel completion run first"
+        question_second = "Parallel completion run second"
+
+        page.evaluate(
+            """question => {
+              const input = document.getElementById("questionInput");
+              input.value = question;
+              input.dispatchEvent(new Event("input", {bubbles: true}));
+              const promise = window.sendQuestion();
+              window.__runPromises.push(promise);
+              promise.finally(() => window.__settledRunQuestions.push(question));
+            }""",
+            question_first,
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('ask', question) === 2",
+            arg=question_first,
+        )
+        run_first = page.evaluate(
+            "question => window.App.runRegistry.list()"
+            ".find(run => run.question === question).runId",
+            question_first,
+        )
+
+        page.evaluate("() => document.getElementById('newRunButton').click()")
+        page.wait_for_timeout(500)  # run-start double-click fence
+        page.evaluate(
+            """question => {
+              const input = document.getElementById("questionInput");
+              input.value = question;
+              input.dispatchEvent(new Event("input", {bubbles: true}));
+              const promise = window.sendQuestion();
+              window.__runPromises.push(promise);
+              promise.finally(() => window.__settledRunQuestions.push(question));
+            }""",
+            question_second,
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('ask', question) === 2",
+            arg=question_second,
+        )
+        run_second = page.evaluate(
+            "question => window.App.runRegistry.list()"
+            ".find(run => run.question === question).runId",
+            question_second,
+        )
+
+        assert run_first != run_second
+        assert page.evaluate(
+            "ids => ids.every(id => {"
+            " const run = window.App.runRegistry.get(id);"
+            " return run?.basis === null && !run?.conversationLockKey;"
+            "})",
+            [run_first, run_second],
+        ) is True
+        assert page.evaluate("() => window.App.runRegistry.activeCount()") == 2
+
+        page.evaluate("id => window.openBookmark(id)", saved_bookmark_id)
+        page.wait_for_function(
+            "expected => {"
+            " const basis = window.App.runRegistry.getSelectedConversationBasis();"
+            " return window.App.runRegistry.visible() === null"
+            "   && window.App.bookmarkSession.currentId() === expected.bookmarkId"
+            "   && window.App.chatSession.activeChatId === expected.chatId"
+            "   && window.App.chatSession.activeTurnId === expected.turnId"
+            "   && basis?.bookmarkId === expected.bookmarkId"
+            "   && basis?.chatId === expected.chatId"
+            "   && basis?.turnId === expected.turnId;"
+            "}",
+            arg={
+                "bookmarkId": saved_bookmark_id,
+                "chatId": saved_chat_id,
+                "turnId": saved_turn_id,
+            },
+        )
+        page.evaluate(
+            """() => {
+              const text = selector => document.querySelector(selector)?.textContent
+                ?.replace(/\\s+/g, " ").trim() || "";
+              window.__captureSavedBookmarkView = () => ({
+                visibleRunId: window.App.runRegistry.snapshot().visibleRunId,
+                basis: window.App.runRegistry.getSelectedConversationBasis(),
+                bookmarkId: window.App.bookmarkSession.currentId(),
+                chat: {
+                  activeChatId: window.App.chatSession.activeChatId,
+                  activeTurnId: window.App.chatSession.activeTurnId,
+                  pendingChatId: window.App.chatSession.pendingChatId,
+                  pendingTurnId: window.App.chatSession.pendingTurnId
+                },
+                followup: {
+                  question: window.App.followup.lastExchange?.question || "",
+                  consensus: window.App.followup.lastExchange?.consensus || "",
+                  turnId: window.App.followup.lastExchange?.turn?.turn_id || ""
+                },
+                lastQuestion: window.lastQuestion,
+                citationMeta: window.consensusCitationMeta,
+                evidenceSources: window.currentEvidenceSources,
+                consensusBookmarkPayload: window.lastConsensusBookmarkPayload,
+                dom: {
+                  question: text("#threadAskText"),
+                  openai: text("#openaiResponse .collapsible-content"),
+                  mistral: text("#mistralResponse .collapsible-content"),
+                  consensus: text("#consensusAnswerBody"),
+                  differences: text("#consensusResponse .consensus-differences p")
+                }
+              });
+            }"""
+        )
+        saved_view_snapshot = page.evaluate(
+            "() => window.__captureSavedBookmarkView()"
+        )
+        assert saved_view_snapshot["visibleRunId"] is None
+        assert saved_view_snapshot["bookmarkId"] == saved_bookmark_id
+        assert saved_view_snapshot["basis"]["key"] == f"chat:{saved_chat_id}"
+        assert saved_view_snapshot["evidenceSources"] == [saved_source]
+        assert_saved_view_unchanged(saved_view_snapshot)
+
+        # The second-created run reaches terminal persistence before the first
+        # run has even left its held model fan-out.
+        page.evaluate(
+            "question => window.__runGate.resolveAsks(question)", question_second
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('consensus', question) === 1",
+            arg=question_second,
+        )
+        assert_saved_view_unchanged(saved_view_snapshot)
+        page.evaluate(
+            "question => window.__runGate.resolveConsensus(question)", question_second
+        )
+        page.wait_for_function(
+            "id => {"
+            " const run = window.App.runRegistry.get(id);"
+            " return run?.status === 'succeeded'"
+            "   && run.bookmark.uiReady === true"
+            "   && run.persistence.consensusWrite === true"
+            "   && run.persistence.pendingWrites === 0;"
+            "}",
+            arg=run_second,
+        )
+        assert page.evaluate(
+            "id => window.App.runRegistry.get(id).status", run_first
+        ) == "running"
+        assert page.evaluate("() => window.__finishedRunQuestions") == [question_second]
+        assert_saved_view_unchanged(saved_view_snapshot)
+
+        page.evaluate(
+            "question => window.__runGate.resolveAsks(question)", question_first
+        )
+        page.wait_for_function(
+            "question => window.__runGate.pending('consensus', question) === 1",
+            arg=question_first,
+        )
+        assert_saved_view_unchanged(saved_view_snapshot)
+        page.evaluate(
+            "question => window.__runGate.resolveConsensus(question)", question_first
+        )
+        page.wait_for_function(
+            "id => {"
+            " const run = window.App.runRegistry.get(id);"
+            " return run?.status === 'succeeded'"
+            "   && run.bookmark.uiReady === true"
+            "   && run.persistence.consensusWrite === true"
+            "   && run.persistence.pendingWrites === 0;"
+            "}",
+            arg=run_first,
+        )
+        page.wait_for_function("() => window.__settledRunQuestions.length === 2")
+        assert page.evaluate("() => window.__finishedRunQuestions") == [
+            question_second,
+            question_first,
+        ]
+        assert page.evaluate("() => window.App.runRegistry.activeCount()") == 0
+        assert_saved_view_unchanged(saved_view_snapshot)
+
+        run_persistence = page.evaluate(
+            """ids => Object.fromEntries(ids.map(id => {
+              const run = window.App.runRegistry.get(id);
+              return [run.question, {
+                bookmarkId: run.bookmark.id,
+                chatId: run.completedBasis.chatId,
+                turnId: run.completedBasis.turnId,
+                consensus: run.consensus.text,
+                sources: run.consensus.sources
+              }];
+            }))""",
+            [run_first, run_second],
+        )
+        assert set(bookmark_state) == {
+            run_persistence[question_first]["bookmarkId"],
+            run_persistence[question_second]["bookmarkId"],
+        }
+        assert saved_bookmark_id not in bookmark_state
+        assert [body["question"] for body in consensus_bookmark_bodies] == [
+            question_second,
+            question_first,
+        ]
+        # Agent-mode answers stay local until the authoritative consensus
+        # bookmark promotes the complete provider set atomically.
+        assert model_bookmark_bodies == []
+
+        for question in (question_first, question_second):
+            slug = question.lower().replace(" ", "-")
+            expected = run_persistence[question]
+            assignment = turn_assignments[question]
+            consensus_body = next(
+                body for body in consensus_bookmark_bodies
+                if body["question"] == question
+            )
+
+            assert consensus_body["bookmarkId"] == expected["bookmarkId"]
+            assert consensus_body["chatId"] == assignment["chat_id"]
+            assert consensus_body["turnId"] == assignment["turn_id"]
+            assert consensus_body["chatId"] == expected["chatId"]
+            assert consensus_body["turnId"] == expected["turnId"]
+            assert consensus_body["previousQuestion"] == ""
+            assert consensus_body["previousTurn"] is None
+            assert all(
+                slug in source["url"] for source in consensus_body["sources"]
+            )
+            assert question in consensus_body["modelResponses"]["OpenAI"]
+            assert question in consensus_body["modelResponses"]["Mistral"]
+            assert bookmark_state[expected["bookmarkId"]]["responses"][
+                "consensus"
+            ] == f"Consensus for {question}"
+            assert assignment["chat_id"] != saved_chat_id
+            assert assignment["turn_id"] != saved_turn_id
+
+        consensus_calls = page.evaluate(
+            "() => window.__runGate.calls('consensus').map(call => call.question)"
+        )
+        assert consensus_calls == [question_second, question_first]
+    finally:
+        context.close()
+
+
 def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
+    model_bookmark_bodies = []
+    bookmark_responses = {}
+
+    def model_bookmark_route(route):
+        body = json.loads(route.request.post_data or "{}")
+        model_bookmark_bodies.append(body)
+        bookmark_responses[body["modelName"]] = body["response"]
+        _json(route, {
+            "bookmark": {
+                "id": body.get("bookmarkId") or "direct-comparison-bookmark",
+                "query": body["question"],
+                "title": body["question"],
+                "mode": body.get("mode") or "Standard",
+                "responses": dict(bookmark_responses),
+                "sources": body.get("sources") or [],
+                "attachments": body.get("attachments") or [],
+            }
+        })
+
     try:
         consensus_requests = []
         page.on(
@@ -416,6 +1289,7 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
                 "sources": [],
             }),
         )
+        page.route("**/bookmark", model_bookmark_route)
         page.click("#attachTrigger")
         menu_toggle = page.locator("#agentModeMenuSwitch")
         menu_toggle_row = page.locator('label[for="agentModeMenuSwitch"]')
@@ -438,8 +1312,21 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             )
             expect(page.locator(f"#{response_id}")).to_be_visible()
 
-        page.wait_for_timeout(500)
+        page.wait_for_function(
+            "() => {"
+            " const run = window.App.runRegistry.visible();"
+            " return run?.status === 'succeeded'"
+            "   && run.persistence.pendingWrites === 0;"
+            "}"
+        )
         assert consensus_requests == []
+        assert {body["modelName"] for body in model_bookmark_bodies} == {
+            "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
+        }
+        assert all(
+            body["question"] == "Give me six direct answers only."
+            for body in model_bookmark_bodies
+        )
         assert page.locator("body").evaluate(
             "el => el.classList.contains('is-hero')"
             " && el.classList.contains('direct-comparison-active')"

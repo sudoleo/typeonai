@@ -11,6 +11,8 @@
 (function () {
   window.App = window.App || {};
 
+  // Legacy fallback for demo/manual paths that do not own a RunContext.
+  // Real requests live in App.runRegistry and are addressed by stable runId.
   let currentConsensusController = null;
   let currentConsensusRunId = 0;
   let consensusRequestRunning = false;
@@ -59,6 +61,12 @@
   }
 
   function getCompletedIncludedAnswerCount() {
+    const visibleRun = window.App.runRegistry?.visible?.();
+    if (visibleRun) {
+      return Object.values(visibleRun.modelResults || {}).filter(result => (
+        result?.status === "complete" && String(result.text || "").trim()
+      )).length;
+    }
     const boxIds = [
       "openaiResponse",
       "mistralResponse",
@@ -84,6 +92,11 @@
   }
 
   function canGenerateConsensus() {
+    const visibleRun = window.App.runRegistry?.visible?.();
+    if (visibleRun) {
+      if (["pending", "streaming", "differences"].includes(visibleRun.consensus?.status)) return true;
+      return getCompletedIncludedAnswerCount() >= 2;
+    }
     if (consensusRequestRunning) return true;
 
     const agentModeWaitingForResponses =
@@ -111,7 +124,18 @@
     if (isSynthesizing) window.App?.differencesPanel?.setSynthesizing?.();
   }
 
-  function startRun() {
+  function startRun(boundRunId = null) {
+    const context = boundRunId ? window.App.runRegistry?.get?.(boundRunId) : null;
+    if (context) {
+      const controller = new AbortController();
+      context.controllers.consensus = controller;
+      window.App.runRegistry.update(context.runId, current => {
+        current.phase = "consensus";
+        current.consensus.status = "pending";
+      });
+      window.App?.syncSendButtonRunning?.();
+      return { runId: context.runId, signal: controller.signal };
+    }
     currentConsensusRunId++;
     currentConsensusController = new AbortController();
     consensusRequestRunning = true;
@@ -125,6 +149,12 @@
   }
 
   function isActiveRun(runId) {
+    const context = window.App.runRegistry?.get?.(runId);
+    if (context) {
+      return window.App.runRegistry.isExecuting(runId)
+        && context.controllers.consensus
+        && !context.controllers.consensus.signal.aborted;
+    }
     return consensusRequestRunning
       && runId === currentConsensusRunId
       && currentConsensusController
@@ -132,6 +162,14 @@
   }
 
   function finishRun(runId) {
+    const context = window.App.runRegistry?.get?.(runId);
+    if (context) {
+      context.controllers.consensus = null;
+      setSynthesizing(false);
+      window.App?.syncSendButtonRunning?.();
+      window.App.runRegistry.renderVisible?.();
+      return;
+    }
     if (runId !== currentConsensusRunId) return;
     consensusRequestRunning = false;
     currentConsensusController = null;
@@ -140,7 +178,14 @@
     window.App?.consensusPipeline?.onConsensusEnd?.();
   }
 
-  function isRunning() {
+  function isRunning(runId = null) {
+    const context = runId
+      ? window.App.runRegistry?.get?.(runId)
+      : window.App.runRegistry?.visible?.();
+    if (context) {
+      return window.App.runRegistry.isExecuting(context.runId)
+        && ["pending", "streaming", "differences"].includes(context.consensus?.status);
+    }
     return consensusRequestRunning;
   }
 
@@ -163,14 +208,20 @@
     }
   }
 
-  function cancelCurrentConsensus() {
+  function cancelCurrentConsensus(runId = null) {
+    const target = runId || window.App.runRegistry?.visible?.()?.runId;
+    if (target && window.App.runRegistry?.get?.(target)) {
+      const canceled = window.App.runRegistry.cancel(target, "user");
+      if (canceled) trackAppEvent("app_consensus_canceled");
+      return canceled;
+    }
     if (!consensusRequestRunning || !currentConsensusController) return;
-    const runId = currentConsensusRunId;
+    const legacyRunId = currentConsensusRunId;
     currentConsensusController.abort();
     markPendingCanceled();
     // Abbruch: Pipeline sofort weg (vor finishRun, sonst blitzt "done" auf).
     window.App?.consensusPipeline?.dismiss?.();
-    finishRun(runId);
+    finishRun(legacyRunId);
     trackAppEvent("app_consensus_canceled");
   }
 

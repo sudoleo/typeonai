@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import re
 import base64
+import hashlib
+import hmac
 import json
 import logging
 import unicodedata
@@ -120,6 +122,35 @@ def _bookmark_title(data):
     stored title yet, so the latest question remains the fallback name.
     """
     return str(data.get("title") or "").strip() or _bookmark_display_question(data)
+
+
+def _bookmark_share_version(data) -> str:
+    def canonical_value(value):
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, list):
+            return [canonical_value(item) for item in value]
+        if isinstance(value, dict):
+            return {str(key): canonical_value(item) for key, item in value.items()}
+        return value
+
+    responses = data.get("responses")
+    responses = responses if isinstance(responses, dict) else {}
+    parts = [
+        str(data.get("query") or ""),
+        str(responses.get("consensus") or ""),
+        str(data.get("chat_id") or ""),
+        str(data.get("turn_id") or ""),
+        str(data.get("share_result_id") or ""),
+        json.dumps(
+            canonical_value(responses.get("differences_data")),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
+    ]
+    canonical = json.dumps(parts, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _stable_bookmark_title(uid, question, previous_question, chat_binding):
@@ -706,6 +737,15 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     if not snap.exists:
         raise HTTPException(status_code=404, detail="Bookmark not found.")
     bookmark = snap.to_dict() or {}
+    expected_version = str(data.get("expectedVersion") or "").strip().lower()
+    if expected_version and (
+        not re.fullmatch(r"[0-9a-f]{64}", expected_version)
+        or not hmac.compare_digest(expected_version, _bookmark_share_version(bookmark))
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Bookmark changed. Reopen it before sharing.",
+        )
     responses = bookmark.get("responses")
     responses = responses if isinstance(responses, dict) else {}
     consensus_text = str(responses.get("consensus") or "").strip()
@@ -759,7 +799,17 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
                 "vote_subject_id": vote_subject_id,
             },
             db=db_firestore,
+            current_guard=(
+                lambda current: hmac.compare_digest(
+                    expected_version, _bookmark_share_version(current)
+                )
+            ) if expected_version else None,
         )
+    except persistence_guard.PersistenceConflictError:
+        raise HTTPException(
+            status_code=409,
+            detail="Bookmark changed. Reopen it before sharing.",
+        ) from None
     except Exception as exc:
         logging.error(
             "prepare_bookmark_share_result failed category=%s",

@@ -127,7 +127,7 @@ def test_consensus_run_requires_two_selected_models_before_starting():
 
     assert "const hasMinimumModels = selectedModelCount >= 2" in app_init
     assert "sendButton.disabled = !canStartRun" in app_init
-    assert "if (selectedModelCount < 2)" in query_send
+    assert "if (selectedCount < 2)" in query_send
     assert 'reason: "minimum_models"' in query_send
     assert "choose at least 2" in model_picker
 
@@ -469,9 +469,9 @@ def test_selecting_answer_text_offers_asking_about_it():
     assert "> ${" not in quote
     assert "window.App.quote?.compose?.(draftQuestion) ?? draftQuestion" in query
     # Ein geplatzter Lauf gibt Entwurf UND Zitat unveraendert zurueck.
-    assert "quote: quotedContext" in query
-    assert "input.value = this.draft;" in query
-    assert "window.App.quote?.set?.(this.quote)" in query
+    assert "metadata: { draftQuestion, quotedContext }" in query
+    assert "input.value = context.metadata.draftQuestion" in query
+    assert "window.App.quote?.set?.(context.metadata.quotedContext)" in query
 
 
 def test_logout_clears_the_loaded_run_and_aborts_active_streams():
@@ -479,11 +479,14 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     app_init = read("static/js/app-init.js")
 
     assert "function resetLoadedRunAfterLogout()" in firebase
-    assert "window.cancelCurrentQuery?.();" in firebase
-    assert "window.cancelCurrentConsensus?.();" in firebase
+    assert 'window.App?.runRegistry?.clearAll?.("logout");' in firebase
     assert "window.clearResponseBoxes?.({ silent: true });" in firebase
     assert "window.App?.watch?.resetAfterLogout?.();" in firebase
     assert "await signOut(auth);" in firebase
+    logout = firebase.split("async function performLogout()", 1)[1].split(
+        "function openLogoutConfirm", 1
+    )[0]
+    assert logout.index('cancelAll?.("logout")') < logout.index("await signOut(auth)")
     assert "function clearAuthenticatedUiState()" in firebase
     assert '["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]' in firebase
     assert "window.App?.sidebarQuota?.setOpen?.(false);" in firebase

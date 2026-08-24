@@ -1080,6 +1080,35 @@ body:has(.sidebar.active) .brand-float {
   color: var(--sidebar-text-muted);
   animation: bookmarkPendingPulse 1.7s ease-in-out infinite;
 }
+/* Registry runs are intentionally openable while they are pending. The
+   legacy one-off placeholder above remains inert for old clients. */
+.sidebar .bookmark.run-entry {
+  padding-right: 92px;
+}
+.sidebar .bookmark.run-entry.is-pending {
+  cursor: pointer;
+  pointer-events: auto;
+}
+.sidebar .bookmark.run-entry:hover,
+.sidebar .bookmark.run-entry:focus-visible {
+  background-color: color-mix(in srgb, var(--sidebar-hover) 86%, var(--accent) 4%);
+}
+.run-entry-status {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  max-width: 78px;
+  overflow: hidden;
+  color: var(--sidebar-text-muted);
+  font-size: 0.64rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+.run-status-succeeded .run-entry-status { color: var(--agree); }
+.run-status-failed .run-entry-status { color: var(--dispute); }
+.run-status-canceled .run-entry-status { color: var(--sidebar-text-muted); }
 .bookmark-pending-spinner {
   position: absolute;
   right: 11px;

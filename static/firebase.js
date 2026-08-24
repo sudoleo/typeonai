@@ -95,6 +95,10 @@ async function performLogout() {
     });
     if (!response.ok) throw new Error(`Session cleanup failed (${response.status})`);
 
+    // Abort while the Firebase identity is still available. Cancel hooks can
+    // then release prepared-but-unconsumed usage reservations with the run's
+    // bound token; clearAll after signOut removes the remaining projections.
+    window.App?.runRegistry?.cancelAll?.("logout");
     await signOut(auth);
     setActiveAuthIdentity(null);
     resetLoadedRunAfterLogout();
@@ -123,8 +127,7 @@ function resetLoadedRunAfterLogout() {
   // A response belongs to the authenticated session that loaded it. Abort
   // active streams first so a late SSE event cannot render it again after the
   // DOM and share/bookmark context have been cleared.
-  window.cancelCurrentQuery?.();
-  window.cancelCurrentConsensus?.();
+  window.App?.runRegistry?.clearAll?.("logout");
   window.clearResponseBoxes?.({ silent: true });
   window.clearPreparedBookmarkShareResult?.();
   window.App.state.set("currentEvidenceSources", [], "evidence");
@@ -226,6 +229,19 @@ const authState = window.App.authState;
 let bookmarkViewEpoch = 0;
 let accountMenuDocumentClickHandler = null;
 
+// A pending bookmark fetch owns only the view epoch it started in. Selecting
+// a live run or returning to the empty composer invalidates that fetch so its
+// late response cannot replace the newer projection.
+window.addEventListener("consensio:run-registry-change", event => {
+  if (["created", "visible", "visible-cleared", "saved-view", "cleared"].includes(event.detail?.type)) {
+    bookmarkViewEpoch += 1;
+    // Share/Watch rehydration is view-owned just like bookmark detail loading.
+    // A late result from saved view A must not replace the result id projected
+    // by live run B.
+    clearPreparedBookmarkShareResult();
+  }
+});
+
 function publishAuthState(uid) {
   authState.publish(uid);
 }
@@ -281,6 +297,7 @@ function clearLocalProviderKeys() {
 
 function clearAuthenticatedUiState() {
   bookmarkViewEpoch += 1;
+  window.App?.runRegistry?.clearAll?.("auth_reset");
   clearAccountMenuDocumentListener();
   localStorage.removeItem("id_token");
   window.App?.usageRun?.clear?.();
@@ -708,12 +725,17 @@ async function fetchUsageData(token, uid, generation) {
       if (Number.isFinite(deepTotalLimit)) window.App.state.set("currentDeepLimit", deepTotalLimit, "userTier");
     }
     if (typeof window.App?.renderUsageDisplay === "function") {
-      window.App.renderUsageDisplay({
+      const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.({
+        uid,
+        generation,
+        user: auth.currentUser
+      }, data, { authoritative: true }) || {
         remaining: data.remaining,
         deepRemaining: data.deep_remaining,
         totalLimit: window.currentMaxLimit,
         deepLimit: window.currentDeepLimit
-      });
+      };
+      window.App.renderUsageDisplay(usageView);
     } else {
       // Modul- und defer-Skripte koennen bei kaltem Cache unterschiedlich
       // schnell eintreffen. Der Fallback bewahrt denselben DOM-Vertrag.
@@ -1365,12 +1387,27 @@ function bookmarkMeta(bookmark) {
   };
 }
 
-function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
+function upsertBookmarkMeta(bookmark, {
+  prepend = true,
+  runId = null,
+  writeType = "model",
+  requestUid = auth.currentUser?.uid || null
+} = {}) {
   const meta = bookmarkMeta(bookmark);
   if (!meta.id) return;
+  if (!bookmarkWriteAllowed(requestUid, meta.id)) return;
   // Keep the local row disabled while the surrounding run (and its queued
   // persistence writes) is still in flight.
-  window.App.bookmarkSession?.noteSavedMeta?.(meta);
+  if (runId && window.App.runRegistry?.get?.(runId)) {
+    window.App.runRegistry.update(runId, context => {
+      context.bookmark.latestMeta = meta;
+      context.bookmark.id = meta.id;
+      context.bookmark.title = bookmarkDisplayTitle(meta) || context.bookmark.title;
+      if (writeType === "consensus") context.persistence.consensusWrite = true;
+    }, { render: false, eventType: "persistence" });
+  } else {
+    window.App.bookmarkSession?.noteSavedMeta?.(meta);
+  }
   if (!window.bookmarksData) window.bookmarksData = [];
   const existingIndex = window.bookmarksData.findIndex(item => item.id === meta.id);
   if (existingIndex >= 0) {
@@ -1381,21 +1418,55 @@ function upsertBookmarkMeta(bookmark, { prepend = true } = {}) {
     else window.bookmarksData.push(meta);
     addBookmarkToDOM(meta, { prepend });
   }
+  if (runId) window.App.bookmarkUi?.finalizeRun?.(window.App.runRegistry?.get?.(runId));
 }
 
 let lastBookmarkSaveNotice = { key: "", shownAt: 0 };
 const bookmarkWriteChains = new Map();
+const deletedBookmarkKeys = new Set();
 
-function enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, operation) {
-  window.App.bookmarkSession?.noteWriteStarted?.(bookmarkId);
-  const queueKey = `${requestGeneration}:${requestUid}:${bookmarkId}`;
+function bookmarkMutationKey(uid, bookmarkId) {
+  return `${String(uid || "")}:${String(bookmarkId || "")}`;
+}
+
+function bookmarkWriteAllowed(uid, bookmarkId) {
+  return !deletedBookmarkKeys.has(bookmarkMutationKey(uid, bookmarkId));
+}
+
+function snapshotBookmarkValue(value) {
+  if (value === undefined) return undefined;
+  try { return structuredClone(value); } catch (_) {}
+  try { return JSON.parse(JSON.stringify(value)); } catch (_) { return null; }
+}
+
+function enqueueBookmarkWrite(
+  requestUid,
+  requestGeneration,
+  bookmarkId,
+  operation,
+  runId = null,
+  { allowStaleAuth = false } = {}
+) {
+  if (runId && window.App.runRegistry?.get?.(runId)) {
+    window.App.runRegistry.update(runId, context => {
+      context.persistence.pendingWrites += 1;
+      context.bookmark.writes += 1;
+    }, { render: false, eventType: "persistence" });
+  } else {
+    window.App.bookmarkSession?.noteWriteStarted?.(bookmarkId);
+  }
+  // Generation fences decide whether an operation may start or update UI, but
+  // the server resource is owned by uid+bookmarkId across login generations.
+  // A rapid logout/re-login of the same account must still drain an older
+  // in-flight fetch before a new write/delete to that document begins.
+  const queueKey = `${requestUid}:${bookmarkId}`;
   const previous = bookmarkWriteChains.get(queueKey) || Promise.resolve();
   const current = previous
     // A failed model snapshot must not prevent the authoritative consensus
     // snapshot behind it from repairing/completing the same bookmark.
     .catch(() => undefined)
     .then(() => {
-      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      if (!allowStaleAuth && !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
       return operation();
     });
   bookmarkWriteChains.set(queueKey, current);
@@ -1403,7 +1474,15 @@ function enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, operati
     if (bookmarkWriteChains.get(queueKey) === current) {
       bookmarkWriteChains.delete(queueKey);
     }
-    window.App.bookmarkSession?.noteWriteFinished?.(bookmarkId);
+    if (runId && window.App.runRegistry?.get?.(runId)) {
+      window.App.runRegistry.update(runId, context => {
+        context.persistence.pendingWrites = Math.max(0, context.persistence.pendingWrites - 1);
+        context.bookmark.writes = Math.max(0, context.bookmark.writes - 1);
+      }, { render: false, eventType: "persistence" });
+      window.App.bookmarkUi?.finalizeRun?.(window.App.runRegistry.get(runId));
+    } else {
+      window.App.bookmarkSession?.noteWriteFinished?.(bookmarkId);
+    }
   });
 }
 
@@ -1431,23 +1510,28 @@ function showBookmarkSaveError(status, detail, scope = "") {
   window.App?.showPopup?.(message);
 }
 
-async function saveBookmark(question, response, modelName, mode, previousQuestion = "") {
-  const requestUser = auth.currentUser;
+async function saveBookmark(question, response, modelName, mode, previousQuestion = "", runOptions = null) {
+  const boundRunId = String(runOptions?.runId || "").trim() || null;
+  const requestUser = runOptions?.auth?.user || auth.currentUser;
   if (!requestUser) return;
-  const requestUid = requestUser.uid;
-  const requestGeneration = authState.generation;
-  const bookmarkId = window.App.bookmarkSession?.currentId?.()
+  const requestUid = runOptions?.auth?.uid || requestUser.uid;
+  const requestGeneration = runOptions?.auth?.generation ?? authState.generation;
+  const bookmarkId = runOptions?.bookmarkId
+    || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
+  const waitForDeleteOutcome = !bookmarkWriteAllowed(requestUid, bookmarkId);
+  // Snapshot before entering the queue. A later bookmark/view switch cannot
+  // change the payload of this run while it waits behind an earlier write.
+  const sources = Array.isArray(runOptions?.sources)
+    ? runOptions.sources.map(source => ({ ...source }))
+    : (window.currentEvidenceSources || []).map(source => ({ ...source }));
+  const attachmentsMeta = Array.isArray(runOptions?.attachments)
+    ? runOptions.attachments.map(item => ({ ...item }))
+    : (window.lastQuestionAttachmentsMeta || []).map(item => ({ ...item }));
   return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
+    if (waitForDeleteOutcome && !bookmarkWriteAllowed(requestUid, bookmarkId)) return;
     const id_token = await requestUser.getIdToken(false);
     if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-
-    // HIER: Quellen holen
-    const sources = window.currentEvidenceSources || [];
-
-    // Anhänge der zuletzt gesendeten Frage: nur Metadaten (Name/Typ/Größe),
-    // die Dateidaten selbst werden bewusst NICHT in Firestore gespeichert.
-    const attachmentsMeta = window.lastQuestionAttachmentsMeta || [];
 
     try {
       const res = await fetch("/bookmark", {
@@ -1472,13 +1556,25 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
 
       if (!res.ok) {
         console.error("Error saving bookmark:", data.detail);
-        showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        if (boundRunId) {
+          window.App.runRegistry?.notePersistence?.(boundRunId, {
+            status: "error",
+            error: { type: "model", status: res.status, detail: data.detail || "Bookmark save failed" }
+          });
+        }
+        if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
+          showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        }
         return;
       }
 
       if (data.bookmark) {
-          window.App.bookmarkSession?.restore?.(data.bookmark.id);
-          upsertBookmarkMeta(data.bookmark);
+          if (!boundRunId) window.App.bookmarkSession?.restore?.(data.bookmark.id);
+          upsertBookmarkMeta(data.bookmark, {
+            runId: boundRunId,
+            writeType: "model",
+            requestUid
+          });
           if (openedBookmarkId === data.bookmark.id) {
             bookmarkDetailCache.clear();
             bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
@@ -1488,8 +1584,14 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
 
     } catch (error) {
       console.error("Error in saveBookmark:", error);
+      if (boundRunId) {
+        window.App.runRegistry?.notePersistence?.(boundRunId, {
+          status: "error",
+          error: { type: "model", detail: error?.message || "Bookmark save failed" }
+        });
+      }
     }
-  });
+  }, boundRunId);
 }
 
 window.saveBookmark = saveBookmark;
@@ -1499,18 +1601,37 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
                                      previousQuestion = "", previousTurn = null,
                                      conversation = null) {
   const requestUser = auth.currentUser;
-  if (!requestUser) return;
-  const requestUid = requestUser.uid;
-  const requestGeneration = authState.generation;
+  const boundRunId = String(conversation?.runId || "").trim() || null;
+  const boundAuth = conversation?.auth || null;
+  const boundRequestUser = boundAuth?.user || requestUser;
+  if (!boundRequestUser) return;
+  const requestUid = boundAuth?.uid || boundRequestUser.uid;
+  const requestGeneration = boundAuth?.generation ?? authState.generation;
   const bookmarkId = conversation?.bookmarkId
     || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
+  const waitForDeleteOutcome = !bookmarkWriteAllowed(requestUid, bookmarkId);
+  const sources = Array.isArray(conversation?.sources)
+    ? conversation.sources.map(source => ({ ...source }))
+    : (window.currentEvidenceSources || []).map(source => ({ ...source }));
+  const payloadSnapshot = {
+    question: String(question || ""),
+    consensusText: String(consensusText || ""),
+    differencesText: String(differencesText || ""),
+    differencesData: snapshotBookmarkValue(differencesData) || null,
+    resultId: resultId || null,
+    consensusModel: String(consensusModel || ""),
+    modelLabels: snapshotBookmarkValue(modelLabels) || null,
+    modelResponses: snapshotBookmarkValue(conversation?.modelResponses) || null,
+    chatId: conversation?.chatId || null,
+    turnId: conversation?.turnId || null,
+    previousQuestion: String(previousQuestion || ""),
+    previousTurn: snapshotBookmarkValue(previousTurn) || null
+  };
   return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
-    const id_token = await requestUser.getIdToken(/* forceRefresh= */ false);
+    if (waitForDeleteOutcome && !bookmarkWriteAllowed(requestUid, bookmarkId)) return;
+    const id_token = await boundRequestUser.getIdToken(/* forceRefresh= */ false);
     if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-
-    // HIER: Quellen holen
-    const sources = window.currentEvidenceSources || [];
 
     try {
       const res = await fetch("/bookmark/consensus", {
@@ -1518,22 +1639,22 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
          headers: { "Content-Type": "application/json" },
          body: JSON.stringify({
            id_token: id_token,
-           question: question,
-           consensusText: consensusText,
-           differencesText: differencesText,
+           question: payloadSnapshot.question,
+           consensusText: payloadSnapshot.consensusText,
+           differencesText: payloadSnapshot.differencesText,
            // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
            // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
-           differencesData: differencesData || null,
+           differencesData: payloadSnapshot.differencesData,
            sources: sources,
-           resultId: resultId || null,
-           consensusModel: consensusModel || "",
-           modelLabels: modelLabels || null,
-           modelResponses: conversation?.modelResponses || null,
+           resultId: payloadSnapshot.resultId,
+           consensusModel: payloadSnapshot.consensusModel,
+           modelLabels: payloadSnapshot.modelLabels,
+           modelResponses: payloadSnapshot.modelResponses,
            bookmarkId: bookmarkId || null,
-           chatId: conversation?.chatId || null,
-           turnId: conversation?.turnId || null,
-           previousQuestion: previousQuestion || "",
-           previousTurn: previousTurn || null
+           chatId: payloadSnapshot.chatId,
+           turnId: payloadSnapshot.turnId,
+           previousQuestion: payloadSnapshot.previousQuestion,
+           previousTurn: payloadSnapshot.previousTurn
          })
       });
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
@@ -1541,12 +1662,31 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
       if (!res.ok) {
         console.error("Error saving consensus bookmark:", data.detail);
-        showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        if (boundRunId) {
+          window.App.runRegistry?.notePersistence?.(boundRunId, {
+            status: "error",
+            error: { type: "consensus", status: res.status, detail: data.detail || "Consensus bookmark save failed" }
+          });
+        }
+        if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
+          showBookmarkSaveError(res.status, data.detail, `${bookmarkId}:${question}`);
+        }
         return;
       }
       if (data.bookmark) {
-        window.App.bookmarkSession?.restore?.(data.bookmark.id);
-        upsertBookmarkMeta(data.bookmark);
+        if (boundRunId && window.App.runRegistry?.get?.(boundRunId)) {
+          const persistedBookmark = snapshotBookmarkValue(data.bookmark);
+          window.App.runRegistry.update(boundRunId, context => {
+            context.persistence.consensusBookmark = persistedBookmark;
+            context.persistence.consensusVersionParts = bookmarkShareVersionParts(data.bookmark);
+          }, { render: false, eventType: "persistence" });
+        }
+        if (!boundRunId) window.App.bookmarkSession?.restore?.(data.bookmark.id);
+        upsertBookmarkMeta(data.bookmark, {
+          runId: boundRunId,
+          writeType: "consensus",
+          requestUid
+        });
         if (openedBookmarkId === data.bookmark.id) {
           bookmarkDetailCache.clear();
           bookmarkDetailCache.set(data.bookmark.id, data.bookmark);
@@ -1555,8 +1695,14 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
       trackAppEvent("app_bookmark_saved", { type: "consensus" });
     } catch (error) {
       console.error("Error in saveBookmarkConsensus:", error);
+      if (boundRunId) {
+        window.App.runRegistry?.notePersistence?.(boundRunId, {
+          status: "error",
+          error: { type: "consensus", detail: error?.message || "Consensus bookmark save failed" }
+        });
+      }
     }
-  });
+  }, boundRunId);
 }
 window.saveBookmarkConsensus = saveBookmarkConsensus;
 
@@ -1578,23 +1724,70 @@ function prepareBookmarkShareResult(bookmark) {
   if (!auth.currentUser || !bookmarkId || !String(consensusText || "").trim()) {
     return null;
   }
-  window.currentBookmarkShareResultContext = { bookmarkId };
+  // Bind the exact snapshot on screen. The same bookmark document can advance
+  // to a newer follow-up while this saved view remains visible; the server must
+  // reject preparing that newer revision for an older view.
+  window.currentBookmarkShareResultContext = {
+    bookmarkId,
+    versionParts: bookmarkShareVersionParts(bookmark)
+  };
   return window.currentBookmarkShareResultContext;
+}
+
+function stableBookmarkJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableBookmarkJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map(key => (
+      `${JSON.stringify(key)}:${stableBookmarkJson(value[key])}`
+    )).join(",")}}`;
+  }
+  const json = JSON.stringify(value);
+  return json === undefined ? "null" : json;
+}
+
+function bookmarkShareVersionParts(bookmark) {
+  const responses = bookmark?.responses && typeof bookmark.responses === "object"
+    ? bookmark.responses : {};
+  return [
+    String(bookmark?.query || ""),
+    String(responses.consensus || ""),
+    String(bookmark?.chat_id || ""),
+    String(bookmark?.turn_id || ""),
+    String(bookmark?.share_result_id || ""),
+    stableBookmarkJson(responses.differences_data ?? null)
+  ];
+}
+
+async function bookmarkShareVersion(parts) {
+  if (!globalThis.crypto?.subtle || typeof TextEncoder !== "function") return "";
+  const bytes = new TextEncoder().encode(JSON.stringify(Array.isArray(parts) ? parts : []));
+  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
 }
 
 async function requestBookmarkShareResult() {
   const context = window.currentBookmarkShareResultContext;
   if (!context || !auth.currentUser) return null;
   const version = bookmarkShareResultVersion;
-  const promise = (async () => {
+  const requestUser = auth.currentUser;
+  const requestUid = requestUser.uid;
+  const requestGeneration = authState.generation;
+  const bookmarkId = context.bookmarkId;
+  const expectedVersion = await bookmarkShareVersion(context.versionParts);
+  if (version !== bookmarkShareResultVersion) return null;
+  const promise = enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
     try {
-      const idToken = await auth.currentUser.getIdToken(false);
+      if (version !== bookmarkShareResultVersion
+          || !bookmarkWriteAllowed(requestUid, bookmarkId)) return null;
+      const idToken = await requestUser.getIdToken(false);
+      if (!idToken || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
       const response = await fetch("/bookmark/consensus/share-result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id_token: idToken, bookmarkId: context.bookmarkId })
+        body: JSON.stringify({ id_token: idToken, bookmarkId, expectedVersion })
       });
       const data = await response.json();
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
       if (!response.ok) throw new Error(data.detail || "Could not prepare bookmark.");
       if (version === bookmarkShareResultVersion) {
         window.App.state.set("lastShareResultId", data.result_id || null, "share");
@@ -1606,7 +1799,7 @@ async function requestBookmarkShareResult() {
       }
       return null;
     }
-  })();
+  });
   window.currentBookmarkShareResultPromise = promise;
   const resultId = await promise;
   if (!resultId && version === bookmarkShareResultVersion) {
@@ -1859,6 +2052,21 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
           continuationTurn.turn_id
         ) === true
       : false;
+    window.App?.runRegistry?.showSavedView?.(
+      { type: "bookmark", bookmarkId: sourceBookmark?.id || "" },
+      {
+        bookmarkId: sourceBookmark?.id || "",
+        chatId: authoritativeChatRestored ? bookmark.chat_id : "",
+        turnId: authoritativeChatRestored ? continuationTurn?.turn_id : "",
+        question: displayQuestion,
+        consensus: String(bookmark?.responses?.consensus || ""),
+        currentTurn: continuationTurn || null,
+        historyTurns: materialized.historyTurns || [],
+        continuationUnavailable: !continuationTurn,
+        title: bookmarkDisplayTitle(bookmark),
+        bookmarkMeta: bookmarkMeta(sourceBookmark)
+      }
+    );
     window.App?.setAppTitle?.(displayQuestion);
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
@@ -2094,9 +2302,23 @@ function renderBookmarksLoadMore() {
   container.appendChild(button);
 }
 
+function restoreRegistryRunRows() {
+  const currentUid = auth.currentUser?.uid || null;
+  (window.App.runRegistry?.list?.() || []).forEach(context => {
+    if (!currentUid || context.auth?.uid !== currentUid) return;
+    if (context.bookmark?.deleted) return;
+    if (context.bookmark?.uiReady && context.bookmark?.latestMeta) {
+      replacePendingBookmarkWithReady(context.bookmark.latestMeta, context.runId);
+    } else {
+      window.App.runView?.ensureRunRow?.(context);
+    }
+  });
+}
+
 function renderBookmarksLoadError(container) {
   if (!container) return;
   container.innerHTML = "";
+  restoreRegistryRunRows();
   const state = document.createElement("div");
   state.className = "bookmarks-load-error";
   const message = document.createElement("p");
@@ -2130,6 +2352,7 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       if (container) container.innerHTML = "";
       // A metadata refresh must not make an in-flight bookmark disappear.
       ensurePendingBookmarkDOM(window.App.bookmarkSession?.pending);
+      restoreRegistryRunRows();
     }
     do {
       // 35 statt 30: auf einem grossen Monitor stand der "Load more"-Button
@@ -2186,12 +2409,18 @@ async function loadBookmarkDetail(bookmarkId) {
 }
 
 window.openBookmark = async function (bookmarkId) {
+  const liveContext = window.App.runRegistry?.findByBookmarkId?.(bookmarkId);
+  if (liveContext) {
+    window.App.runRegistry.show(liveContext.runId);
+    trackAppEvent("app_bookmark_opened", { source: "run_registry" });
+    return;
+  }
   const requestEpoch = ++bookmarkViewEpoch;
   const requestUid = auth.currentUser?.uid || null;
   const requestGeneration = authState.generation;
   const viewIsCurrent = () => requestEpoch === bookmarkViewEpoch
     && isCurrentAuthenticatedUser(requestUid, requestGeneration);
-  const row = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
+  const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmarkId}"]`);
   row?.classList.add("is-loading");
   try {
     const bookmark = await loadBookmarkDetail(bookmarkId);
@@ -2231,35 +2460,88 @@ async function deleteBookmark(bookmarkId) {
   if (!requestUser) return;
   const requestUid = requestUser.uid;
   const requestGeneration = authState.generation;
-  const id_token = await requestUser.getIdToken(false);
-  if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+  const mutationKey = bookmarkMutationKey(requestUid, bookmarkId);
+  // Fence immediately. Earlier model/consensus/share writes drain first in
+  // the same queue; anything started after this click is rejected, so no late
+  // callback can recreate the document after DELETE.
+  deletedBookmarkKeys.add(mutationKey);
+  window.App.runRegistry?.blockBookmarkMutation?.(bookmarkId);
+  window.App.runRegistry?.cancelActionsForBookmark?.(bookmarkId, "bookmark_deleted");
 
-  try {
-    const res = await fetch("/bookmark", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id_token, bookmarkId })
-    });
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-    const data = await res.json();
-    if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+  return enqueueBookmarkWrite(requestUid, requestGeneration, bookmarkId, async () => {
+    let requestStarted = false;
+    try {
+      const id_token = await requestUser.getIdToken(false);
+      if (!id_token) {
+        deletedBookmarkKeys.delete(mutationKey);
+        window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+        return;
+      }
+      requestStarted = true;
+      const res = await fetch("/bookmark", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id_token, bookmarkId })
+      });
+      const data = await res.json().catch(() => ({}));
 
-    if (!res.ok) {
-      console.error("Error deleting bookmark:", data.detail);
-      return;
+      if (!res.ok) {
+        // A received 4xx proves that this request did not commit. A transport
+        // failure or 5xx is ambiguous: the idempotent DELETE may already have
+        // committed and only its response was lost. Keep the tombstone in that
+        // case so queued/later saves cannot recreate the document.
+        if (res.status >= 400 && res.status < 500) {
+          deletedBookmarkKeys.delete(mutationKey);
+          window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+        } else {
+          window.App?.showPopup?.(
+            "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
+          );
+        }
+        console.error("Error deleting bookmark:", data.detail);
+        return;
+      }
+
+      // The user intent and server mutation remain valid after logout, but UI
+      // from an old auth generation must not repaint a newly signed-in view.
+      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+
+      // Lokales Array und DOM aktualisieren.
+      window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
+      bookmarkDetailCache.delete(bookmarkId);
+      if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
+      (window.App.runRegistry?.list?.() || [])
+        .filter(context => context.bookmark?.id === bookmarkId)
+        .forEach(context => {
+          if (window.App.runRegistry.isExecuting(context.runId)) {
+            window.App.runRegistry.cancel(context.runId, "bookmark_deleted");
+          }
+          window.App.runRegistry.update(context.runId, current => {
+            current.bookmark.deleted = true;
+            current.bookmark.latestMeta = null;
+            current.bookmark.uiReady = true;
+          }, { render: false, eventType: "persistence" });
+        });
+      const selectedBasis = window.App.runRegistry?.getSelectedConversationBasis?.();
+      if (selectedBasis?.bookmarkId === bookmarkId) {
+        window.App.runRegistry?.clearVisible?.();
+        window.clearResponseBoxes?.({ silent: true });
+      }
+      document.querySelectorAll(`.bookmark[data-id="${bookmarkId}"]`).forEach(el => el.remove());
+      window.clearPreparedBookmarkShareResult?.();
+      trackAppEvent("app_bookmark_deleted");
+    } catch (error) {
+      if (!requestStarted) {
+        deletedBookmarkKeys.delete(mutationKey);
+        window.App.runRegistry?.unblockBookmarkMutation?.(bookmarkId);
+      } else {
+        window.App?.showPopup?.(
+          "The deletion outcome is uncertain. Retry the deletion or reload before continuing this bookmark."
+        );
+      }
+      console.error("Error in deleteBookmark:", error);
     }
-
-    // Lokales Array und DOM aktualisieren
-    window.bookmarksData = window.bookmarksData.filter(b => b.id !== bookmarkId);
-    bookmarkDetailCache.delete(bookmarkId);
-    if (openedBookmarkId === bookmarkId) openedBookmarkId = null;
-    const el = document.querySelector(`.bookmark[data-id="${bookmarkId}"]`);
-    if (el) el.remove();
-    trackAppEvent("app_bookmark_deleted");
-
-  } catch (error) {
-    console.error("Error in deleteBookmark:", error);
-  }
+  }, null, { allowStaleAuth: true });
 }
 window.deleteBookmark = deleteBookmark;
 
@@ -2305,15 +2587,16 @@ function sendFeedback(message, email) {
 window.sendFeedback = sendFeedback;
 
 function updateBookmarkDOM(bookmark) {
-  const row = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  const row = document.querySelector(`.bookmark:not(.run-entry)[data-id="${bookmark.id}"]`);
   const label = row?.querySelector("p");
   if (label) label.textContent = truncateText(bookmarkDisplayTitle(bookmark));
 }
 
-function createReadyBookmarkRow(bookmark) {
+function createReadyBookmarkRow(bookmark, runId = null) {
   const div = document.createElement("div");
   div.className = "bookmark";
   div.dataset.id = bookmark.id;
+  if (runId) div.dataset.runId = runId;
   // Die Frage kommt als freier Nutzertext und darf nie als HTML interpretiert
   // werden - deshalb textContent statt Template-Interpolation in innerHTML.
   const label = document.createElement("p");
@@ -2343,7 +2626,11 @@ function createReadyBookmarkRow(bookmark) {
 
   // Click-Event -> Ruft jetzt die ausgelagerte Funktion auf
   div.addEventListener("click", () => {
-    window.openBookmark(bookmark.id);
+    const context = runId
+      ? window.App.runRegistry?.get?.(runId)
+      : window.App.runRegistry?.findByBookmarkId?.(bookmark.id);
+    if (context) window.App.runRegistry.show(context.runId);
+    else window.openBookmark(bookmark.id);
   });
 
   return div;
@@ -2381,10 +2668,12 @@ function ensurePendingBookmarkDOM(pending) {
   row.append(label, spinner);
 }
 
-function replacePendingBookmarkWithReady(bookmark) {
+function replacePendingBookmarkWithReady(bookmark, runId = null) {
   if (!bookmark?.id) return;
-  const row = document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
-  const readyRow = createReadyBookmarkRow(bookmark);
+  const row = runId
+    ? document.querySelector(`.bookmark.run-entry[data-run-id="${runId}"]`)
+    : document.querySelector(`.bookmark[data-id="${bookmark.id}"]`);
+  const readyRow = createReadyBookmarkRow(bookmark, runId);
   if (row) row.replaceWith(readyRow);
   else document.getElementById("bookmarksContainer")?.prepend(readyRow);
 }
@@ -2407,3 +2696,35 @@ function addBookmarkToDOM(bookmark, { prepend = true } = {}) {
   div.classList.add("fade-in");
   setTimeout(() => div.classList.remove("fade-in"), 500);
 }
+
+function finalizeRegistryRunBookmark(context) {
+  if (!context || context.status !== "succeeded") return false;
+  if (context.bookmark?.uiReady) return true;
+  if (context.persistence?.pendingWrites > 0) return false;
+  const meta = context.bookmark?.latestMeta;
+  if (!meta?.id) return false;
+  // Agent-mode success is only a complete bookmark once the authoritative
+  // consensus snapshot has returned. Direct comparisons intentionally have
+  // no consensus and become ready after their model writes drain.
+  if (context.config?.agentMode !== false && !context.persistence?.consensusWrite) return false;
+  window.App.runRegistry?.update?.(context.runId, current => {
+    current.bookmark.uiReady = true;
+    current.bookmark.status = "ready";
+    current.persistence.status = "saved";
+  }, { render: false, eventType: "persistence" });
+  replacePendingBookmarkWithReady(meta, context.runId);
+  return true;
+}
+
+window.App.bookmarkUi = Object.freeze({
+  finalizeRun: finalizeRegistryRunBookmark,
+  replacePendingBookmarkWithReady,
+  versionForParts: bookmarkShareVersion,
+  versionParts: bookmarkShareVersionParts,
+  invalidate(bookmarkId) {
+    bookmarkDetailCache.delete(String(bookmarkId || ""));
+  },
+  canWrite(bookmarkId, uid = auth.currentUser?.uid) {
+    return bookmarkWriteAllowed(uid, bookmarkId);
+  }
+});
