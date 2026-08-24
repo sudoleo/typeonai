@@ -119,6 +119,10 @@ class RunRepo:
         self.config.update(lease_until=None, lease_run_id="", last_run_at=finished_at,
                            next_run_at=finished_at + timedelta(days=interval_days))
     def latest_review(self): return next(iter(self.reviews.values()), None)
+    def recent_reviews(self, limit=12):
+        items = [{**data, "run_id": run_id} for run_id, data in self.reviews.items()]
+        items.sort(key=lambda item: str(item.get("started_at") or ""), reverse=True)
+        return items[:limit]
     def get_review(self, run_id):
         return {**self.reviews[run_id], "run_id": run_id} if run_id in self.reviews else None
     def mark_page_reviewed(self, page_id, admin_uid, now): pass
@@ -311,6 +315,75 @@ def test_mature_portfolio_can_persist_optional_topic_brief_suggestion(monkeypatc
     result = service.run(force=True)
     assert result["proposed_topic_brief"] == "Focus on specific developer-tool launches."
     assert result["topic_brief_evidence_page_ids"] == ["0", "1", "2"]
+
+
+def test_young_portfolio_keeps_the_topic_brief_suggestion_but_cannot_apply_it(monkeypatch):
+    service, _repo, judge = build_run_service(monkeypatch)
+    service.data_service.overview = lambda **kwargs: {
+        "final_date": "2026-07-17", "rows": [{"page_id": "0"}]
+    }
+    service._build_page = lambda row, now: {
+        "page_id": row["page_id"], "recommendation": "wait", "status": "insufficient_data",
+        "watch_status": "none", "publication_source": "", "age_days": 4,
+        "data_window": {"finalized_days": 4, "query_data_complete": True},
+    }
+    judge.ask = lambda pages, current: {
+        "summary": "Too early to tell.", "positive_patterns": [], "negative_patterns": ["Nothing is indexed long enough."],
+        "grouped_recommendations": [], "proposed_topic_brief": "Cover agent pricing disputes.",
+        "topic_brief_reason": "Weak, but visible.", "topic_brief_evidence_page_ids": ["0"],
+    }
+    result = service.run(force=True)
+    assert result["proposed_topic_brief"] == "Cover agent pricing disputes."
+    assert result["topic_brief_decision"] == "insufficient_evidence"
+    assert result["topic_brief_evidence_strength"] == "weak"
+    assert result["status_counts"] == {"insufficient_data": 1}
+    with pytest.raises(weekly.ReviewError) as excinfo:
+        service.accept_topic_brief(result["run_id"], admin_uid="admin")
+    assert excinfo.value.code == "insufficient_evidence"
+
+
+def test_history_exposes_findings_judge_failure_and_status_delta(monkeypatch):
+    service, repo, judge = build_run_service(monkeypatch)
+    statuses = ["emerging", "opportunity"]
+    service.data_service.overview = lambda **kwargs: {
+        "final_date": "2026-07-17", "rows": [{"page_id": "0"}]
+    }
+    service._build_page = lambda row, now: {
+        "page_id": row["page_id"], "title": "Which agent is cheaper?",
+        "recommendation": "monitor", "status": statuses[0],
+        "watch_status": "none", "publication_source": "", "age_days": 40,
+        "data_window": {"finalized_days": 28, "query_data_complete": True},
+    }
+    judge.ask = lambda pages, current: {
+        "summary": "One page started ranking.", "positive_patterns": ["A contested page is being shown."],
+        "negative_patterns": ["Most pages repeat what one model would say."],
+        "grouped_recommendations": [], "proposed_topic_brief": None,
+        "topic_brief_reason": None, "topic_brief_evidence_page_ids": [],
+    }
+    first = service.run(force=True)
+    assert first["delta"]["comparable"] is False
+
+    statuses[0] = "opportunity"
+    repo.reviews[first["run_id"]]["started_at"] = "2026-07-13T09:00:00+00:00"
+    second = service.run(force=True)
+    changed = second["delta"]["changed"]
+    assert second["delta"]["comparable"] is True
+    assert changed and changed[0]["from"] == "emerging" and changed[0]["to"] == "opportunity"
+
+    def failing_judge(pages, current):
+        raise weekly.ReviewError("invalid_judge_response", "The portfolio judge returned invalid JSON.")
+    judge.ask = failing_judge
+    repo.reviews[second["run_id"]]["started_at"] = "2026-07-14T09:00:00+00:00"
+    third = service.run(force=True)
+    assert third["judge_called"] is False
+    assert third["judge_error"] == "The portfolio judge returned invalid JSON."
+
+    history = service.history(limit=5)["reviews"]
+    assert len(history) == 3
+    with_findings = [item for item in history if item["findings"]["negative"]]
+    assert with_findings[0]["findings"]["negative"] == ["Most pages repeat what one model would say."]
+    assert any(item["judge_error"] for item in history)
+    assert all(item["pages_reviewed"] == 1 for item in history)
 
 
 def test_deterministic_recommendations_are_grouped_without_llm_override():

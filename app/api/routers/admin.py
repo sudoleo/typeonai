@@ -215,6 +215,7 @@ def _raise_seo_review_error(exc):
         "topic_brief_changed": 409,
         "state_changed": 409,
         "recommendation_stale": 409,
+        "insufficient_evidence": 409,
     }.get(exc.code, 400)
     raise HTTPException(status_code=status, detail=exc.safe_message)
 
@@ -229,6 +230,18 @@ async def admin_get_seo_weekly_review(request: Request):
             "admin_get_seo_weekly_review failed category=%s", safe_exception(exc)
         )
         raise HTTPException(status_code=500, detail="Failed to load weekly SEO review")
+
+
+@router.get("/api/admin/seo/reviews")
+async def admin_list_seo_weekly_reviews(request: Request, limit: int = 12):
+    await asyncio.to_thread(_require_admin, request, {})
+    try:
+        return await asyncio.to_thread(seo_weekly_review_service.history, limit)
+    except Exception as exc:
+        logging.error(
+            "admin_list_seo_weekly_reviews failed category=%s", safe_exception(exc)
+        )
+        raise HTTPException(status_code=500, detail="Failed to load SEO review history")
 
 
 @router.put("/api/admin/seo/review/config")

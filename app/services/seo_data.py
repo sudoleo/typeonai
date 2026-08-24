@@ -19,6 +19,14 @@ FINALIZATION_LAG_DAYS = 3
 HISTORY_DAYS = 90
 MAX_QUERY_RANGE_DAYS = 31
 TOP_QUERIES_PER_PAGE = 20
+# One click counts as 20 impressions, the inverse of the 5% CTR this module
+# already calls a winner. It puts both signals on one comparable scale so a
+# portfolio that earns impressions but almost no clicks can still be ranked.
+CLICK_IMPRESSION_WEIGHT = 20
+# A small portfolio never reaches the 100-impression winner floor. A page that
+# is shown 25 times in 28 days at position <= 20 and is not clicked is already
+# a title/intro problem worth surfacing.
+OPPORTUNITY_MIN_IMPRESSIONS = 25
 MAX_QUERY_PAGES_PER_RUN = 100
 DATA_SOURCE = "google_search_console"
 DISCLAIMER = (
@@ -153,14 +161,21 @@ def aggregate_metrics(metrics: list[dict]) -> dict:
         "position": round(weighted_position / positioned_impressions, 3)
         if positioned_impressions else None,
         "days": len(metrics),
+        "visibility": round(clicks * CLICK_IMPRESSION_WEIGHT + impressions, 3),
     }
 
 
 STATUS_RULES = {
-    "insufficient_data": "fewer than 7 finalized daily rows",
+    "insufficient_data": (
+        "fewer than 7 finalized daily rows. This counts stored rows, not traffic: a page "
+        "with 28 days of zeroes is invisible, not insufficient_data"
+    ),
     "invisible": "at least 7 finalized rows and 0 impressions over 28 days",
     "winner": "at least 100 impressions, 10 clicks, 5% CTR and average position <= 10 over 28 days",
-    "opportunity": "at least 100 impressions and position <= 20 with CTR < 3% over 28 days",
+    "opportunity": (
+        f"at least {OPPORTUNITY_MIN_IMPRESSIONS} impressions and position <= 20 with "
+        "CTR < 3% over 28 days: the page is being shown and not clicked"
+    ),
     "declining": "previous 7 days had at least 20 impressions and recent clicks or impressions fell by at least 40%",
     "emerging": "visible page that does not match winner, opportunity or declining",
 }
@@ -196,7 +211,7 @@ def classify_status(metrics_28: list[dict], final_date: date) -> str:
     ):
         return "winner"
     if (
-        summary["impressions"] >= 100
+        summary["impressions"] >= OPPORTUNITY_MIN_IMPRESSIONS
         and summary["position"] is not None
         and summary["position"] <= 20
         and summary["ctr"] < 0.03
@@ -547,7 +562,9 @@ class SeoDataService:
                     "final_date": final_date,
                 }
             rows.append(row)
-        rows.sort(key=lambda item: (-item["metrics_28d"]["clicks"], item["url"] or ""))
+        # Clicks alone leave a low-traffic portfolio sorted alphabetically,
+        # which hides the pages that are actually being shown.
+        rows.sort(key=lambda item: (-item["metrics_28d"]["visibility"], item["url"] or ""))
         return {
             "configuration": gsc.configuration_status(),
             "last_run": self.repository.last_run(),

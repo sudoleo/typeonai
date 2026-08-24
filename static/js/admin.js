@@ -1930,6 +1930,13 @@ function renderSeoOverview(data) {
         status.textContent = row.status || 'insufficient_data';
         status.title = (data.status_rules || {})[row.status] || '';
         statusCell.appendChild(status);
+        const window28 = row.metrics_28d || {};
+        appendSeoText(
+            statusCell, 'div',
+            Number(window28.days || 0) + '/28 daily rows \u00b7 visibility '
+                + Math.round(Number(window28.visibility || 0)),
+            'section-hint'
+        ).title = 'Visibility weights one click as 20 impressions. The status depends on stored daily rows, not on clicks.';
         tr.appendChild(statusCell);
 
         const history = row.recommendation_history || [];
@@ -2060,6 +2067,7 @@ function renderSeoWeeklyReview(status) {
     document.getElementById('seoSearchRules').textContent = status.search_opportunity_rules || '';
     document.getElementById('runSeoReviewBtn').disabled = !!status.running;
     document.getElementById('seoReviewSummary').textContent = review.summary || 'No weekly review yet.';
+    renderSeoReviewDiagnostics(review);
     const groupsContainer = document.getElementById('seoReviewGroups');
     groupsContainer.textContent = '';
     const pages = new Map((review.pages || []).map(page => [page.page_id, page]));
@@ -2183,6 +2191,124 @@ function renderSeoWeeklyReview(status) {
     renderSeoTopicBrief(review, pages);
 }
 
+function renderSeoFindingList(container, label, items) {
+    container.textContent = '';
+    if (!items.length) return;
+    appendSeoText(container, 'strong', label);
+    const list = document.createElement('ul');
+    items.forEach(item => appendSeoText(list, 'li', item));
+    container.appendChild(list);
+}
+
+function describeSeoDelta(delta) {
+    if (!delta || !delta.comparable) return 'no comparable previous run';
+    const changed = delta.changed || [];
+    const added = delta.new_pages || [];
+    if (!changed.length && !added.length) return 'nothing changed';
+    const parts = [];
+    if (changed.length) parts.push(changed.length + ' status change' + (changed.length === 1 ? '' : 's'));
+    if (added.length) parts.push(added.length + ' new');
+    if (delta.removed) parts.push(delta.removed + ' gone');
+    return parts.join(' \u00b7 ');
+}
+
+function describeSeoStatusCounts(counts) {
+    return Object.keys(counts || {}).map(key => key + ' ' + counts[key]).join(', ');
+}
+
+function renderSeoReviewDiagnostics(review) {
+    const judgeState = document.getElementById('seoReviewJudgeState');
+    const judgeError = document.getElementById('seoReviewJudgeError');
+    if (!review.run_id) {
+        judgeState.textContent = 'no review yet';
+        judgeError.textContent = '';
+    } else if (review.judge_called) {
+        judgeState.textContent = 'answered';
+        judgeError.textContent = '';
+    } else {
+        judgeState.textContent = review.judge_error ? 'failed' : 'not called';
+        judgeError.textContent = review.judge_error
+            || 'The assessment below was generated from the rules, not by the judge.';
+    }
+
+    const collection = review.collection || {};
+    document.getElementById('seoReviewCollection').textContent = review.run_id
+        ? (collection.status || 'unknown') + ' \u00b7 '
+            + (collection.metrics_written != null ? collection.metrics_written : '?') + ' rows written'
+        : 'no review yet';
+    document.getElementById('seoReviewCollectionMessage').textContent = review.run_id
+        ? [
+            collection.days_collected != null
+                ? collection.days_collected + '/'
+                    + (collection.days_requested != null ? collection.days_requested : '?') + ' days collected'
+                : '',
+            collection.gsc_rows_matched != null ? collection.gsc_rows_matched + ' GSC rows matched' : '',
+            collection.message || ''
+        ].filter(Boolean).join(' \u00b7 ')
+        : '';
+
+    const deltaCard = document.getElementById('seoReviewDelta');
+    deltaCard.textContent = review.run_id ? describeSeoDelta(review.delta) : 'no review yet';
+    deltaCard.title = describeSeoStatusCounts(review.status_counts);
+
+    const findingsPanel = document.getElementById('seoReviewFindings');
+    const positive = (review.findings || {}).positive || [];
+    const negative = (review.findings || {}).negative || [];
+    findingsPanel.hidden = !positive.length && !negative.length;
+    renderSeoFindingList(document.getElementById('seoReviewFindingsPositive'), 'Working', positive);
+    renderSeoFindingList(document.getElementById('seoReviewFindingsNegative'), 'Not working', negative);
+}
+
+function renderSeoReviewHistory(entries) {
+    const container = document.getElementById('seoReviewHistory');
+    container.textContent = '';
+    if (!entries.length) {
+        appendSeoText(container, 'p', 'No reviews recorded yet.', 'section-hint');
+        return;
+    }
+    entries.forEach(entry => {
+        const box = document.createElement('div');
+        box.className = 'seo-review-group';
+        const when = entry.started_at ? new Date(entry.started_at).toLocaleString() : 'unknown time';
+        appendSeoText(box, 'strong', when + ' \u00b7 ' + entry.status
+            + (entry.trigger ? ' \u00b7 ' + entry.trigger : ''));
+        appendSeoText(
+            box, 'div',
+            entry.pages_reviewed + ' pages \u00b7 '
+                + (describeSeoStatusCounts(entry.status_counts) || 'no page data')
+                + ' \u00b7 ' + describeSeoDelta(entry.delta)
+                + ' \u00b7 judge ' + (entry.judge_called ? 'answered' : (entry.judge_error || 'not called'))
+                + ' \u00b7 Telegram ' + (entry.telegram_status || 'unknown'),
+            'section-hint'
+        );
+        appendSeoText(box, 'div', entry.summary || 'No summary.');
+        const findings = ((entry.findings || {}).positive || []).map(item => '+ ' + item)
+            .concat(((entry.findings || {}).negative || []).map(item => '\u2212 ' + item));
+        if (findings.length) {
+            const list = document.createElement('ul');
+            findings.forEach(item => appendSeoText(list, 'li', item));
+            box.appendChild(list);
+        }
+        container.appendChild(box);
+    });
+}
+
+let seoReviewHistoryLoaded = false;
+
+async function loadSeoReviewHistory(force) {
+    if (seoReviewHistoryLoaded && !force) return;
+    const container = document.getElementById('seoReviewHistory');
+    container.textContent = 'Loading\u2026';
+    try {
+        const data = await shareAdminRequest('GET', '/api/admin/seo/reviews?limit=12');
+        seoReviewHistoryLoaded = true;
+        renderSeoReviewHistory(data.reviews || []);
+    } catch (err) {
+        container.textContent = '';
+        appendSeoText(container, 'p', err.message, 'section-hint');
+    }
+}
+
 function renderSeoTopicBrief(review, pages) {
     const panel = document.getElementById('seoTopicBriefPanel');
     const proposed = review.proposed_topic_brief || '';
@@ -2190,6 +2316,10 @@ function renderSeoTopicBrief(review, pages) {
     if (!proposed) return;
     document.getElementById('seoCurrentTopicBrief').textContent = review.current_topic_brief || '';
     document.getElementById('seoProposedTopicBrief').textContent = proposed;
+    document.getElementById('seoTopicBriefStrength').textContent = review.topic_brief_evidence_strength === 'weak'
+        ? 'Weak evidence: only ' + (review.mature_page_count || 0) + ' reviewed pages are mature '
+            + '(28 days old with 28 finalized rows). Shown for information; it cannot be applied.'
+        : '';
     document.getElementById('seoTopicBriefReason').textContent = review.topic_brief_reason || '';
     document.getElementById('seoTopicBriefEvidence').textContent = (review.topic_brief_evidence_page_ids || [])
         .map(id => (pages.get(id) || {}).title || (pages.get(id) || {}).url || id).join(' · ');
@@ -2272,6 +2402,10 @@ document.getElementById('saveSeoReviewConfigBtn').addEventListener('click', asyn
     } finally { this.disabled = false; }
 });
 
+document.getElementById('seoReviewHistoryPanel').addEventListener('toggle', function () {
+    if (this.open) loadSeoReviewHistory(false);
+});
+
 document.getElementById('runSeoReviewBtn').addEventListener('click', async function () {
     if (!confirm('Run Search Console collection and the weekly portfolio review now? At most one portfolio Judge call may be made.')) return;
     this.disabled = true;
@@ -2280,6 +2414,7 @@ document.getElementById('runSeoReviewBtn').addEventListener('click', async funct
         const result = await shareAdminRequest('POST', '/api/admin/seo/review/run', {});
         seoStatus(result.summary || result.status, result.status === 'error' || result.status === 'collection_failed');
         await loadSeoOverview();
+        if (seoReviewHistoryLoaded) await loadSeoReviewHistory(true);
     } catch (err) {
         seoStatus(err.message, true);
     } finally { this.disabled = false; }

@@ -91,6 +91,54 @@ def _clip(value, chars=300) -> str:
     return re.sub(r"\s+", " ", str(value or "")).strip()[:chars]
 
 
+def _status_counts(pages: list[dict]) -> dict:
+    counts: dict[str, int] = {}
+    for page in pages or []:
+        key = str(page.get("status") or "unknown")
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _page_statuses(review: dict) -> dict:
+    return {
+        str(page.get("page_id") or ""): str(page.get("status") or "unknown")
+        for page in (review.get("pages") or [])
+        if page.get("page_id")
+    }
+
+
+def _status_delta(current: dict, previous: dict | None) -> dict:
+    """What actually changed since the previous review, page by page."""
+    now_statuses = _page_statuses(current)
+    if previous is None:
+        return {"comparable": False, "new_pages": [], "changed": [], "removed": 0}
+    before = _page_statuses(previous)
+    titles = {
+        str(page.get("page_id") or ""): _clip(page.get("title") or page.get("url"), 120)
+        for page in (current.get("pages") or [])
+    }
+    changed = [
+        {
+            "page_id": page_id,
+            "title": titles.get(page_id, ""),
+            "from": before[page_id],
+            "to": status,
+        }
+        for page_id, status in now_statuses.items()
+        if page_id in before and before[page_id] != status
+    ]
+    return {
+        "comparable": True,
+        "previous_run_id": previous.get("run_id") or "",
+        "new_pages": [
+            {"page_id": page_id, "title": titles.get(page_id, ""), "status": status}
+            for page_id, status in now_statuses.items() if page_id not in before
+        ][:25],
+        "changed": changed[:25],
+        "removed": len([page_id for page_id in before if page_id not in now_statuses]),
+    }
+
+
 def validate_schedule(run_time: str, timezone_name: str) -> tuple[str, str]:
     run_time = str(run_time or "").strip()
     timezone_name = str(timezone_name or "").strip()
@@ -460,6 +508,28 @@ class WeeklyReviewRepository:
             return value.timestamp() if value else float("-inf")
         return max(items, key=key)
 
+    def recent_reviews(self, limit: int = 12) -> list[dict]:
+        """Newest reviews first. Used for the Admin history and the delta line."""
+        limit = max(1, min(int(limit or 1), 50))
+        collection = self.db.collection(REVIEWS_COLLECTION)
+        items = []
+        if hasattr(collection, "order_by"):
+            stream = (
+                collection.order_by("started_at", direction=Query.DESCENDING)
+                .limit(limit)
+                .stream()
+            )
+            return [{**(snap.to_dict() or {}), "run_id": snap.id} for snap in stream]
+
+        # Lightweight unit-test doubles do not expose Firestore query methods.
+        for snap in collection.stream():
+            items.append({**(snap.to_dict() or {}), "run_id": snap.id})
+        def key(item):
+            value = _as_utc(item.get("started_at"))
+            return value.timestamp() if value else float("-inf")
+        items.sort(key=key, reverse=True)
+        return items[:limit]
+
     def mark_page_reviewed(self, page_id: str, admin_uid: str, now: datetime) -> None:
         self.db.collection("seo_pages").document(page_id).set({
             "portfolio_reviewed_at": now,
@@ -558,6 +628,7 @@ class SeoWeeklyReviewService:
                     "groups": {name: [] for name in GROUPS},
                     "pages": [],
                     "judge_called": False,
+                    "status_counts": {},
                 }
                 return self._persist_terminal_review(run_id, result)
 
@@ -583,10 +654,12 @@ class SeoWeeklyReviewService:
                 if int((page.get("data_window") or {}).get("finalized_days") or 0) >= 28
                 and page.get("age_days", 0) >= 28
             )
-            proposed = (judge_result or {}).get("proposed_topic_brief")
-            if mature_count < 3:
-                proposed = None
-            proposed = str(proposed or "").strip() or None
+            proposed = str(
+                (judge_result or {}).get("proposed_topic_brief") or ""
+            ).strip() or None
+            # A young portfolio used to make this suggestion disappear without a
+            # trace. It stays visible now and is only blocked from being applied.
+            evidence_strength = "mature" if mature_count >= 3 else "weak"
             evidence_ids = [
                 page_id for page_id in (judge_result or {}).get("topic_brief_evidence_page_ids", [])
                 if any(page["page_id"] == page_id for page in pages)
@@ -613,8 +686,14 @@ class SeoWeeklyReviewService:
                     if proposed else ""
                 ),
                 "topic_brief_evidence_page_ids": evidence_ids if proposed else [],
-                "topic_brief_decision": "pending" if proposed else "not_proposed",
+                "topic_brief_evidence_strength": evidence_strength if proposed else "",
+                "mature_page_count": mature_count,
+                "topic_brief_decision": (
+                    ("pending" if evidence_strength == "mature" else "insufficient_evidence")
+                    if proposed else "not_proposed"
+                ),
                 "topic_brief_accepted_at": None,
+                "status_counts": _status_counts(pages),
             }
             return self._persist_terminal_review(run_id, result)
         except Exception:
@@ -634,7 +713,65 @@ class SeoWeeklyReviewService:
                 config.get("timezone") or DEFAULT_TIMEZONE,
             )
 
+    def _delta_for(self, run_id: str, result: dict) -> dict:
+        """Compare this review against the previous one. Never fails a review."""
+        try:
+            previous = next(
+                (
+                    item for item in self.repository.recent_reviews(4)
+                    if item.get("run_id") != run_id and (item.get("pages") or [])
+                ),
+                None,
+            )
+        except Exception as exc:
+            logging.warning(
+                "SEO review delta unavailable category=%s", safe_exception(exc)
+            )
+            return {"comparable": False, "new_pages": [], "changed": [], "removed": 0}
+        return _status_delta({**result, "run_id": run_id}, previous)
+
+    def history(self, limit: int = 12) -> dict:
+        """Compact list of past reviews. The full page lists stay in Firestore."""
+        entries = []
+        for review in self.repository.recent_reviews(limit):
+            pages = review.get("pages") or []
+            groups = review.get("groups") or {}
+            entries.append({
+                "run_id": review.get("run_id") or "",
+                "status": review.get("status") or "unknown",
+                "trigger": review.get("trigger") or "",
+                "started_at": review.get("started_at"),
+                "finished_at": review.get("finished_at"),
+                "summary": _clip(review.get("summary"), 1_200),
+                "findings": {
+                    "positive": [_clip(item, 400) for item in ((review.get("findings") or {}).get("positive") or [])][:8],
+                    "negative": [_clip(item, 400) for item in ((review.get("findings") or {}).get("negative") or [])][:8],
+                },
+                "judge_called": bool(review.get("judge_called")),
+                "judge_error": _clip(review.get("judge_error"), 300),
+                "pages_reviewed": len(pages),
+                "status_counts": review.get("status_counts") or _status_counts(pages),
+                "group_counts": {
+                    name: len(groups.get(name) or []) for name in GROUPS
+                    if groups.get(name)
+                },
+                "delta": review.get("delta") or {},
+                "collection": {
+                    key: (review.get("collection") or {}).get(key)
+                    for key in (
+                        "status", "message", "days_requested", "days_collected",
+                        "metrics_written", "gsc_rows_matched", "eligible_urls",
+                        "query_pages_collected", "query_failures",
+                    )
+                },
+                "telegram_status": (review.get("telegram_notification") or {}).get("status") or "",
+                "proposed_topic_brief": _clip(review.get("proposed_topic_brief"), 1_000),
+                "topic_brief_decision": review.get("topic_brief_decision") or "not_proposed",
+            })
+        return _json_safe({"reviews": entries})
+
     def _persist_terminal_review(self, run_id: str, result: dict) -> dict:
+        result = {**result, "delta": self._delta_for(run_id, result)}
         self.repository.update_review(run_id, result)
         payload = {**result, "run_id": run_id}
         try:
@@ -1069,6 +1206,11 @@ class SeoWeeklyReviewService:
         proposed = str(review.get("proposed_topic_brief") or "").strip()
         if not proposed:
             raise ReviewError("no_topic_brief", "This review has no Topic Brief suggestion.")
+        if review.get("topic_brief_decision") == "insufficient_evidence":
+            raise ReviewError(
+                "insufficient_evidence",
+                "This suggestion rests on fewer than three mature pages and cannot be applied.",
+            )
         current = publisher_config.get_config(db=self.db)
         if current.get("topic_brief") != review.get("current_topic_brief"):
             raise ReviewError("topic_brief_changed", "The Topic Brief changed after this suggestion was created.")

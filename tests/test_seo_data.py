@@ -118,6 +118,7 @@ def daily_rows(final_date, *, impressions, clicks, position=5.0, days=28):
 def test_configuration_errors_are_safe(monkeypatch):
     monkeypatch.delenv("GSC_SITE_URL", raising=False)
     monkeypatch.delenv("GSC_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.delenv("GSC_SERVICE_ACCOUNT_FILE", raising=False)
     missing = gsc.configuration_status()
     assert missing["configured"] is False
     assert missing["status"] == "not_configured"
@@ -139,6 +140,24 @@ def test_configuration_errors_are_safe(monkeypatch):
     monkeypatch.setenv("GSC_SITE_URL", "sc-domain:")
     invalid_site = gsc.configuration_status()
     assert invalid_site["status"] == "invalid_configuration"
+
+
+def test_service_account_file_variable_is_accepted_as_an_alias(monkeypatch, tmp_path):
+    """Render carries GSC_SERVICE_ACCOUNT_FILE; both spellings must configure."""
+    credential_file = tmp_path / "render-gsc-service-account.json"
+    credential_file.write_text('{"type":"service_account","project_id":"test"}', encoding="utf-8")
+    monkeypatch.setattr(gsc, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setenv("GSC_SITE_URL", "sc-domain:consens.io")
+    monkeypatch.delenv("GSC_SERVICE_ACCOUNT_JSON", raising=False)
+    monkeypatch.setenv("GSC_SERVICE_ACCOUNT_FILE", credential_file.name)
+
+    config = gsc.SearchConsoleConfig.from_env()
+    assert config.service_account_info["project_id"] == "test"
+
+    monkeypatch.delenv("GSC_SERVICE_ACCOUNT_FILE", raising=False)
+    status = gsc.configuration_status()
+    assert status["status"] == "not_configured"
+    assert "GSC_SERVICE_ACCOUNT_JSON/GSC_SERVICE_ACCOUNT_FILE" in status["message"]
 
 
 def test_service_account_variable_is_a_relative_repository_root_path(monkeypatch, tmp_path):
@@ -394,6 +413,36 @@ def test_status_classification_rules():
     for row in declining[:7]:
         row.update({"impressions": 2, "clicks": 0, "ctr": 0.0})
     assert seo_data.classify_status(declining, final_date) == "declining"
+
+
+def test_insufficient_data_counts_rows_not_traffic():
+    final_date = date(2026, 7, 17)
+    # 28 days of pure zeroes are data, not a gap.
+    assert seo_data.classify_status(
+        daily_rows(final_date, impressions=0, clicks=0), final_date
+    ) == "invisible"
+    assert seo_data.classify_status(
+        daily_rows(final_date, impressions=0, clicks=0, days=6), final_date
+    ) == "insufficient_data"
+
+
+def test_visibility_weights_one_click_as_twenty_impressions():
+    final_date = date(2026, 7, 17)
+    clicked = seo_data.aggregate_metrics(
+        daily_rows(final_date, impressions=1, clicks=1, days=1)
+    )
+    seen = seo_data.aggregate_metrics(
+        daily_rows(final_date, impressions=21, clicks=0, days=1)
+    )
+    assert clicked["visibility"] == 21
+    assert seen["visibility"] == 21
+
+
+def test_small_portfolio_reaches_opportunity_on_impressions_alone():
+    final_date = date(2026, 7, 17)
+    # 28 impressions over 28 days at position 15 without a single click.
+    rows = daily_rows(final_date, impressions=1, clicks=0, position=15)
+    assert seo_data.classify_status(rows, final_date) == "opportunity"
 
 
 def test_admin_endpoints_require_admin(monkeypatch):

@@ -277,6 +277,46 @@ def _group_count(review: dict, name: str) -> int:
     return len(((review.get("groups") or {}).get(name) or []))
 
 
+def _review_findings(review: dict) -> list[str]:
+    findings = review.get("findings") or {}
+    lines = []
+    for marker, key in (("+", "positive"), ("-", "negative")):
+        for item in (findings.get(key) or [])[:3]:
+            text = str(item or "").strip()
+            if text:
+                lines.append(f"{marker} {text[:300]}")
+    return lines
+
+
+def _review_delta_line(review: dict) -> str:
+    delta = review.get("delta") or {}
+    if not delta.get("comparable"):
+        return "Change since last review: no comparable previous run"
+    changed = delta.get("changed") or []
+    new_pages = delta.get("new_pages") or []
+    if not changed and not new_pages:
+        return "Change since last review: none"
+    parts = [
+        f"{str(item.get('title') or item.get('page_id') or '')[:60]}: "
+        f"{item.get('from')} -> {item.get('to')}"
+        for item in changed[:3]
+    ]
+    if len(changed) > 3:
+        parts.append(f"+{len(changed) - 3} more")
+    if new_pages:
+        parts.append(f"{len(new_pages)} new")
+    return "Change since last review: " + "; ".join(parts)
+
+
+def _review_judge_line(review: dict) -> str:
+    judge_error = str(review.get("judge_error") or "").strip()
+    if review.get("judge_called"):
+        return "Portfolio judge: answered"
+    if judge_error:
+        return f"Portfolio judge: FAILED - {judge_error[:200]}"
+    return "Portfolio judge: not called"
+
+
 def _review_message(review: dict) -> str:
     status = str(review.get("status") or "unknown")
     pages = list(review.get("pages") or [])
@@ -289,24 +329,35 @@ def _review_message(review: dict) -> str:
     )
     summary = str(review.get("summary") or "No summary available.").strip()
     admin_url = str(os.environ.get("SEO_ADMIN_URL") or DEFAULT_ADMIN_URL).strip()
+    counts = review.get("status_counts") or {}
+    status_line = ", ".join(f"{name} {count}" for name, count in counts.items())
     lines = [
         f"SEO review {status}",
         "",
         summary[:1_200],
+    ]
+    findings = _review_findings(review)
+    if findings:
+        lines.extend(["", *findings])
+    lines.extend([
         "",
-        f"Pages reviewed: {len(pages)}",
+        _review_delta_line(review),
+        f"Pages reviewed: {len(pages)}" + (f" ({status_line})" if status_line else ""),
+        _review_judge_line(review),
         f"Editorial decisions open: {editorial_open}",
         f"Publisher prompt decision: {'required' if prompt_pending else 'none'}",
         "",
         admin_url,
-    ]
+    ])
     return "\n".join(lines)
 
 
 def send_seo_review_notification(review: dict) -> dict:
     """Notify after every terminal SEO review without failing the review itself."""
     configured_token = bot_token()
-    chat_id = str(os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+    # Accept the same chat id the critical alerts use. A deployment that only
+    # set CRITICAL_ERROR_TELEGRAM_CHAT_ID used to drop every review silently.
+    chat_id = _critical_chat_id()
     attempted_at = datetime.now(timezone.utc).isoformat()
     if not configured_token or not chat_id:
         return {
