@@ -199,12 +199,19 @@ aber Teil des globalen täglichen Watch-Run-Budgets.
 
 Der Workflow `.github/workflows/publish-consensus.yml` läuft standardmäßig
 montags, mittwochs und freitags um 07:15 UTC und kann manuell mit einer festen
-Frage gestartet werden. Bei der automatischen Themenwahl priorisieren die
-`Search-opportunity requirements` neben frischen AI-Produktnachrichten besonders
-AI-Memes und zynische oder ironische X-Narrative, deren Breakout-Signal ungefähr
-aus den letzten zwölf Stunden stammt und deren Verbreitung noch sichtbar
-beschleunigt. Originalposts belegen Ursprung und Momentum; belastbare externe
-Quellen verifizieren den sachlichen Kontext.
+Frage gestartet werden. Bei der automatischen Themenwahl verlangen die
+`Search-opportunity requirements` ein konkretes AI-Modell- oder Produktereignis
+aus den letzten 24 Stunden (höchstens 48) als Auslöser — Release, Rückzug,
+Preis- oder Limitänderung, Benchmark- oder Capability-Behauptung — zusammen mit
+einem belegten Nachfragesignal (laufende Diskussion auf Hacker News, X oder
+Reddit, oder Berichterstattung mehrerer Medien am selben Tag).
+
+Die Frage selbst muss das Ereignis überleben: ob eine Behauptung standhält oder
+was sich praktisch ändert, nicht ob etwas echt ist oder wann es erscheint —
+Letzteres ist binnen einer Woche beantwortet und die Seite stirbt mit der
+Antwort. Ob am Ende veröffentlicht wird, entscheidet der Judge: Läufe über
+`CONSENSUS_MAX_AGREEMENT_SCORE` (Default 80) oder unter
+`CONSENSUS_MIN_CONTRADICTIONS` (Default 1) werden verworfen.
 Im GitHub-Repository werden folgende Actions-Secrets benötigt:
 
 - `CONSENSUS_API_KEY`: Key einer Admin-UID mit allen drei Scopes.

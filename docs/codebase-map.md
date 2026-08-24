@@ -93,8 +93,11 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 Der Scheduled Publisher läuft per GitHub Actions montags, mittwochs und freitags.
 Seine identisch in `scripts/publish_consensus.py` und
 `app/services/publisher_config.py` gehaltenen `Search-opportunity requirements`
-wählen dauerhaft nachgefragte, strittige Fragen und schließen News-Zyklen,
-Memes, Leaks und virale Posts ausdrücklich aus.
+nehmen ein frisches AI-Produktereignis (höchstens 24, notfalls 48 Stunden alt)
+als Auslöser, verlangen aber eine Frage, die das Ereignis überlebt: ob eine
+Behauptung hält, nicht ob etwas existiert oder wann es erscheint. Über die
+Veröffentlichung entscheidet danach der Judge: Runs, deren Modelle sich einig
+sind, werden bezahlt und trotzdem verworfen.
 | `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT

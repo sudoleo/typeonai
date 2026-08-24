@@ -87,7 +87,9 @@ def test_superseded_default_topic_briefs_migrate_to_the_disagreement_strategy():
         assert config["topic_brief"] == publisher_config.DEFAULT_TOPIC_BRIEF
 
     assert "still answer differently" in publisher_config.DEFAULT_TOPIC_BRIEF
-    assert "durable search demand" in publisher_config.DEFAULT_TOPIC_BRIEF
+    # The event is the trigger, but the question has to survive it.
+    assert "fresh product event" in publisher_config.DEFAULT_TOPIC_BRIEF
+    assert "stand on its own" in publisher_config.DEFAULT_TOPIC_BRIEF
 
 
 def test_hand_edited_topic_brief_is_never_overwritten():
