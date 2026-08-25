@@ -416,7 +416,6 @@ body {
 .share-md pre,
 .share-md code { background: var(--surface); }
 
-.watch-versions,
 .watch-version-banner { border-color: var(--line-soft); }
 
 /* --------------------------------------------------------------------------

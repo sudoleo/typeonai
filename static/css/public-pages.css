@@ -3034,8 +3034,8 @@ canvas {
 .watch-drift-baseline strong { color: var(--heading); }
 
 .watch-version-banner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; margin: 16px -2px -4px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); }
-.watch-version-banner a, .watch-version-link, .watch-versions a { color: var(--accent); font-weight: var(--font-weight-semibold); text-decoration: none; }
-.watch-version-banner a:hover, .watch-version-link:hover, .watch-versions a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.watch-version-banner a, .watch-version-link { color: var(--accent); font-weight: var(--font-weight-semibold); text-decoration: none; }
+.watch-version-banner a:hover, .watch-version-link:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 .watch-history-heading {
   display: flex;
@@ -3281,16 +3281,6 @@ canvas {
 .dark-mode .watch-event-major { color: #fca5a5; }
 .watch-version-link { font-size: var(--font-size-micro); white-space: nowrap; }
 
-.watch-versions { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 14px; }
-.watch-versions summary { color: var(--heading); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); cursor: pointer; }
-.watch-versions ol { margin: 10px 0 0; padding: 0; list-style: none; }
-.watch-versions li { display: grid; grid-template-columns: 74px minmax(0, 1fr) auto auto; gap: 8px 12px; align-items: center; padding: 9px 10px; border-radius: var(--radius-sm); color: var(--muted); font-size: var(--font-size-micro); }
-.watch-versions li:nth-child(odd) { background: color-mix(in srgb, var(--glass-bg-strong) 58%, transparent); }
-.watch-versions li.is-selected { box-shadow: inset 3px 0 0 var(--accent); }
-.watch-versions li strong { color: var(--accent); font-size: var(--font-size-micro); text-transform: uppercase; }
-.watch-version-state { justify-self: start; padding: 2px 7px; border-radius: var(--radius-pill); background: color-mix(in srgb, #22c55e 12%, transparent); color: color-mix(in srgb, #15803d 80%, var(--text)); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); text-transform: uppercase; }
-.watch-version-state.is-changed { background: color-mix(in srgb, #f59e0b 14%, transparent); color: color-mix(in srgb, #b45309 86%, var(--text)); }
-
 /* Report-Bereich */
 .share-report {
   margin-top: 10px;
@@ -3392,8 +3382,6 @@ canvas {
   .watch-events .watch-version-link { grid-column: 1 / -1; }
   .share-header .watch-drift-hero,
   .share-header .share-scoreboard { width: 100%; }
-  .watch-versions li { grid-template-columns: 68px minmax(0, 1fr) auto; }
-  .watch-versions li strong { display: none; }
   .watch-position-intro { flex-direction: column; }
   .watch-direction-score { align-items: flex-start; text-align: left; }
   .watch-position-dimension { grid-template-columns: 1fr; gap: 12px; }

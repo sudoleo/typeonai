@@ -171,26 +171,6 @@ def _score_move_is_within_range(trigger, score_delta) -> bool:
     )
 
 
-def _build_watch_versions_view(history_points, selected_id, latest_id, page_path):
-    versions = []
-    for point in reversed(history_points):
-        run_id = str(point.get("run_id") or "")
-        if not run_id or not point.get("has_snapshot"):
-            continue
-        versions.append({
-            "run_id": run_id,
-            "date": point["ts"].strftime("%Y-%m-%d %H:%M UTC"),
-            "url": f"{page_path}?version={run_id}",
-            "trigger": (
-                point.get("trigger")
-                if point.get("trigger") in {"changed", "stable"} else "stable"
-            ),
-            "is_selected": run_id == selected_id,
-            "is_current": run_id == latest_id,
-        })
-    return versions
-
-
 def _watch_datetime_view(value, timezone_name=""):
     if not isinstance(value, datetime):
         return {"iso": "", "display": ""}
@@ -773,9 +753,6 @@ def share_page(request: Request, slug_id: str):
         selected_run_id,
         query_first=bool(data.get("watch_query_only")),
     ) if watch_page else None
-    watch_versions = _build_watch_versions_view(
-        history_points, selected_run_id, latest_run_id, page_path,
-    ) if watch_page else []
 
     date_iso = payload["answered_at"] or payload["created_at"]
     published_iso = date_iso
@@ -915,7 +892,6 @@ def share_page(request: Request, slug_id: str):
             )
         ),
         "watch_drift": watch_drift,
-        "watch_versions": watch_versions,
         "watch_selected_version": {
             "id": selected_run_id,
             "kind": display_version["kind"],
