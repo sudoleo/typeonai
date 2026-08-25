@@ -915,7 +915,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `prefers-reduced-motion`. Nach dem
   ersten erfolgreichen, speicherbaren Consensus zeigt `window.App.watch.*`
   einmalig einen dezenten Hinweis am Watch-Button; Schließen oder Öffnen des
-  Features persistiert die Bestätigung in `localStorage`. Seit 2026-08-04
+  Features persistiert die Bestätigung in `localStorage`. Der Hinweis wird als
+  eigener, dem Watch-Knopf folgender Viewport-Layer unter `<body>` gerendert;
+  nur dieser Layer liegt über dem fixierten Composer, die Consensus-Sektion
+  selbst bleibt darunter und kann deshalb nie das Eingabefeld übermalen.
+  Seit 2026-08-04
   enthält dieser Hinweis die **Aktion selbst**: „Watch this question"
   (`#watchNudgeStart`) legt den Watch mit einem Klick über
   `nudgeWatchDefaults()` an (wöchentlich, morgiger Wochentag, 09:00 lokal,

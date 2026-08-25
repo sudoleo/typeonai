@@ -1231,33 +1231,6 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   align-items: center;
 }
 
-.consensus-main h2.has-watch-feature-nudge {
-  z-index: 3;
-}
-
-/* Der Hinweis haengt seit dem Umzug der Aktionen (Share/Watch/Cite) im
-   Antwort-Fuss — und damit direkt ueber dem Composer, dem einzigen Element
-   der Spalte mit eigenem z-index (`.input-section`: 5). Der z-index: 20 des
-   Hinweises half dagegen nichts: zwischen ihm und dem Composer liegen vier
-   Stacking-Contexts ohne eigenen z-index (.run-provenance, .consensus-main,
-   .consensus-box per `isolation`, .consensus-output per `will-change`), an
-   deren Grenze er endet. Also lag der ganze Antwortblock unter dem Composer
-   und mit ihm die untere Haelfte des Hinweises: Knopf und „Pick a different
-   schedule" waren verdeckt und nicht klickbar. Hoch muss deshalb die
-   aeusserste Huelle unter `.container` — nur solange der Hinweis offen ist. */
-.consensus-section.has-watch-feature-nudge,
-.consensus-box.has-watch-feature-nudge {
-  z-index: 6;
-}
-
-/* Und noch eine Grenze tiefer dasselbe Spiel: der Fuss ist per `isolation`
-   ebenfalls ein eigener Stacking-Context ohne z-index und liegt damit unter
-   Ueberschrift und Antworttext (beide z-index: 1). Nach oben aufgeklappt
-   verschwand der Hinweis sonst hinter der eigenen Antwort. */
-.run-provenance.has-watch-feature-nudge {
-  z-index: 2;
-}
-
 .watch-feature-anchor.has-feature-nudge .watch-consensus-pill {
   background: color-mix(in srgb, var(--accent) 9%, var(--sidebar-hover));
   color: color-mix(in srgb, var(--accent) 74%, var(--text-color));
@@ -1265,11 +1238,12 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
 
 .watch-feature-nudge {
   --watch-nudge-surface: color-mix(in srgb, var(--bg-color) 18%, #ffffff);
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 10px);
-  right: 0;
+  position: fixed;
+  z-index: 70;
+  top: 0;
+  left: 0;
   box-sizing: border-box;
+  display: block;
   width: min(258px, calc(100vw - 28px));
   padding: 13px 34px 13px 14px;
   border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
@@ -1281,6 +1255,8 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   color: var(--text-color);
   text-align: left;
   white-space: normal;
+  overflow-y: auto;
+  visibility: hidden;
   animation: watchFeatureNudgeIn .28s cubic-bezier(.22, 1, .36, 1) both;
 }
 
@@ -1288,7 +1264,7 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   content: "";
   position: absolute;
   top: -5px;
-  right: 23px;
+  right: var(--watch-nudge-arrow-right, 23px);
   width: 9px;
   height: 9px;
   border-top: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
@@ -1305,8 +1281,6 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
    nicht, klappt der Hinweis nach oben auf (watch.js misst beim Einblenden)
    und der Pfeil wandert an die Unterkante. */
 .watch-feature-nudge.is-above {
-  top: auto;
-  bottom: calc(100% + 10px);
   animation-name: watchFeatureNudgeInUp;
 }
 

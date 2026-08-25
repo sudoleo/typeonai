@@ -7,6 +7,8 @@
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
   ];
   let featureNudgeTimer = null;
+  let featureNudgeAnchor = null;
+  let featureNudgePositionHandler = null;
   const watchState = window.App.watchState;
 
   function featureNudgeWasDismissed() {
@@ -17,46 +19,63 @@
     }
   }
 
-  // Zwischen dem Hinweis und dem Rest der Seite liegen mehrere unsichtbare
-  // Grenzen, an denen sein eigener z-index endet: `.run-provenance`,
-  // `.consensus-main`, `.consensus-box` (alle per `isolation`) und
-  // `.consensus-output` (per `will-change`) sind Stacking-Contexts ohne
-  // eigenen z-index. Sein z-index: 20 gilt deshalb immer nur bis zur
-  // naechsten Grenze. Zwei davon muessen hoch, solange der Hinweis offen ist:
-  //   .run-provenance    haengt sonst unter Ueberschrift und Antworttext
-  //                      (beide z-index: 1), also unter der eigenen Antwort;
-  //   .consensus-section die aeusserste Huelle unterhalb von `.container` —
-  //                      erst sie hebt den ganzen Block ueber den Composer
-  //                      (`.input-section`, z-index: 5). Eine der inneren
-  //                      Boxen zu heben brachte nichts, ihr z-index endet
-  //                      selbst wieder an der naechsten Grenze.
-  // `.consensus-box`/`h2` bleiben als Rueckfall, solange consensus-actions.js
-  // ohne Fuss-Slot in die Ueberschrift einhaengt.
-  function nudgeStackingHosts(anchor) {
-    if (!anchor) return [];
-    return [
-      anchor.closest(".run-provenance"),
-      anchor.closest(".consensus-section")
-        || anchor.closest(".consensus-box")
-        || anchor.closest("h2")
-    ].filter(Boolean);
-  }
-
-  // Nach unten aufgeklappt deckt der Hinweis das Eingabefeld zu — im Fuss
-  // steht der Composer unmittelbar darunter. Also nach oben, sobald es unten
-  // nicht mehr passt und oben Platz ist.
+  // Der Hinweis lebt direkt unter <body>, nicht im Consensus-Fuss. Nur so kann
+  // er ueber dem fixierten Composer liegen, ohne dafuer die gesamte Antwort
+  // anzuheben: Letzteres liess Antworttext und Footer ueber das Eingabefeld
+  // malen. Die Position folgt trotzdem dem Watch-Knopf.
   function placeWatchFeatureNudge(nudge, anchor) {
+    if (!nudge || !anchor?.isConnected) return;
+    const edge = 8;
+    const gap = 10;
     const anchorRect = anchor.getBoundingClientRect();
-    const height = nudge.offsetHeight;
-    // offsetParent ist bei position: fixed (Composer auf Mobil) null, deshalb
-    // entscheidet die gemessene Hoehe ueber "sichtbar".
     const composerRect = document.querySelector(".input-section")?.getBoundingClientRect();
-    const limit = composerRect && composerRect.height > 0
+    const composerIsVisible = composerRect && composerRect.height > 0
+      && composerRect.bottom > 0 && composerRect.top < window.innerHeight;
+    const limit = composerIsVisible
       ? composerRect.top
       : window.innerHeight;
-    const fitsBelow = anchorRect.bottom + 10 + height <= limit - 8;
-    const fitsAbove = anchorRect.top - 10 - height >= 8;
-    nudge.classList.toggle("is-above", !fitsBelow && fitsAbove);
+
+    nudge.style.maxHeight = `${Math.max(80, Math.floor(limit - edge * 2))}px`;
+    const nudgeRect = nudge.getBoundingClientRect();
+    const width = nudgeRect.width;
+    const height = nudgeRect.height;
+    const fitsBelow = anchorRect.bottom + gap + height <= limit - edge;
+    const spaceBelow = limit - anchorRect.bottom;
+    const spaceAbove = anchorRect.top;
+    const placeAbove = !fitsBelow && spaceAbove >= spaceBelow;
+    const desiredTop = placeAbove
+      ? anchorRect.top - gap - height
+      : anchorRect.bottom + gap;
+    const maxTop = Math.max(edge, limit - edge - height);
+    const top = Math.min(Math.max(edge, desiredTop), maxTop);
+    const maxLeft = Math.max(edge, window.innerWidth - edge - width);
+    const left = Math.min(Math.max(edge, anchorRect.right - width), maxLeft);
+    const arrowRight = Math.min(
+      Math.max(14, left + width - (anchorRect.left + anchorRect.width / 2) - 5),
+      Math.max(14, width - 24)
+    );
+
+    nudge.classList.toggle("is-above", placeAbove);
+    nudge.style.left = `${Math.round(left)}px`;
+    nudge.style.top = `${Math.round(top)}px`;
+    nudge.style.setProperty("--watch-nudge-arrow-right", `${Math.round(arrowRight)}px`);
+    nudge.style.visibility = "visible";
+  }
+
+  function stopWatchFeatureNudgePositioning() {
+    if (!featureNudgePositionHandler) return;
+    window.removeEventListener("resize", featureNudgePositionHandler);
+    document.removeEventListener("scroll", featureNudgePositionHandler, true);
+    featureNudgePositionHandler = null;
+  }
+
+  function startWatchFeatureNudgePositioning(nudge, anchor) {
+    stopWatchFeatureNudgePositioning();
+    featureNudgeAnchor = anchor;
+    featureNudgePositionHandler = () => placeWatchFeatureNudge(nudge, anchor);
+    window.addEventListener("resize", featureNudgePositionHandler);
+    document.addEventListener("scroll", featureNudgePositionHandler, true);
+    featureNudgePositionHandler();
   }
 
   function dismissWatchFeatureNudge(reason) {
@@ -66,12 +85,13 @@
       clearTimeout(featureNudgeTimer);
       featureNudgeTimer = null;
     }
-    const anchor = document.querySelector(".watch-feature-anchor");
+    const anchor = featureNudgeAnchor || document.querySelector(".watch-feature-anchor");
+    stopWatchFeatureNudgePositioning();
     if (nudge) nudge.remove();
     if (anchor) {
       anchor.classList.remove("has-feature-nudge");
-      nudgeStackingHosts(anchor).forEach(host => host.classList.remove("has-watch-feature-nudge"));
     }
+    featureNudgeAnchor = null;
     try {
       localStorage.setItem(FEATURE_NUDGE_STORAGE_KEY, "true");
     } catch (_) {
@@ -131,9 +151,8 @@
         openWatchDialog("confirm");
       });
       anchor.classList.add("has-feature-nudge");
-      nudgeStackingHosts(anchor).forEach(host => host.classList.add("has-watch-feature-nudge"));
-      anchor.appendChild(nudge);
-      placeWatchFeatureNudge(nudge, anchor);
+      document.body.appendChild(nudge);
+      startWatchFeatureNudgePositioning(nudge, anchor);
       window.App?.trackAppEvent?.("app_watch_feature_nudge_shown");
     }, 650);
   }
@@ -214,6 +233,7 @@
       dismissWatchFeatureNudge("created");
       openWatchDashboard();
     });
+    placeWatchFeatureNudge(nudge, featureNudgeAnchor);
     loadWatchLimits(true).catch(() => {});
   }
 

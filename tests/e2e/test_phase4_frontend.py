@@ -215,6 +215,80 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
         context.close()
 
 
+def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, phase4_server):
+    """Regression fuer den ersten Watch-Hinweis am fertigen Consensus-Fuss.
+
+    Der Hinweis muss selbst ueber dem Composer schweben. Die Antwort-Huelle
+    darf dafuer keinen hoeheren Stacking-Level bekommen, sonst uebermalt ihr
+    Text das fixe Eingabefeld, bis der Hinweis geschlossen wird.
+    """
+
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 1000, "height": 800})
+        page.evaluate(
+            """() => {
+              localStorage.removeItem("consensio.watchFeatureNudge.dismissed.v1");
+              window.exitHeroMode();
+              const output = document.getElementById("consensusOutput");
+              const response = document.getElementById("consensusResponse");
+              const footer = document.getElementById("runProvenance");
+              output.hidden = false;
+              output.style.display = "block";
+              output.classList.add("visible");
+              response.hidden = false;
+              footer.hidden = false;
+              document.getElementById("consensusAnswerBody").innerHTML =
+                Array.from({ length: 20 }, (_, index) =>
+                  `<p>Consensus answer line ${index + 1}: enough content to make the thread scroll.</p>`
+                ).join("");
+              window.App.state.set("lastShareResultId", "phase4-nudge-result", "share");
+              window.App.watch.showFeatureNudge();
+            }"""
+        )
+        expect(page.locator("#watchFeatureNudge")).to_be_visible(timeout=3000)
+        page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.wait_for_timeout(100)
+
+        metrics = page.evaluate(
+            """() => {
+              const rect = selector => document.querySelector(selector).getBoundingClientRect();
+              const overlaps = (a, b) =>
+                a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+              const nudge = document.getElementById("watchFeatureNudge");
+              const inputElement = document.querySelector(".input-section");
+              const input = inputElement.getBoundingClientRect();
+              const answer = rect("#consensusAnswerBody");
+              const footer = rect("#runProvenance");
+              const nudgeRect = nudge.getBoundingClientRect();
+              const overlapX = Math.max(input.left, footer.left) + 10;
+              const overlapY = Math.max(input.top, footer.top) + 2;
+              const paintedAtOverlap = document.elementFromPoint(overlapX, overlapY);
+              return {
+                nudgeIsBodyLayer: nudge.parentElement === document.body,
+                sectionRaised: document.querySelector(".consensus-section")
+                  .classList.contains("has-watch-feature-nudge"),
+                answerOverlapsComposer: overlaps(answer, input),
+                footerComposerOverlap: Math.max(0, footer.bottom - input.top),
+                composerOwnsOverlapPaint: inputElement === paintedAtOverlap
+                  || inputElement.contains(paintedAtOverlap),
+                nudgeOverlapsComposer: overlaps(nudgeRect, input),
+                nudgeZ: Number(getComputedStyle(nudge).zIndex),
+                composerZ: Number(getComputedStyle(document.querySelector(".input-section")).zIndex),
+              };
+            }"""
+        )
+        assert metrics["nudgeIsBodyLayer"] is True
+        assert metrics["sectionRaised"] is False
+        assert metrics["answerOverlapsComposer"] is False
+        assert metrics["footerComposerOverlap"] < 20
+        assert metrics["composerOwnsOverlapPaint"] is True
+        assert metrics["nudgeOverlapsComposer"] is False
+        assert metrics["nudgeZ"] > metrics["composerZ"]
+    finally:
+        context.close()
+
+
 def test_account_a_late_bookmark_save_cannot_mutate_account_b(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:

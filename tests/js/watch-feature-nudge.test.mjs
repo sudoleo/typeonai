@@ -4,11 +4,9 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 /**
  * Der Hinweis "Keep this answer current" haengt am Watch-Knopf im Fuss der
- * Antwort. Sein z-index endet an jedem Stacking-Context darueber, deshalb
- * markiert watch.js die Boxen, die mit hoch muessen. Genau diese Markierung
- * war still kaputt: sie suchte ein <h2>, seit dem Umzug der Aktionen in den
- * Fuss (#consensusFooterActions) gibt es das ueber dem Anker nicht mehr — und
- * der halbe Hinweis lag unter dem Composer.
+ * Antwort. Er lebt als eigener Layer direkt unter <body>: Wenn stattdessen
+ * die Consensus-Sektion ueber den fixierten Composer gehoben wird, malt auch
+ * der Antworttext ueber das Eingabefeld.
  */
 const BODY = `
   <div class="container">
@@ -61,21 +59,18 @@ function boot() {
 }
 
 describe("watch feature nudge", () => {
-  it("hebt Fuss und Konsens-Sektion, solange der Hinweis offen ist", () => {
+  it("portaliert nur den Hinweis ueber den Composer, nie die Antwort", () => {
     const { document, show } = boot();
     show();
 
     const nudge = document.getElementById("watchFeatureNudge");
     expect(nudge).not.toBeNull();
-    expect(nudge.closest(".watch-feature-anchor")).not.toBeNull();
-    // Ohne diese beiden liegt der Hinweis unter der eigenen Antwort
-    // (.run-provenance) bzw. unter dem Composer (.consensus-section).
-    expect(
-      document.getElementById("runProvenance").classList.contains("has-watch-feature-nudge")
-    ).toBe(true);
-    expect(
-      document.querySelector(".consensus-section").classList.contains("has-watch-feature-nudge")
-    ).toBe(true);
+    expect(nudge.parentElement).toBe(document.body);
+    expect(document.querySelector(".watch-feature-anchor").classList.contains("has-feature-nudge"))
+      .toBe(true);
+    expect(document.querySelectorAll(".has-watch-feature-nudge").length).toBe(0);
+    expect(nudge.style.top).not.toBe("");
+    expect(nudge.style.left).not.toBe("");
   });
 
   it("nimmt die Markierung beim Schliessen wieder zurueck", () => {
@@ -85,6 +80,7 @@ describe("watch feature nudge", () => {
     document.querySelector(".watch-feature-nudge-close").click();
 
     expect(document.getElementById("watchFeatureNudge")).toBeNull();
-    expect(document.querySelectorAll(".has-watch-feature-nudge").length).toBe(0);
+    expect(document.querySelector(".watch-feature-anchor").classList.contains("has-feature-nudge"))
+      .toBe(false);
   });
 });
