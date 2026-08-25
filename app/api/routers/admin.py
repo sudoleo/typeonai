@@ -27,6 +27,7 @@ from app.services import (
     watch_scheduler,
     watch_service,
 )
+from app.services.llm import provider_transport
 from app.services.share_snapshots import ShareError
 from app.services.api_key_repository import (
     ApiKeyNotFound,
@@ -948,6 +949,27 @@ def _server_enforced_models() -> dict:
     return {provider: [] for provider in PROVIDER_KEYS}
 
 
+def _provider_credentials() -> dict:
+    """Which providers the server can actually call right now.
+
+    A configured Watch model whose provider has no server credential is skipped
+    at run time. Reporting the plain availability flag lets the Admin UI say so
+    right where the model is picked, instead of leaving it to a log line and a
+    surprisingly short model list in the next run. Only booleans leave here.
+    """
+    try:
+        keys = provider_transport.developer_keys()
+    except Exception as exc:
+        logging.warning(
+            "Provider credential probe unavailable category=%s", safe_exception(exc)
+        )
+        return {}
+    return {
+        provider: bool(provider_transport.provider_available(provider, keys))
+        for provider in PROVIDER_KEYS
+    }
+
+
 def _model_dependencies(data: dict) -> dict:
     """Liefert rein informative In-use-Gruende je Provider/Modell.
 
@@ -1019,6 +1041,7 @@ def _admin_meta(data: dict) -> dict:
     return {
         "aliases": aliases,
         "enforced": enforced,
+        "provider_credentials": _provider_credentials(),
         "dependencies": _model_dependencies(data),
         "labels": labels,
         "api_models": api_models,

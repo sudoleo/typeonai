@@ -47,23 +47,17 @@ def execute_topic(
     condition: str = "",
     previous_opinion_map=None,
     is_pro: bool = False,
-    excluded_providers=None,
     baseline_consensus: str = "",
     model_overrides=None,
     known_claims=None,
     claim_key_prefix: str = "",
 ) -> dict:
     keys = provider_transport.developer_keys()
-    excluded = {
-        str(provider or "").strip().lower()
-        for provider in (excluded_providers or ())
-    }
     configured = dict(model_overrides or {})
     provider_models = {
         provider: configured[provider]
         for provider in provider_transport.PROVIDER_ORDER
-        if provider not in excluded
-        and configured.get(provider)
+        if configured.get(provider)
         and provider_transport.provider_available(provider, keys)
     }
     if mock_llm_enabled():

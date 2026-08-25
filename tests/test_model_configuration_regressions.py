@@ -4,7 +4,11 @@ from pathlib import Path
 from fastapi import HTTPException
 
 import app.core.config as cfg
-from app.api.routers.admin import _server_enforced_models, normalize_models_document
+from app.api.routers.admin import (
+    _admin_meta,
+    _server_enforced_models,
+    normalize_models_document,
+)
 from app.api.routers.chat import parse_boolean_flag, validate_question_word_limit
 from app.services.llm.base import validate_model
 from app.services.llm.engines import build_provider_payload
@@ -366,13 +370,47 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
-        from app.api.routers.admin import _admin_meta
-
         meta = _admin_meta({})
         self.assertEqual(meta["api_models"].get(cfg.GROK_NO_REASONING_MODEL), "grok-4.3")
         # Modelle, deren ID bereits das API-Modell ist, tauchen nicht auf.
         self.assertNotIn("grok-4.3", meta["api_models"])
         self.assertNotIn(cfg.DEFAULT_GROK_MODEL, meta["api_models"])
+
+    def test_admin_meta_reports_provider_credentials_as_booleans_only(self):
+        """Ein Provider ohne Server-Key faellt sonst still aus dem Lauf."""
+        from unittest.mock import patch
+        from app.api.routers import admin as admin_router
+
+        with patch.object(
+            admin_router.provider_transport,
+            "developer_keys",
+            return_value={"OpenAI": "sk-secret-value", "Gemini": ""},
+        ), patch.object(
+            admin_router.provider_transport,
+            "provider_available",
+            side_effect=lambda provider, keys: provider == "openai",
+        ):
+            meta = _admin_meta({})
+
+        credentials = meta["provider_credentials"]
+        self.assertEqual(set(credentials), set(admin_router.PROVIDER_KEYS))
+        self.assertIs(credentials["openai"], True)
+        self.assertIs(credentials["deepseek"], False)
+        self.assertNotIn("sk-secret-value", repr(meta))
+
+    def test_admin_meta_stays_silent_when_the_credential_probe_fails(self):
+        """Lieber keine Aussage als eine falsche Verfuegbarkeitsanzeige."""
+        from unittest.mock import patch
+        from app.api.routers import admin as admin_router
+
+        with patch.object(
+            admin_router.provider_transport,
+            "developer_keys",
+            side_effect=RuntimeError("credential store unavailable"),
+        ):
+            meta = _admin_meta({})
+
+        self.assertEqual(meta["provider_credentials"], {})
 
     def test_admin_template_lists_premium_models_as_locked_instead_of_hiding(self):
         """Ausgeblendete Eintraege liessen die Liste unvollstaendig wirken."""

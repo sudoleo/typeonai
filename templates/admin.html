@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20260825-flat1">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260824-seolayout1">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260825-watcheffective1">
 
-    <script type="module" src="/static/js/admin.js?v=20260824-watchconsensus1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260825-watcheffective1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -213,8 +213,8 @@
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and run limits. Normal v1 runs use all six providers, including mandatory
-                    DeepSeek processing in China; Scheduled Publisher runs explicitly exclude DeepSeek.
+                    UID's tier and run limits. All v1 runs use all six providers, including mandatory
+                    DeepSeek processing in China; the Scheduled Publisher is no exception.
                     Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
                     into a secret manager.
@@ -305,7 +305,7 @@
                     Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
                 </p>
                 <h4>Watch models by user tier</h4>
-                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for each tier. At least two answer providers are required. Premium models stay listed for Free but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model.</p>
+                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for each tier. At least two answer providers are required. Premium models stay listed for Free but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. Free is the tier the Scheduled Publisher watches run on; every other watch follows its owner's account tier.</p>
                 <div id="watchModelConfig" class="watch-model-grid"></div>
                 <div class="watch-admin-toolbar">
                     <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>

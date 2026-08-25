@@ -646,6 +646,12 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
     dataToMerge = {
         "query": question,
         "previous_question": previous_question,
+        # Agent Mode persists only this authoritative consensus snapshot; the
+        # former per-model writes (which also supplied the timestamp) were
+        # removed by the multi-run migration. Firestore order_by("timestamp")
+        # excludes documents where the field is missing, so a successful new
+        # bookmark otherwise exists only until the browser refreshes.
+        "timestamp": firestore.SERVER_TIMESTAMP,
         "responses": {
             "consensus": consensusText,
             "differences": differencesText

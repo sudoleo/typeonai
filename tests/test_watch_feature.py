@@ -426,18 +426,21 @@ class WatchCrudTests(unittest.TestCase):
         self.db.stores["shares"][self.share_id]["publication_source"] = "scheduled_publisher"
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=True,
-            model_tier="free", return_existing=True,
-            excluded_providers=("deepseek",), db=self.db,
+            model_tier="free", return_existing=True, db=self.db,
         )
         repeated = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", is_pro=True,
-            model_tier="free", return_existing=True,
-            excluded_providers=("deepseek",), db=self.db,
+            model_tier="free", return_existing=True, db=self.db,
         )
 
         self.assertEqual(created["id"], repeated["id"])
         self.assertEqual(created["model_tier"], "free")
-        self.assertEqual(created["excluded_providers"], ["deepseek"])
+        # A Publisher watch pins the tier and the schedule, nothing else. It
+        # must not carry a provider filter of its own.
+        self.assertNotIn("excluded_providers", created)
+        self.assertNotIn(
+            "excluded_providers", self.db.stores["watches"][created["id"]]
+        )
         self.assertEqual(self.db.stores["watches"][created["id"]]["model_tier"], "free")
         self.assertEqual(
             self.db.stores["watches"][created["id"]]["publication_source"],
@@ -446,11 +449,6 @@ class WatchCrudTests(unittest.TestCase):
         self.assertEqual(
             watch_service.publisher_watch_counts(db=self.db),
             {"active": 1, "paused": 0},
-        )
-        self.db.stores["watches"][created["id"]].pop("excluded_providers")
-        self.assertEqual(
-            watch_service.list_watches("u1", db=self.db)[0]["excluded_providers"],
-            ["deepseek"],
         )
 
     def test_publisher_watch_resume_bypasses_owner_limit_but_keeps_counter(self):
@@ -1210,13 +1208,11 @@ class SchedulerSafetyTests(unittest.TestCase):
                     "provider_available",
                     return_value=False,
                 ):
-            engine = watch_scheduler._configured_consensus_engine(
-                {"Gemini": ""}, False, set()
-            )
+            engine = watch_scheduler._configured_consensus_engine({"Gemini": ""}, False)
 
         self.assertIsNone(engine)
 
-    def test_publisher_watch_excludes_deepseek_even_if_configured_for_free(self):
+    def test_free_tier_watch_runs_every_configured_provider(self):
         configured = {
             "openai": cfg.DEFAULT_OPENAI_MODEL,
             "mistral": cfg.DEFAULT_MISTRAL_MODEL,
@@ -1224,11 +1220,21 @@ class SchedulerSafetyTests(unittest.TestCase):
         }
         keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
         with patch.object(cfg, "get_watch_models", return_value=configured):
-            selected = watch_scheduler._selected_models(
-                keys, False, excluded_providers=("deepseek",)
-            )
+            selected = watch_scheduler._selected_models(keys, False)
 
-        self.assertNotIn("deepseek", dict(selected))
+        self.assertEqual(set(dict(selected)), {"openai", "mistral", "deepseek"})
+
+    def test_configured_provider_without_credential_is_the_only_thing_dropped(self):
+        configured = {
+            "openai": cfg.DEFAULT_OPENAI_MODEL,
+            "mistral": cfg.DEFAULT_MISTRAL_MODEL,
+            "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
+        }
+        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
+        keys["DeepSeek"] = ""
+        with patch.object(cfg, "get_watch_models", return_value=configured):
+            selected = watch_scheduler._selected_models(keys, False)
+
         self.assertEqual(set(dict(selected)), {"openai", "mistral"})
 
 
@@ -1651,6 +1657,8 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         claimed = {
             "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
             "model_tier": "free", "email_mode": "changes_only",
+            # Legacy field from the era of the hardcoded Publisher exclusion.
+            # A stale document must no longer silence a provider.
             "excluded_providers": ["deepseek"],
         }
         result = {
@@ -1672,7 +1680,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             await watch_scheduler.run_watch_tick()
 
         self.assertFalse(execute.call_args.args[-1])
-        self.assertEqual(execute.call_args.kwargs["excluded_providers"], ["deepseek"])
+        self.assertNotIn("excluded_providers", execute.call_args.kwargs)
 
 
 class TelegramWatchTests(unittest.TestCase):

@@ -122,6 +122,9 @@ function dependencyReasons(provider, model) {
     return ((((meta().dependencies || {})[provider] || {})[model]) || []);
 }
 function labelFor(model) { return (meta().labels || {})[model] || ''; }
+// Leer, solange der Server keine Auskunft geben konnte. Dann wird nichts
+// behauptet, statt faelschlich "laeuft" oder "laeuft nicht" anzuzeigen.
+function providerCredentials() { return meta().provider_credentials || {}; }
 // Virtuelle IDs senden ein anderes API-Modell (z. B.
 // grok-4.3-no-reasoning -> grok-4.3). Sichtbar machen, sonst sieht man
 // zwei fast gleich aussehende Eintraege ohne erkennbaren Unterschied.
@@ -234,6 +237,65 @@ function renderWatchModelConfig() {
         select.value = configuredConsensus[tier] || '';
         select.addEventListener('change', markDirty);
         container.appendChild(select);
+    });
+
+    renderWatchEffectiveRun(container, configured, premium);
+}
+
+// Ein Filter, der beim Lauf greift, muss dort sichtbar sein, wo man die
+// Auswahl trifft. Sonst steht in der Konfiguration eine Modellzahl und im Lauf
+// eine andere -- ohne dass irgendwo steht, welcher Provider warum fehlt.
+function watchTierOutcome(configured, premium, tier) {
+    const credentials = providerCredentials();
+    const running = [];
+    const skipped = [];
+    providers.forEach(provider => {
+        const model = (configured[tier] || {})[provider];
+        if (!model) return;
+        if (tier === 'free' && premium.has(model)) {
+            skipped.push({ provider, model, reason: 'Pro only in the Free tier' });
+            return;
+        }
+        if (credentials[provider] === false) {
+            skipped.push({ provider, model, reason: 'no server credential' });
+            return;
+        }
+        running.push({ provider, model });
+    });
+    return { running, skipped };
+}
+
+function renderWatchEffectiveRun(container, configured, premium) {
+    const label = document.createElement('div');
+    label.className = 'watch-model-provider';
+    label.textContent = 'Actually runs';
+    container.appendChild(label);
+    ['free', 'pro'].forEach(tier => {
+        const cell = document.createElement('div');
+        cell.className = 'watch-effective-run';
+        const outcome = watchTierOutcome(configured, premium, tier);
+        const summary = document.createElement('div');
+        summary.className = 'watch-effective-summary';
+        summary.textContent = outcome.running.length
+            ? `${outcome.running.length} providers: ` +
+              outcome.running.map(item => item.provider).join(', ')
+            : 'No provider left';
+        cell.appendChild(summary);
+        if (outcome.running.length < 2) {
+            cell.appendChild(chip(
+                'warn',
+                'Needs at least 2',
+                'A run with fewer than two answers cannot be compared.',
+            ));
+        }
+        outcome.skipped.forEach(item => {
+            cell.appendChild(chip(
+                'warn',
+                `${item.provider} skipped`,
+                `${item.model} is configured but will not run: ${item.reason}.`,
+            ));
+        });
+        container.appendChild(cell);
     });
 }
 

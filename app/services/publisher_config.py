@@ -227,6 +227,9 @@ def public_config(config: dict) -> dict:
         **normalize_config(config),
         "watch_interval": "weekly",
         "watch_model_tier": "free",
-        "excluded_providers": ["deepseek"],
+        # No provider is filtered out of Publisher runs. The field stays in the
+        # contract so a future exclusion is an explicit, readable fact instead
+        # of a rule buried in the execution path.
+        "excluded_providers": [],
         "search_opportunity_rules": SEARCH_OPPORTUNITY_RULES,
     }

@@ -42,25 +42,28 @@ def _developer_keys() -> dict:
     return provider_transport.developer_keys()
 
 
-def _selected_models(keys: dict, is_pro: bool, excluded_providers=None,
+def _selected_models(keys: dict, is_pro: bool,
                      model_overrides=None) -> list[tuple[str, str]]:
+    """Every provider the tier configures, minus the ones with no credential.
+
+    A missing server key is the only reason a configured provider can drop out
+    of a run. There is deliberately no second, invisible filter on top of the
+    Admin configuration.
+    """
     configured = (
         dict(model_overrides)
         if isinstance(model_overrides, dict)
         else cfg.get_watch_models(is_pro)
     )
-    excluded = {
-        str(provider or "").strip().lower() for provider in (excluded_providers or ())
-    }
     if mock_llm_enabled():
         return [
             (provider, configured[provider])
             for provider in PROVIDER_ORDER
-            if provider not in excluded and configured.get(provider)
+            if configured.get(provider)
         ]
     return [
         (provider, configured[provider]) for provider in PROVIDER_ORDER
-        if provider not in excluded and configured.get(provider)
+        if configured.get(provider)
         and provider_transport.provider_available(provider, keys)
     ]
 
@@ -72,11 +75,11 @@ def _provider_answer(provider: str, model: str, question: str, keys: dict,
     )
 
 
-def _configured_consensus_engine(keys: dict, is_pro: bool, excluded: set[str]) -> str | None:
+def _configured_consensus_engine(keys: dict, is_pro: bool) -> str | None:
     """Return the configured Watch engine when its provider can be called."""
     chosen = cfg.get_watch_consensus_model(is_pro)
     resolved = cfg.get_consensus_model_config(chosen)
-    if not resolved or not resolved.provider or resolved.provider in excluded:
+    if not resolved or not resolved.provider:
         return None
     if not provider_transport.provider_available(resolved.provider, keys):
         return None
@@ -85,20 +88,14 @@ def _configured_consensus_engine(keys: dict, is_pro: bool, excluded: set[str]) -
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
                   previous_opinion_map=None, is_pro: bool = False,
-                  excluded_providers=None, baseline_consensus: str = "",
+                  baseline_consensus: str = "",
                   model_overrides=None) -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
-    excluded = {
-        str(provider or "").strip().lower() for provider in (excluded_providers or ())
-    }
-    for provider in excluded:
-        if provider in PROVIDER_LABELS:
-            keys[PROVIDER_LABELS[provider]] = ""
     selected_models = _selected_models(
-        keys, is_pro, excluded, model_overrides=model_overrides
+        keys, is_pro, model_overrides=model_overrides
     )
-    configured_engine = _configured_consensus_engine(keys, is_pro, excluded)
+    configured_engine = _configured_consensus_engine(keys, is_pro)
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
@@ -440,9 +437,6 @@ async def run_watch_tick() -> int:
                 # Admin-configured Free Watch providers. All ordinary watches
                 # continue to follow the owner's live account tier.
                 is_pro = False if claimed.get("model_tier") == "free" else account_is_pro
-                excluded_providers = claimed.get("excluded_providers") or (
-                    ("deepseek",) if claimed.get("model_tier") == "free" else ()
-                )
                 try:
                     history = await asyncio.to_thread(
                         share_snapshots.list_watch_history, claimed["share_id"], max_items=1,
@@ -480,7 +474,6 @@ async def run_watch_tick() -> int:
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
                     previous_position_map,
                     is_pro,
-                    excluded_providers=excluded_providers,
                     baseline_consensus=original_consensus,
                 )
                 mail_kind = notification_kind(claimed, result)

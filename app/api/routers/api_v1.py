@@ -123,7 +123,7 @@ class ApiPublisherConfigResponse(BaseModel):
     watch_timezone: str
     watch_interval: Literal["weekly"]
     watch_model_tier: Literal["free"]
-    excluded_providers: list[Literal["deepseek"]]
+    excluded_providers: list[str]
 
 
 def authenticate_api_identity(api_key: Optional[str], required_scope: str = "consensus:run"):
@@ -285,7 +285,6 @@ def create_consensus_run(
             model_plan = build_server_model_plan(
                 deep_think=payload.deep_think,
                 is_pro=is_pro,
-                excluded_providers=("deepseek",) if publisher_mode else (),
             )
         except HTTPException:
             raise
@@ -546,7 +545,6 @@ def create_api_publisher_watch(
             model_tier="free",
             return_existing=True,
             bypass_active_limit=True,
-            excluded_providers=("deepseek",),
             publisher_active_limit=limit,
         )
     except HTTPException:

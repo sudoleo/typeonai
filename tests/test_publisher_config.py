@@ -57,7 +57,7 @@ def test_default_publisher_configuration_is_persisted_and_free_pinned():
         publisher_config.DEFAULT_TOPIC_BRIEF
     )
     assert publisher_config.public_config(config)["watch_model_tier"] == "free"
-    assert publisher_config.public_config(config)["excluded_providers"] == ["deepseek"]
+    assert publisher_config.public_config(config)["excluded_providers"] == []
 
 
 def test_saved_publisher_configuration_is_normalized():

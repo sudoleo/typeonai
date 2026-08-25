@@ -206,6 +206,9 @@
 }
 .admin-chip.required { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .admin-chip.deepthink { color: var(--accent-tertiary); border-color: color-mix(in srgb, var(--accent-tertiary) 45%, transparent); }
+/* Shared traffic-light amber, same meaning as everywhere else: not broken,
+   but not what the configuration above says either. */
+.admin-chip.warn { color: var(--partial); border-color: color-mix(in srgb, var(--partial) 45%, transparent); }
 
 .icon-btn {
     background: transparent !important;
@@ -518,6 +521,8 @@
 .watch-model-grid .watch-model-head { font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--sidebar-text-muted); text-transform: uppercase; }
 .watch-model-provider { font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); text-transform: capitalize; }
 .watch-model-select { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--input-border); border-radius: var(--radius-xs); background: var(--input-bg); color: var(--text-color); }
+.watch-effective-run { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.watch-effective-summary { font-size: var(--font-size-xs); color: var(--sidebar-text-muted); overflow-wrap: anywhere; }
 
 /* Read-only SEO overview */
 .seo-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }

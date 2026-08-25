@@ -39,7 +39,6 @@ WATCH_LEASE_MINUTES = 15
 WORKER_LEASE_MINUTES = 29
 RUNTIME_COLLECTION = "watch_runtime"
 WATCH_HISTORY_POINTS = 16
-WATCH_INTERNAL_EXCLUDED_PROVIDERS = {"deepseek"}
 WATCH_EVENT_CHECKED = "watch.checked"
 WATCH_EVENT_CHANGED = "watch.changed"
 WATCH_EVENT_CONDITION_MET = "watch.condition_met"
@@ -225,13 +224,8 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
     share = share or {}
     slug = str(share.get("slug") or data.get("share_slug") or "")
     visibility = str(share.get("visibility") or data.get("visibility") or "public")
-    excluded_providers = list(data.get("excluded_providers") or [])
     baseline_agreement = (share.get("differences_data") or {}).get("agreement") or {}
     baseline_agreement_score = baseline_agreement.get("score")
-    if data.get("model_tier") == "free" and not excluded_providers:
-        # Backward-compatible default for Publisher Watches created before the
-        # explicit exclusion field was introduced.
-        excluded_providers = ["deepseek"]
     return {
         # Google-Listing-Status der Seite (Quelle: Share-Doc) fürs Dashboard.
         "indexed": bool(share.get("indexed")),
@@ -246,10 +240,6 @@ def _serialize_watch(watch_id: str, data: dict, share: dict | None = None) -> di
         "publication_source": str(
             data.get("publication_source") or share.get("publication_source") or ""
         ),
-        "excluded_providers": [
-            provider for provider in excluded_providers
-            if provider in WATCH_INTERNAL_EXCLUDED_PROVIDERS
-        ],
         "run_weekday": str(data.get("run_weekday") or ""),
         "run_time": str(data.get("run_time") or ""),
         "timezone": str(data.get("timezone") or ""),
@@ -395,7 +385,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                  run_weekday="",
                  result_id=None,
                  share_id=None, question=None, model_tier="", return_existing=False,
-                 bypass_active_limit=False, excluded_providers=None,
+                 bypass_active_limit=False,
                  publisher_active_limit=None, db=None) -> dict:
     db = db if db is not None else db_firestore
     interval = validate_interval(interval, is_pro)
@@ -414,12 +404,6 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
     normalized_model_tier = str(model_tier or "").strip().lower()
     if normalized_model_tier not in {"", "free"}:
         raise WatchError("invalid_model_tier", "Only the Free Watch model tier can be pinned.")
-    normalized_excluded = sorted({
-        str(provider or "").strip().lower() for provider in (excluded_providers or ())
-        if str(provider or "").strip()
-    })
-    if any(provider not in WATCH_INTERNAL_EXCLUDED_PROVIDERS for provider in normalized_excluded):
-        raise WatchError("invalid_provider", "Unsupported Watch provider exclusion.")
     if question is not None and not isinstance(question, str):
         raise WatchError("invalid_question", "Question must be text.")
     sources = [bool(result_id), bool(share_id), bool(str(question or "").strip())]
@@ -473,7 +457,6 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
         "question_hash": share.get("question_hash") or share_snapshots.question_hash(share.get("question")),
         "interval": interval,
         "model_tier": normalized_model_tier,
-        "excluded_providers": normalized_excluded,
         "run_weekday": run_weekday,
         "run_time": run_time,
         "timezone": timezone_name,
@@ -551,7 +534,6 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                         "run_weekday": run_weekday,
                         "run_time": run_time,
                         "timezone": timezone_name,
-                        "excluded_providers": normalized_excluded,
                     }
                     if any(
                         existing_data.get(key) != value

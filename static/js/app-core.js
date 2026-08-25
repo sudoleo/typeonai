@@ -84,11 +84,27 @@
     if (!wrap || !text) return "";
 
     const normalized = String(question || "").replace(/\s+/g, " ").trim();
+    const unchanged = text.textContent === normalized;
+    // Die Multi-Run-Projektion schreibt den sichtbaren Context waehrend des
+    // Streamings regelmaessig neu ins DOM. Eine identische Frage ist dabei
+    // kein neuer Turn: ihren lokalen Disclosure-State zurueckzusetzen liess
+    // "Show full question" unter dem Mauszeiger flackern und klappte einen
+    // erfolgreichen Klick beim naechsten Stream-Update sofort wieder zu.
+    // Nur neuer Inhalt initialisiert Clamp und Link deshalb von vorn.
+    if (unchanged) {
+      wrap.hidden = !normalized;
+      if (normalized) observeThreadAskWidth(wrap, text);
+      return normalized;
+    }
+
     text.textContent = normalized;
     wrap.hidden = !normalized;
     wrap.classList.remove("is-open", "is-long");
     const more = wrap.querySelector(".thread-ask-more");
-    if (more) more.textContent = "Show full question";
+    if (more) {
+      more.textContent = "Show full question";
+      more.setAttribute("aria-expanded", "false");
+    }
     if (!normalized) return "";
 
     requestAnimationFrame(() => syncThreadAskClamp(wrap, text));
@@ -286,6 +302,7 @@
     if (!wrap) return;
     const open = wrap.classList.toggle("is-open");
     more.textContent = open ? "Collapse question" : "Show full question";
+    more.setAttribute("aria-expanded", String(open));
   });
 
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).

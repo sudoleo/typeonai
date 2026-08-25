@@ -1862,13 +1862,16 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Consensus-Engine aus demselben Preset und für Deep Think stattdessen
   `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
   keine Request-Felder.
-- Reguläre API-v1-Runs verwenden bewusst immer alle sechs Provider einschließlich
-  DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Nur der admin-only
-  Scheduled Publisher setzt den typisierten Header `X-Consensus-Publisher: true`:
-  Sein persistierter Modellplan und die Ausführung entfernen DeepSeek aus
-  Antwort-Fan-out, Consensus-Engine/Fallback und Differences-Judges. Der Modus
-  wird Teil des Idempotenz-Requests und kann daher nicht mit einem regulären Run
-  unter demselben Key kollidieren. Privacy/Terms beschreiben diese Ausnahme.
+- API-v1-Runs verwenden bewusst immer alle sechs Provider einschließlich
+  DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Das gilt seit
+  2026-08-25 auch für den admin-only Scheduled Publisher: sein typisierter
+  Header `X-Consensus-Publisher: true` markiert nur noch die Herkunft (Lineage,
+  Idempotenz, Kapazität) und verändert den Modellplan nicht mehr. Der frühere
+  DeepSeek-Ausschluss in Antwort-Fan-out, Consensus-Engine/Fallback und
+  Differences-Judges ist entfernt — er war nirgends sichtbar und hat nach einem
+  Wechsel des Watch-Modellprofils auf DeepSeek unbemerkt nur noch zwei statt
+  drei Antworten produziert. Der Modus wird Teil des Idempotenz-Requests und
+  kann daher nicht mit einem regulären Run unter demselben Key kollidieren.
 - UID + gehashter `Idempotency-Key` zeigen auf genau einen persistenten Run;
   derselbe Key mit anderem Request ergibt 409. Der API-State folgt
   `accepted → reserved → running → succeeded|failed`. Der transaktionale
@@ -1923,10 +1926,9 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   KI-Produkt-/Modellfragen mit jungem Suchfenster und geringer Konkurrenz im
   exakten Suchintent; Policy-/Regulierungsfragen werden für automatisch gewählte
   Titel hart ausgeschlossen. Secrets bleiben ausschließlich in
-  GitHub Actions. Sowohl der initiale Publisher-Run als auch seine Watch-Runs
-  schließen DeepSeek explizit aus; beim Watch wird dazu
-  `excluded_providers=[deepseek]` persistent gespeichert und der DeepSeek-Key
-  auch für Engine-/Judge-Fallbacks entfernt.
+  GitHub Actions. Publisher-Run und Watch-Runs laufen auf demselben
+  Providerkreis wie alles andere; das früher persistierte
+  `excluded_providers=[deepseek]` ist Code- wie datenseitig entfernt.
 - Nur ein API-Run mit persistiertem `request.publisher_mode=true` markiert den
   erzeugten Share als `publication_source=scheduled_publisher`; normale API-
   und Nutzer-Shares erhalten diese Lineage nicht. Neue Publisher-Watches sind
@@ -2399,8 +2401,10 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
 - `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
   Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
-  Intervall (`weekly`), Modellprofil (`free`) und der DeepSeek-Ausschluss sind
-  absichtlich nicht konfigurierbar und werden serverseitig erzwungen;
+  Intervall (`weekly`) und Modellprofil (`free`) sind absichtlich nicht
+  konfigurierbar und werden serverseitig erzwungen; `excluded_providers` bleibt
+  als leeres Feld im Vertrag, damit ein künftiger Ausschluss eine lesbare
+  Tatsache wäre statt einer Regel im Ausführungspfad;
   `max_active_publisher_watches` begrenzt neue aktive Watches (Default 12).
 - `app_config/seo_weekly_review` — `enabled`, `interval_days` (Default 7),
   lokale `run_time` + IANA-`timezone`, `last_run_at`, `next_run_at` sowie
@@ -2439,7 +2443,9 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   optional internes `model_tier=free` für Publisher-Watches,
   denormalisierte `publication_source` für begrenzte Publisher-Kapazitätschecks
   ohne N+1-Reads der Share-Dokumente,
-  optional interne `excluded_providers` (beim Publisher fest `deepseek`),
+  (das früher hier persistierte `excluded_providers` ist entfernt: es wurde
+  nirgends angezeigt und hat still einen Provider aus jedem Publisher-Lauf
+  genommen),
   das aus Kompatibilitätsgründen so benannte `email_mode` als kanalneutrale
   Alert-Regel `changes_only|condition|every_run`, `email_enabled`,
   `telegram_enabled`, optionales `telegram_muted_until`, private
@@ -2661,7 +2667,13 @@ geordnet (Picker-Reihenfolge via `MODEL_ORDER_BY_PROVIDER`/`get_ordered_models`,
 per ↑/↓ sortierbar); Feld `defaults` setzt den Free-Default je Provider (`apply_default_models`,
 nur Nicht-Premium erlaubt, sonst `_BASE_FREE_DEFAULTS`). Feld `watch_models`
 enthält getrennte `free`-/`pro`-Mappings Provider→Modell; je Tier sind mindestens zwei
-Provider nötig, Free wird serverseitig auf Nicht-Premium begrenzt. Das getrennte Feld
+Provider nötig, Free wird serverseitig auf Nicht-Premium begrenzt. Die Zeile
+„Actually runs“ unter dem Raster nennt pro Tier die Provider, die der nächste
+Lauf wirklich verwendet, und benennt jeden konfigurierten Provider, der
+wegfällt, mit Grund (Pro-only im Free-Tier, kein Server-Key) — sichtbar an der
+Stelle, an der man die Auswahl trifft. Grundlage ist `meta.provider_credentials`
+(reine Booleans je Provider); ein leeres Objekt heißt „keine Aussage“ und zeigt
+bewusst gar nichts an. Das getrennte Feld
 `watch_consensus_models` wählt pro Tier genau eine Synthese-Engine (Alias oder direkte
 konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwenden.
   `normalize_models_document` erhält die Reihenfolge (kein `sorted` mehr), entfernt
@@ -2806,10 +2818,12 @@ alle fünf Minuten und fenced Completion wie Fehlerabschluss über
 ein alter Worker kann einen neueren Claim weder leeren noch pausieren. Die Reruns ermitteln den aktuellen Pro-Status des Eigentümers und
 nutzen das entsprechende `WATCH_MODELS_BY_TIER`-Mapping aus Firestore `watch_models`;
 je konfiguriertem Provider läuft genau ein Modell (mindestens zwei), deren Antwort-Calls
-laufen innerhalb des einzelnen Watch-Runs parallel. Die Synthese sowie die nachgelagerte
+laufen innerhalb des einzelnen Watch-Runs parallel. Ein fehlender Server-Key ist
+der einzige Grund, aus dem ein konfigurierter Provider aus einem Lauf fällt; es
+gibt keinen zweiten, unsichtbaren Filter über der Admin-Konfiguration. Die Synthese sowie die nachgelagerte
 Differences-/Change-Analyse verwenden die tierabhängige Engine aus
-`watch_consensus_models`. Ist deren Provider mangels Key nicht verfügbar oder für den Lauf
-ausgeschlossen, fällt der Scheduler deterministisch auf den ersten erfolgreichen
+`watch_consensus_models`. Ist deren Provider mangels Key nicht verfügbar,
+fällt der Scheduler deterministisch auf den ersten erfolgreichen
 Watch-Antwortprovider in `PROVIDER_ORDER` zurück. Keine Attachments/Follow-ups und keine
 In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
 `shares/{share_id}/watch_history/{run_id}` genau eine unveränderliche Version:

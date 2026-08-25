@@ -34,6 +34,11 @@ class FakeBookmarkRef:
         for key, value in incoming.items():
             if key == "responses":
                 self.data.setdefault("responses", {}).update(value)
+            elif value is bookmarks_router.firestore.SERVER_TIMESTAMP:
+                # Production Firestore resolves transforms before the route's
+                # post-write read. Keep this tiny fake faithful to that
+                # response contract instead of leaking the SDK Sentinel.
+                self.data[key] = "server-time"
             else:
                 self.data[key] = value
 
@@ -221,6 +226,7 @@ def test_consensus_save_returns_complete_merged_bookmark():
     with (
         patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
         patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(bookmarks_router.firestore, "SERVER_TIMESTAMP", "server-time"),
         patch.object(
             bookmarks_router,
             "_authoritative_consensus_payload",
@@ -259,6 +265,10 @@ def test_consensus_save_returns_complete_merged_bookmark():
     assert bookmark["responses"]["OpenAI"] == ""
     assert bookmark["responses"]["consensus"] == "Merged consensus"
     assert bookmark["responses"]["differences"] == "Merged differences"
+    # Agent Mode no longer performs model bookmark writes. The consensus save
+    # must therefore make a brand-new document eligible for the timestamp-
+    # ordered sidebar query on its own.
+    assert bookmark["timestamp"] == "server-time"
     assert bookmark["share_result_id"] == "N" * 16
     assert bookmark["consensus_model"] == "Gemini-Pro"
     assert bookmark["model_labels"] == {"Gemini": "Gemini-Pro"}
