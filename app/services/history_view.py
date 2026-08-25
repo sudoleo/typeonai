@@ -6,16 +6,51 @@ change events and the Position Map — is identical for both, so both pages buil
 it here instead of growing two divergent versions of the same chart.
 
 Input points are dictionaries with ``ts`` (datetime), ``agreement_score``,
-``changed`` and optionally ``change_summary``, ``opinion_map``, ``run_id``,
-``has_snapshot`` and ``trigger``.
+``changed`` and optionally ``severity``, ``change_summary``, ``opinion_map``,
+``run_id`` and ``has_snapshot``. ``trigger``, ``score_event`` and ``restated``
+are derived from the series by :mod:`app.services.drift_signal`, so a stored
+trigger written under an older rule is never rendered.
 """
 
 from __future__ import annotations
+
+from app.services import drift_signal
+from app.services.public_markdown import markdown_to_plaintext
+
+
+def _plain_dimensions(dimensions):
+    """Position-Map-Labels kommen aus dem Antworttext und tragen dessen Markdown.
+
+    Die Karten rendern kein Markdown, also stuenden dort sonst sichtbare
+    Sternchen ("**Neither is universally cheaper.**") auf der oeffentlichen
+    Seite.
+    """
+    plain = []
+    for dimension in dimensions or []:
+        if not isinstance(dimension, dict):
+            continue
+        positions = []
+        for position in dimension.get("positions") or []:
+            if not isinstance(position, dict):
+                continue
+            positions.append({
+                **position,
+                "stance": markdown_to_plaintext(position.get("stance") or ""),
+            })
+        plain.append({
+            **dimension,
+            "label": markdown_to_plaintext(dimension.get("label") or ""),
+            "positions": positions,
+        })
+    return plain
 
 
 def build_history_view(points):
     if not points:
         return None
+    # One shared rule decides which checks moved the answer; the curve marks
+    # exactly those, so a page cannot highlight more events than it alerts on.
+    points = drift_signal.annotate_points(points)
     width, height = 640, 190
     left, right, top, bottom = 38, 18, 18, 30
     plot_w, plot_h = width - left - right, height - top - bottom
@@ -24,11 +59,8 @@ def build_history_view(points):
     for index, point in enumerate(points):
         x = left + (plot_w * index / (count - 1) if count > 1 else plot_w / 2)
         y = top + plot_h * (100 - point["agreement_score"]) / 100
-        previous_score = points[index - 1]["agreement_score"] if index else None
-        score_event = previous_score is not None and abs(point["agreement_score"] - previous_score) >= 15
-        trigger = point.get("trigger")
-        if trigger not in {"stable", "changed"}:
-            trigger = "changed" if point.get("changed") or score_event else "stable"
+        score_event = bool(point.get("score_event"))
+        trigger = point.get("trigger") if point.get("trigger") in {"stable", "changed"} else "stable"
         coords.append({
             **point,
             # Stable within the rendered history and independent of Firestore
@@ -43,7 +75,7 @@ def build_history_view(points):
         ("M" if index == 0 else "L") + f" {point['x']} {point['y']}"
         for index, point in enumerate(coords)
     )
-    events = [point for point in reversed(coords) if point["changed"] or point["score_event"]]
+    events = [point for point in reversed(coords) if point["trigger"] == "changed"]
     mapped_points = [point for point in coords if point.get("opinion_map")]
     position_view = None
     if mapped_points:
@@ -72,7 +104,7 @@ def build_history_view(points):
         position_view = {
             "dates": [point["ts"].strftime("%b %d") for point in mapped_points],
             "trajectories": trajectories,
-            "dimensions": latest_map.get("dimensions") or [],
+            "dimensions": _plain_dimensions(latest_map.get("dimensions")),
             "shift_score": latest_map.get("shift_score"),
             "shift_label": latest_map.get("shift_label") or "New baseline",
         }

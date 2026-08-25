@@ -22,6 +22,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 
+from app.services import drift_signal
 from app.services.opinion_map import similarity
 from app.services.public_markdown import markdown_to_plaintext
 
@@ -35,7 +36,12 @@ MAX_LIFELINE_TICKS = 40
 MAX_RETIRED_CLAIMS = 6
 MAX_RETIRED_SOURCES = 8
 MAX_RECORD_SITES = 6
-MATERIAL_CHANGE_TYPES = {"minor", "major"}
+# Movement, in the sense the record strip and the change badge use, is what
+# app.services.drift_signal grades as material: the Change Judge's "major".
+# A "minor" grade is the Judge saying the answer was restated, not moved, and
+# a record that anchors on it reports a change after every single check.
+MATERIAL_CHANGE_TYPES = {drift_signal.MATERIAL_SEVERITY}
+RESTATED_CHANGE_TYPES = {"minor"}
 # A run only counts as an inventory of the answer when the cross-check
 # produced more than one claim. Runs below that line say nothing about the
 # claims they omit, so they must not be read as an absence.
@@ -330,7 +336,8 @@ def build_record_summary(runs) -> dict | None:
     The anchor is the last run the Change Judge graded as a material change.
     Score movement is deliberately *not* an anchor: the agreement score steps
     between a small set of grading levels, so a step without a material grade
-    is a wording difference, not a shift in substance.
+    is a wording difference, not a shift in substance. A "minor" grade is not
+    an anchor either — that is the Judge saying the answer was restated.
     """
     runs = list(runs or [])
     if not runs:

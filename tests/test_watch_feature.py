@@ -780,6 +780,11 @@ class SchedulerSafetyTests(unittest.TestCase):
         self.assertTrue(watch_scheduler.should_notify(60, 61, True, "major"))
         self.assertTrue(watch_scheduler.should_notify(60, 75, False, "minor"))
         self.assertFalse(watch_scheduler.should_notify(60, 74, True, "minor"))
+        # Same band rule as the page badge: a score that keeps swinging back to
+        # a level it just held is not a new event.
+        self.assertFalse(
+            watch_scheduler.should_notify(84, 64, False, "minor", [84, 64, 84])
+        )
         unchanged = {"agreement_score": 61, "changed": False, "severity": "minor"}
         self.assertEqual(
             watch_scheduler.notification_kind(
@@ -909,8 +914,8 @@ class SchedulerSafetyTests(unittest.TestCase):
             "consensus": "The current consensus.",
             "agreement_score": 68,
             "changed": True,
-            "severity": "minor",
-            "change_summary": "A qualification was added.",
+            "severity": "major",
+            "change_summary": "The recommendation flipped.",
             "differences_data": {"agreement": {"score": 68}},
             "included_models": ["OpenAI", "Google Gemini"],
             "consensus_model": "OpenAI",
@@ -929,6 +934,84 @@ class SchedulerSafetyTests(unittest.TestCase):
             db.stores["shares"]["A" * 16]["latest_watch_run_id"],
             "run12345678",
         )
+
+    def test_a_restated_answer_is_recorded_as_a_check_not_as_a_change(self):
+        """The Judge sets `changed` for a rewritten qualification too. Marking
+        that as movement made every tracked page claim it had changed."""
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        db.stores["watches"]["w1"] = {
+            "status": "active", "current_run_id": "run12345678"
+        }
+        claimed = {
+            "share_id": "A" * 16,
+            "current_run_id": "run12345678",
+            "interval": "weekly",
+            "last_agreement_score": 70,
+        }
+        result = {
+            "consensus": "The current consensus.",
+            "agreement_score": 68,
+            "changed": True,
+            "severity": "minor",
+            "change_summary": "A qualification was added.",
+            "differences_data": {"agreement": {"score": 68}},
+            "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI",
+        }
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            history = watch_service.complete_watch_run(
+                "w1", claimed, result,
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+        self.assertEqual(history["trigger"], "stable")
+        self.assertEqual(history["event_type"], "watch.checked")
+        # The Judge's sentence is kept; only the badge is denied.
+        self.assertEqual(history["change_summary"], "A qualification was added.")
+        self.assertTrue(history["changed"])
+
+    def test_a_score_bouncing_between_cap_steps_reports_one_event(self):
+        """The agreement score is quantised by the scoring caps, so a single
+        difference labelled major once moves it a whole step. Only leaving the
+        band of the recent checks counts."""
+        db = FakeDb()
+        db.stores["shares"]["A" * 16] = share()
+        base_claim = {
+            "share_id": "A" * 16,
+            "interval": "weekly",
+            "history_points": [
+                {"agreement_score": 84}, {"agreement_score": 64}, {"agreement_score": 84},
+            ],
+            "last_agreement_score": 84,
+        }
+        result = {
+            "consensus": "The current consensus.",
+            "agreement_score": 64,
+            "changed": False,
+            "severity": "minor",
+            "change_summary": "",
+            "differences_data": {"agreement": {"score": 64}},
+            "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI",
+        }
+        db.stores["watches"]["w1"] = {"status": "active", "current_run_id": "run1"}
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            bounced = watch_service.complete_watch_run(
+                "w1", {**base_claim, "current_run_id": "run1"}, result,
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+        self.assertEqual(bounced["trigger"], "stable")
+
+        db.stores["watches"]["w2"] = {"status": "active", "current_run_id": "run2"}
+        with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
+            left_band = watch_service.complete_watch_run(
+                "w2",
+                {**base_claim, "current_run_id": "run2",
+                 "history_points": [{"agreement_score": 84}] * 3},
+                result,
+                now=datetime(2026, 7, 21, tzinfo=timezone.utc), db=db,
+            )
+        self.assertEqual(left_band["trigger"], "changed")
 
     def test_first_query_watch_run_promotes_result_to_share_baseline(self):
         db = FakeDb()
@@ -1296,6 +1379,26 @@ class HistoryViewTests(unittest.TestCase):
         self.assertTrue(view["path"].startswith("M 38.0"))
         self.assertEqual(len(view["events"]), 1)
         self.assertEqual(view["events"][0]["change_summary"], "Conclusion changed.")
+
+    def test_position_map_labels_lose_the_markdown_of_the_answer_text(self):
+        # Die Labels sind Ausschnitte der Konsens-Antwort; die Karten rendern
+        # kein Markdown, also stuenden dort sonst sichtbare Sternchen.
+        points = [{
+            "ts": datetime(2026, 7, 8, tzinfo=timezone.utc), "agreement_score": 80,
+            "changed": True, "severity": "major", "change_summary": "",
+            "opinion_map": {
+                "shift_score": 12,
+                "dimensions": [{
+                    "label": "**Neither is universally cheaper.** In practice:",
+                    "type": "claim",
+                    "positions": [{"stance": "*Depends* on the workload [S1]", "models": ["OpenAI"]}],
+                }],
+            },
+        }]
+        dimension = share_router._build_watch_history_view(points)["position_map"]["dimensions"][0]
+        self.assertEqual(dimension["label"], "Neither is universally cheaper. In practice:")
+        self.assertEqual(dimension["positions"][0]["stance"], "Depends on the workload")
+        self.assertEqual(dimension["type"], "claim")
 
 
 class OpinionMapTests(unittest.TestCase):

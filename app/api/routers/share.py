@@ -2,7 +2,6 @@ import json
 import logging
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Request, Body, HTTPException
@@ -13,7 +12,7 @@ from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
 from app.core.site import SITE_URL
-from app.services import og_image
+from app.services import drift_signal, og_image
 from app.services import share_snapshots as snapshots
 from app.services.history_view import build_history_view
 from app.services import watch_service
@@ -21,6 +20,7 @@ from app.services.share_snapshots import ShareError
 from app.services.public_markdown import (
     render_public_markdown,
     markdown_to_plaintext,
+    source_host,
     source_site_name,
 )
 
@@ -69,6 +69,9 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
             "direction_shift": None,
             "baseline_summary": "",
         }
+    # Idempotent: the projection already classified these points, but the view
+    # must never fall back to a stored trigger from the looser rule.
+    history_points = drift_signal.annotate_points(history_points)
     index = len(history_points) - 1
     if selected_run_id:
         for candidate, point in enumerate(history_points):
@@ -94,20 +97,18 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
         if isinstance(score, (int, float)) and isinstance(previous_score, (int, float))
         else None
     )
-    trigger = point.get("trigger")
-    if trigger not in {"stable", "changed"}:
-        trigger = "changed" if point.get("changed") or (
-            score_delta is not None and abs(score_delta) >= 15
-        ) else "stable"
+    trigger = (
+        point.get("trigger") if point.get("trigger") in {"stable", "changed"} else "stable"
+    )
     position = point.get("opinion_map") or {}
+    steady = drift_signal.steady_checks(history_points[:index + 1])
     return {
         "trigger": trigger,
         "label": "Changed since last check" if trigger == "changed" else "Stable since last check",
-        "summary": (
-            point.get("change_summary")
-            or ("The consensus moved materially." if trigger == "changed"
-                else "No material change was detected in the latest check.")
-        ),
+        "summary": _watch_drift_summary(point, trigger, score_delta, steady),
+        "score_within_range": _score_move_is_within_range(trigger, score_delta),
+        "restated": bool(point.get("restated")) and trigger == "stable",
+        "steady_checks": steady,
         "score_delta": score_delta,
         "direction_shift": position.get("shift_score"),
         "direction_label": position.get("shift_label") or "",
@@ -115,6 +116,59 @@ def _build_watch_drift_view(history_points, selected_run_id="", query_first=Fals
         "baseline_changed": bool(point.get("baseline_changed")),
         "checked_at": point.get("ts"),
     }
+
+
+# Ein Score-Sprung unter der Bandgrenze faellt in der Kurve auf; ohne einen Satz
+# dazu liest sich "Stable" neben "-15 pts" wie ein Widerspruch.
+VISIBLE_SCORE_MOVE = 10
+
+
+def _watch_drift_summary(point, trigger, score_delta, steady) -> str:
+    """The one sentence under the badge — never a paraphrase of the badge.
+
+    The heading already says whether this check moved the answer. Repeating it
+    here ("Stable since last check" / "No material change was detected") costs
+    the reader a line and tells them nothing, so this sentence carries only
+    what the heading cannot: how long the answer has held, that a restatement
+    happened, or which of the two signals actually moved.
+    """
+    summary = str(point.get("change_summary") or "").strip()
+    graded_material = bool(point.get("changed")) and not drift_signal.is_restated(
+        point.get("changed"), point.get("severity"),
+    )
+    if trigger == "changed":
+        if not graded_material:
+            direction = "less" if (score_delta or 0) < 0 else "more"
+            moved = (
+                f"The answer itself held, but the models now agree {direction} "
+                f"than in the recent checks ({score_delta:+d} pts)."
+                if score_delta is not None else
+                "The agreement score left the band of the recent checks."
+            )
+            return f"{moved} {summary}".strip() if summary else moved
+        return summary or "The consensus moved materially."
+
+    if point.get("changed") and summary:
+        held = f"The wording moved, the conclusion held: {summary}"
+    elif steady >= 2:
+        held = f"The answer has held through {steady} checks."
+    else:
+        held = "Nothing material moved in this check."
+    return held
+
+
+def _score_move_is_within_range(trigger, score_delta) -> bool:
+    """A visible score move on a check that still counts as stable.
+
+    Without a word for it, "Stable since last check" next to "-15 pts" reads
+    like a bug. The note sits on the number itself instead of in the sentence,
+    so the sentence stays one line long.
+    """
+    return (
+        trigger == "stable"
+        and score_delta is not None
+        and abs(score_delta) >= VISIBLE_SCORE_MOVE
+    )
 
 
 def _build_watch_versions_view(history_points, selected_id, latest_id, page_path):
@@ -127,7 +181,10 @@ def _build_watch_versions_view(history_points, selected_id, latest_id, page_path
             "run_id": run_id,
             "date": point["ts"].strftime("%Y-%m-%d %H:%M UTC"),
             "url": f"{page_path}?version={run_id}",
-            "trigger": point.get("trigger") or ("changed" if point.get("changed") else "stable"),
+            "trigger": (
+                point.get("trigger")
+                if point.get("trigger") in {"changed", "stable"} else "stable"
+            ),
             "is_selected": run_id == selected_id,
             "is_current": run_id == latest_id,
         })
@@ -651,16 +708,15 @@ def share_page(request: Request, slug_id: str):
     for source in payload["sources"]:
         match = re.match(r"^S(\d+)$", str(source.get("id") or ""))
         url = source.get("url") or ""
-        try:
-            domain = re.sub(r"^www\.", "", urlsplit(url).hostname or "")
-        except ValueError:
-            domain = ""
+        # Grounding-Redirects zeigen sonst alle denselben Google-Host statt der
+        # Seite, die die Aussage wirklich stützt.
+        domain = source_host(url, source.get("title"))
         # Nichtssagende Titel (leer, nur eine Zahl oder die nackte URL)
         # fallen auf die Domain zurück, damit Quellen zuordenbar bleiben.
         title = str(source.get("title") or "").strip()
         if not title or title == url or re.fullmatch(r"\d+", title):
             title = domain or url
-        site_label = source_site_name(url)
+        site_label = source_site_name(url, source.get("title"))
         sources_view.append({
             "num": match.group(1) if match else "",
             "id": source.get("id") or "",
@@ -668,6 +724,8 @@ def share_page(request: Request, slug_id: str):
             "url": url,
             "domain": domain,
             "site": site_label,
+            # False = die URL ist ein Redirect, die Domain kam aus dem Titel.
+            "is_direct": bool(domain) and domain == source_host(url),
         })
 
     # Differences: strukturierte Karten, sonst Freitext-Fallback (markdown-
@@ -725,6 +783,16 @@ def share_page(request: Request, slug_id: str):
     # gebunden; kompakte History-Metadaten dürfen hier nicht einsickern.
     modified_iso = date_iso
 
+    # Die laufende Watch-Seite ist EIN Dokument, das seit ihrer Anlage gepflegt
+    # wird: der letzte Check ist ihre Aenderung, nicht ihre Geburt. Ohne diese
+    # Trennung sieht sie nach jedem Lauf wie ein brandneuer Artikel aus und
+    # verliert genau das, was sie auszeichnet. Historische Versionen bleiben
+    # bewusst vollstaendig bei ihrem eigenen Datum.
+    tracking_start = history_points[0]["ts"] if history_points else None
+    if watch_page and not requested_version:
+        origin = snapshots.public_share_payload(data)
+        published_iso = origin["answered_at"] or origin["created_at"] or date_iso
+
     # Verdict-Scoreboard: der datendichte Einstieg über der Konsens-Antwort.
     agreement_data = differences_data.get("agreement")
     agreement_data = agreement_data if isinstance(agreement_data, dict) else {}
@@ -738,8 +806,14 @@ def share_page(request: Request, slug_id: str):
         "model_count": model_count,
         "contradiction_count": contradiction_count,
         "source_count": len(sources_view),
-        "checks": 0,
-        "tracked_since": "",
+        # Nur auf der laufenden Seite: eine historische Version zeigt den Stand
+        # ihres eigenen Checks, nicht die Bilanz aller späteren.
+        "checks": len(history_points) if watch_page and not requested_version else 0,
+        "tracked_since": (
+            tracking_start.strftime("%d %b %Y")
+            if watch_page and not requested_version and isinstance(tracking_start, datetime)
+            else ""
+        ),
         "last_checked": date_iso[:10] if date_iso else "",
         "spark": None,
     }
@@ -756,7 +830,13 @@ def share_page(request: Request, slug_id: str):
             f"{contradiction_count} contradiction{'s' if contradiction_count != 1 else ''}"
         )
     if scoreboard["tracked_since"]:
-        description_bits.append(f"tracked since {scoreboard['tracked_since']}")
+        # Der eigentliche Unterschied zu einer einmaligen Antwort: die Seite
+        # wird seit Monaten nachgeprüft. Das gehört in die Suchergebnis-Zeile.
+        description_bits.append(
+            f"{scoreboard['checks']} checks since {scoreboard['tracked_since']}"
+            if scoreboard["checks"] > 1
+            else f"tracked since {scoreboard['tracked_since']}"
+        )
     if description_bits:
         prefix = " · ".join(description_bits) + ". "
         excerpt = markdown_to_plaintext(
@@ -791,7 +871,12 @@ def share_page(request: Request, slug_id: str):
             "name": "consens.io",
             "logo": {"@type": "ImageObject", "url": SITE_URL + "/static/favicon-square.png"},
         },
-        "citation": [s["url"] for s in sources_view if s["url"]][:10],
+        # Nur Quellen, deren URL wirklich auf die zitierte Seite zeigt. Ein
+        # signierter Grounding-Redirect ist als Zitat wertlos und verdraengt
+        # sonst die echten Belege aus den ersten zehn.
+        "citation": [
+            source["url"] for source in sources_view if source["url"] and source["is_direct"]
+        ][:10],
         "isAccessibleForFree": True,
     }
     if og_is_card:

@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from app.core.security import db_firestore
-from app.services import persistence_guard, watch_service
+from app.services import drift_signal, persistence_guard, watch_service
 from app.services.watch_service import WatchError
 
 
@@ -237,36 +237,33 @@ def mark_brief_sent(uid: str, *, now=None, db=None):
     db.collection(BRIEFS_COLLECTION).document(uid).update({"last_sent_at": now or utcnow()})
 
 
-SCORE_EVENT_DELTA = 15
+SCORE_EVENT_DELTA = drift_signal.SCORE_BAND_DELTA
 
 
 def collect_brief_items(uid: str, *, since: datetime, db=None) -> tuple[list[dict], int]:
     """Digest rows for every watch of the user + count of notable new events.
 
-    Notable = a history point after `since` whose change flag is set or whose
-    agreement score moved by >= SCORE_EVENT_DELTA vs its predecessor — the same
-    signal the changes_only watch mail uses.
+    Notable = a history point after `since` that :mod:`app.services.drift_signal`
+    grades as material — the same signal the changes_only watch mail and the
+    page badge use, so the brief cannot count movement the page does not show.
     """
     db = db if db is not None else db_firestore
     watches = watch_service.list_watches(uid, db=db, include_history=True)
     items, changes = [], 0
     for watch in watches:
-        history = watch.get("history") or []
+        # Idempotent; `list_watches` classifies already, but the count must not
+        # silently fall to zero for a caller that hands over raw points.
+        history = drift_signal.annotate_points(watch.get("history") or [])
         new_points = []
-        for index, point in enumerate(history):
+        for point in history:
             try:
                 ts = datetime.fromisoformat(point.get("ts") or "")
             except ValueError:
                 continue
             if ts <= since:
                 continue
-            previous = history[index - 1].get("agreement_score") if index else None
-            score = point.get("agreement_score")
-            score_event = (
-                isinstance(previous, (int, float)) and isinstance(score, (int, float))
-                and abs(score - previous) >= SCORE_EVENT_DELTA
-            )
-            notable = bool(point.get("changed")) or score_event
+            # `history` is already classified by serialize_history_points.
+            notable = point.get("trigger") == "changed"
             changes += 1 if notable else 0
             new_points.append({**point, "notable": notable})
         previous_score = history[-2].get("agreement_score") if len(history) >= 2 else None

@@ -29,7 +29,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 import app.core.config as cfg
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
-from app.services import opinion_map, persistence_guard
+from app.services import drift_signal, opinion_map, persistence_guard
 
 PENDING_COLLECTION = "pending_results"
 SHARES_COLLECTION = "shares"
@@ -1723,7 +1723,6 @@ def list_watch_history(share_id, db=None, max_items=100):
             "changed": bool(data.get("changed")),
             "severity": _clip(data.get("severity"), 10),
             "change_summary": _clip(data.get("change_summary"), 400),
-            "trigger": "changed" if data.get("trigger") == "changed" else "stable",
             "event_type": _clip(data.get("event_type"), 40),
             "baseline_changed": bool(data.get("baseline_changed")),
             "baseline_severity": _clip(data.get("baseline_severity"), 10),
@@ -1732,6 +1731,9 @@ def list_watch_history(share_id, db=None, max_items=100):
             "opinion_map": opinion_map.sanitize_opinion_map(data.get("opinion_map")),
         })
     points.sort(key=lambda item: item["ts"])
+    # Movement is decided here, over the whole series, rather than trusted from
+    # the stored trigger: older checks were written under a looser rule.
+    points = drift_signal.annotate_points(points)
     previous_map = None
     for point in points:
         current_map = opinion_map.recalculate_opinion_map(

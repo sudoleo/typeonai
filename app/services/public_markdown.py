@@ -49,18 +49,34 @@ _SLD_SUFFIXES = {"co", "com", "org", "net", "ac", "gov"}
 # Nur harmlose Zeichen im Markdown-Link-Text (keine [, ], ( , ) usw.).
 _LABEL_SAFE_RE = re.compile(r"[^A-Za-z0-9._äöü-]+")
 
+# Geminis Grounding-Links zeigen auf einen signierten Google-Redirect; die echte
+# Domain steckt dann im Titel der Quelle. Ohne diese Aufloesung traegt die halbe
+# Quellenliste denselben nichtssagenden Host (und dasselbe Google-Favicon).
+_INDIRECT_SOURCE_HOSTS = {"vertexaisearch.cloud.google.com"}
+_BARE_DOMAIN_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9-]+)+$")
 
-def source_site_name(url):
+
+def source_host(url, title=""):
+    """Die Domain, die eine Quelle tatsaechlich zeigt (Redirects aufgeloest)."""
+    try:
+        hostname = (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        hostname = ""
+    hostname = re.sub(r"^www\.", "", hostname)
+    if hostname in _INDIRECT_SOURCE_HOSTS:
+        candidate = str(title or "").strip().lower().removeprefix("www.")
+        if _BARE_DOMAIN_RE.fullmatch(candidate):
+            return candidate
+    return hostname
+
+
+def source_site_name(url, title=""):
     """Kurzer, erkennbarer Site-Name einer Quelle ("en.wikipedia.org" → "wikipedia").
 
     Python-Pendant zu getSourceSiteName() in index.html, damit Inline-
     Citations auf der Share-Seite genauso aussehen wie im Consensus-Bereich.
     """
-    try:
-        hostname = (urlsplit(str(url or "")).hostname or "").lower()
-    except ValueError:
-        return ""
-    hostname = re.sub(r"^(www|m|amp)\.", "", hostname)
+    hostname = re.sub(r"^(www|m|amp)\.", "", source_host(url, title))
     parts = [p for p in hostname.split(".") if p]
     if len(parts) < 2:
         return parts[0] if parts else ""
@@ -77,7 +93,7 @@ def _source_labels(sources):
         if not match:
             continue
         number = match.group(1).lstrip("0") or "0"
-        label = source_site_name(source.get("url"))
+        label = source_site_name(source.get("url"), source.get("title"))
         labels[number] = _LABEL_SAFE_RE.sub("", label) if label else ""
     return labels
 

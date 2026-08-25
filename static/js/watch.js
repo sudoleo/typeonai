@@ -17,6 +17,48 @@
     }
   }
 
+  // Zwischen dem Hinweis und dem Rest der Seite liegen mehrere unsichtbare
+  // Grenzen, an denen sein eigener z-index endet: `.run-provenance`,
+  // `.consensus-main`, `.consensus-box` (alle per `isolation`) und
+  // `.consensus-output` (per `will-change`) sind Stacking-Contexts ohne
+  // eigenen z-index. Sein z-index: 20 gilt deshalb immer nur bis zur
+  // naechsten Grenze. Zwei davon muessen hoch, solange der Hinweis offen ist:
+  //   .run-provenance    haengt sonst unter Ueberschrift und Antworttext
+  //                      (beide z-index: 1), also unter der eigenen Antwort;
+  //   .consensus-section die aeusserste Huelle unterhalb von `.container` —
+  //                      erst sie hebt den ganzen Block ueber den Composer
+  //                      (`.input-section`, z-index: 5). Eine der inneren
+  //                      Boxen zu heben brachte nichts, ihr z-index endet
+  //                      selbst wieder an der naechsten Grenze.
+  // `.consensus-box`/`h2` bleiben als Rueckfall, solange consensus-actions.js
+  // ohne Fuss-Slot in die Ueberschrift einhaengt.
+  function nudgeStackingHosts(anchor) {
+    if (!anchor) return [];
+    return [
+      anchor.closest(".run-provenance"),
+      anchor.closest(".consensus-section")
+        || anchor.closest(".consensus-box")
+        || anchor.closest("h2")
+    ].filter(Boolean);
+  }
+
+  // Nach unten aufgeklappt deckt der Hinweis das Eingabefeld zu — im Fuss
+  // steht der Composer unmittelbar darunter. Also nach oben, sobald es unten
+  // nicht mehr passt und oben Platz ist.
+  function placeWatchFeatureNudge(nudge, anchor) {
+    const anchorRect = anchor.getBoundingClientRect();
+    const height = nudge.offsetHeight;
+    // offsetParent ist bei position: fixed (Composer auf Mobil) null, deshalb
+    // entscheidet die gemessene Hoehe ueber "sichtbar".
+    const composerRect = document.querySelector(".input-section")?.getBoundingClientRect();
+    const limit = composerRect && composerRect.height > 0
+      ? composerRect.top
+      : window.innerHeight;
+    const fitsBelow = anchorRect.bottom + 10 + height <= limit - 8;
+    const fitsAbove = anchorRect.top - 10 - height >= 8;
+    nudge.classList.toggle("is-above", !fitsBelow && fitsAbove);
+  }
+
   function dismissWatchFeatureNudge(reason) {
     const nudge = document.getElementById("watchFeatureNudge");
     const wasActive = Boolean(featureNudgeTimer || nudge);
@@ -28,7 +70,7 @@
     if (nudge) nudge.remove();
     if (anchor) {
       anchor.classList.remove("has-feature-nudge");
-      anchor.closest("h2")?.classList.remove("has-watch-feature-nudge");
+      nudgeStackingHosts(anchor).forEach(host => host.classList.remove("has-watch-feature-nudge"));
     }
     try {
       localStorage.setItem(FEATURE_NUDGE_STORAGE_KEY, "true");
@@ -89,8 +131,9 @@
         openWatchDialog("confirm");
       });
       anchor.classList.add("has-feature-nudge");
-      anchor.closest("h2")?.classList.add("has-watch-feature-nudge");
+      nudgeStackingHosts(anchor).forEach(host => host.classList.add("has-watch-feature-nudge"));
       anchor.appendChild(nudge);
+      placeWatchFeatureNudge(nudge, anchor);
       window.App?.trackAppEvent?.("app_watch_feature_nudge_shown");
     }, 650);
   }
@@ -1111,8 +1154,7 @@
     const path = coords.map((c, i) => (i ? "L" : "M") + c.x.toFixed(1) + " " + c.y.toFixed(1)).join(" ");
     const area = path + ` L ${coords[coords.length - 1].x.toFixed(1)} ${height - pad} L ${coords[0].x.toFixed(1)} ${height - pad} Z`;
     const dots = points.map((point, index) => {
-      const prev = index ? points[index - 1].agreement_score : null;
-      const isEvent = point.changed || (typeof prev === "number" && Math.abs(point.agreement_score - prev) >= 15);
+      const isEvent = isMaterialCheck(point);
       const last = index === points.length - 1;
       if (!isEvent && !last) return "";
       const c = coords[index];
@@ -1133,6 +1175,14 @@
     return chip;
   }
 
+  // The server grades every check with one shared rule (drift_signal) and ships
+  // the verdict as `trigger`. The dashboard reads that verdict instead of the
+  // raw `changed` flag: that flag is also set for a rewritten qualification,
+  // and using it here made every card announce a change after every check.
+  function isMaterialCheck(point) {
+    return Boolean(point) && point.trigger === "changed";
+  }
+
   function latestHistoryPoint(watch) {
     const history = watch.history || [];
     return history.length ? history[history.length - 1] : null;
@@ -1149,13 +1199,15 @@
         point: point
       };
     }
-    const changed = point.trigger === "changed" || point.changed;
+    const changed = isMaterialCheck(point);
     return {
       key: changed ? "changed" : "stable",
       label: changed ? "Changed" : "Stable",
-      summary: point.change_summary || (changed
-        ? "Material movement detected in the latest check."
-        : "No material movement in the latest check."),
+      summary: changed
+        ? (point.change_summary || "Material movement detected in the latest check.")
+        : (point.restated && point.change_summary
+          ? "Restated, not moved: " + point.change_summary
+          : "No material movement in the latest check."),
       point: point
     };
   }
@@ -1169,7 +1221,7 @@
     watches.forEach(watch => (watch.history || []).forEach(point => {
       if (!point.ts || new Date(point.ts).getTime() < weekAgo) return;
       recentChecks += 1;
-      if (point.trigger === "changed" || point.changed) recentChanges += 1;
+      if (isMaterialCheck(point)) recentChanges += 1;
     }));
     const stats = document.createElement("div");
     stats.className = "watch-dash-stats";
@@ -1493,7 +1545,7 @@
     meta.className = "watch-card-meta";
     const metaLines = [];
     const lastEvent = [...history].reverse().find(point =>
-      (point.trigger === "changed" || point.changed) && point.change_summary
+      isMaterialCheck(point) && point.change_summary
     );
     if (lastEvent) {
       metaLines.push(
@@ -1987,7 +2039,11 @@
   window.App.watch = Object.assign(window.App.watch || {}, {
     showFeatureNudge: showWatchFeatureNudge,
     refreshQuota: () => loadWatchLimits(true),
-    resetAfterLogout: resetAfterLogout
+    resetAfterLogout: resetAfterLogout,
+    // Exposed because it is the one place the dashboard decides whether a
+    // check counts as movement; the same decision the server made in
+    // drift_signal and shipped as `trigger`.
+    driftState: driftState
   });
   initWatchButton();
   initViewSwitch();

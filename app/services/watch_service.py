@@ -17,7 +17,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
 from app.core.security import db_firestore
-from app.services import opinion_map, persistence_guard, share_snapshots
+from app.services import drift_signal, opinion_map, persistence_guard, share_snapshots
 
 
 WATCHES_COLLECTION = "watches"
@@ -609,9 +609,14 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
 
 
 def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dict]:
-    """Compact, JSON-safe view of the newest history points (ascending)."""
+    """Compact, JSON-safe view of the newest history points (ascending).
+
+    The trigger is recomputed from the full series here instead of read from
+    the stored field: checks written before the drift rule tightened carry a
+    trigger that marked every wording difference as movement.
+    """
     serialized = []
-    for point in points[-max_items:]:
+    for point in drift_signal.annotate_points(points)[-max_items:]:
         ts = point.get("ts")
         serialized.append({
             "run_id": str(point.get("run_id") or ""),
@@ -620,7 +625,8 @@ def serialize_history_points(points, max_items=WATCH_HISTORY_POINTS) -> list[dic
             "changed": bool(point.get("changed")),
             "severity": str(point.get("severity") or ""),
             "change_summary": str(point.get("change_summary") or ""),
-            "trigger": "changed" if point.get("trigger") == "changed" else "stable",
+            "trigger": point.get("trigger") if point.get("trigger") in {"changed", "stable"} else "stable",
+            "restated": bool(point.get("restated")),
             "event_type": str(point.get("event_type") or ""),
             "baseline_changed": bool(point.get("baseline_changed")),
             "baseline_severity": str(point.get("baseline_severity") or ""),
@@ -1458,11 +1464,17 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     now = now or utcnow()
     interval = claimed.get("interval") if claimed.get("interval") in WATCH_INTERVALS else "weekly"
     previous_score = claimed.get("last_agreement_score")
-    try:
-        score_delta = abs(float(result["agreement_score"]) - float(previous_score))
-    except (TypeError, ValueError):
-        score_delta = 0
-    trigger = "changed" if bool(result.get("changed")) or score_delta >= 15 else "stable"
+    previous_points = claimed.get("history_points")
+    previous_points = previous_points if isinstance(previous_points, list) else []
+    # The band the recent checks held, so a score bouncing between two cap
+    # steps is not announced as movement on every bounce.
+    previous_scores = drift_signal.recent_scores(previous_points) or (
+        [previous_score] if isinstance(previous_score, (int, float)) else []
+    )
+    trigger = drift_signal.classify(
+        result.get("changed"), result.get("severity"),
+        result.get("agreement_score"), previous_scores,
+    )
     history = {
         "schema_version": 2,
         "ts": now,

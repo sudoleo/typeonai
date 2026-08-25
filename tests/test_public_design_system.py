@@ -109,7 +109,9 @@ def test_share_page_loads_the_common_math_renderer():
     template = read("templates/share.html")
     assert "katex@0.17.0/dist/katex.min.js" in template
     assert re.search(r"/static/js/math-render\.js\?v=[\w.-]+", template)
-    assert '<main class="page-shell" data-math-render>' in template
+    # Die Klassenliste des Shells waechst (share-shell, topic-detail-shell);
+    # gepruefft wird, dass der Renderer am Shell haengt, nicht ihre Reihenfolge.
+    assert re.search(r'<main class="page-shell[^"]*" data-math-render>', template)
 
 
 def test_watch_header_keeps_intro_left_aligned_and_dates_visible():

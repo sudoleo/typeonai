@@ -6,7 +6,10 @@
   <meta name="robots" content="{{ robots_meta }}">
   {% if is_private %}<meta name="referrer" content="no-referrer">{% endif %}
   <link rel="canonical" href="{{ canonical_url }}">
-  <title>{% if watch_page %}Consensus Watch: {% endif %}{{ question[:70] }} | consens.io</title>
+  <!-- Die Frage ist das Keyword und steht vorn: ein Präfix wie "Consensus
+       Watch:" schiebt sie im SERP hinter den abgeschnittenen Rand. Dass die
+       Seite nachgeprüft wird, trägt die Meta-Description. -->
+  <title>{{ question[:70] }} | consens.io</title>
   <meta name="description" content="{{ meta_description }}">
   <meta property="og:type" content="article">
   <meta property="og:site_name" content="consens.io">
@@ -22,8 +25,8 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260824-watch-clarity1">
-  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260731-inter1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260825-flat1">
+  <link rel="stylesheet" href="/static/css/public-shell.css?v=20260825-flat1">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -65,8 +68,8 @@
     {% for point in history.points %}
     <a class="watch-chart-target" href="#watch-run-{{ point.anchor_id }}"
        aria-label="{{ point.ts.strftime('%Y-%m-%d') }}: {{ point.agreement_score }} out of 100 agreement{% if point.change_summary %}. {{ point.change_summary }}{% endif %}">
-      <circle class="watch-chart-point{% if point.changed %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if compact %}{% if point.changed %}8{% else %}7{% endif %}{% elif point.changed %}5{% else %}4{% endif %}">
-        <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %} · {{ point.change_summary }}{% else %} · No material movement{% endif %}</title>
+      <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if compact %}{% if point.trigger == "changed" %}8{% else %}7{% endif %}{% elif point.trigger == "changed" %}5{% else %}4{% endif %}">
+        <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.trigger == "changed" and point.change_summary %} · {{ point.change_summary }}{% elif point.restated and point.change_summary %} · Restated, not moved: {{ point.change_summary }}{% else %} · No material movement{% endif %}</title>
       </circle>
     </a>
     {% endfor %}
@@ -77,7 +80,7 @@
   </svg>
   {% endmacro %}
 
-  <main class="page-shell" data-math-render>
+  <main class="page-shell share-shell" data-math-render>
     <header class="page-header share-header">
       <p class="eyebrow">{% if watch_page %}Tracked question{% else %}Shared consensus{% endif %}{% if is_private %} · Private{% endif %}</p>
       <!-- Lange Fragen klappen wie in /app (#threadAsk) auf drei Zeilen ein.
@@ -124,33 +127,26 @@
               </div>
             </div>
             <p class="watch-drift-summary">{{ watch_drift.summary }}</p>
-            <details class="watch-analysis-details">
-              <summary>Advanced change metrics</summary>
-              <dl class="watch-drift-metrics">
-                <div>
-                  <dt>Direction shift</dt>
-                  <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
-                </div>
-                <div>
-                  <dt>Agreement change</dt>
-                  <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts</span>{% else %}&mdash;{% endif %}</dd>
-                </div>
-                <div>
-                  <dt>Compared with</dt>
-                  <dd class="is-text">{% if watch_selected_version.is_original %}Tracking start{% else %}Previous check{% endif %}</dd>
-                </div>
-              </dl>
-              {% if watch_drift.baseline_changed and watch_drift.baseline_summary %}
-              <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
-              {% endif %}
-            </details>
+            <!-- Zwei Belegzahlen als eine ruhige Zeile. Der Vergleichsbezug
+                 steckt im Wert, nicht in einer dritten Beschriftung, und der
+                 Absatz "Since tracking began" steht jetzt bei der Historie:
+                 dort gehoert eine Bilanz ueber alle Checks hin. -->
+            <dl class="watch-drift-metrics">
+              <div>
+                <dt>Direction shift</dt>
+                <dd>{% if watch_drift.direction_shift is not none %}{{ watch_drift.direction_shift }}<span>/100</span>{% else %}&mdash;{% endif %}</dd>
+              </div>
+              <div>
+                <dt>Agreement</dt>
+                <dd>{% if watch_drift.score_delta is not none %}{% if watch_drift.score_delta > 0 %}+{% endif %}{{ watch_drift.score_delta }}<span> pts vs {% if watch_selected_version.is_original %}tracking start{% else %}previous check{% endif %}{% if watch_drift.score_within_range %}, within the range of the recent checks{% endif %}</span>{% else %}&mdash;{% endif %}</dd>
+              </div>
+            </dl>
           </div>
           {% if watch_history %}
           <div class="watch-compact-agreement" aria-labelledby="watchCompactAgreementHeading">
             <div class="watch-compact-agreement-heading">
               <div>
                 <p class="eyebrow" id="watchCompactAgreementHeading">Agreement over time</p>
-                <span>Hover a point for details. Select it to open that run.</span>
               </div>
               <strong>{{ watch_history.latest_score }}<span>/100</span></strong>
             </div>
@@ -429,6 +425,9 @@
           </div>
           <strong class="watch-history-latest">{{ watch_history.latest_score }}<span>/100</span><small> latest agreement</small></strong>
         </div>
+        {% if watch_drift and watch_drift.baseline_changed and watch_drift.baseline_summary %}
+        <p class="watch-drift-baseline"><strong>Since tracking began:</strong> {{ watch_drift.baseline_summary }}</p>
+        {% endif %}
         <details id="watchFullAgreement" class="watch-full-agreement">
           <summary>View the full agreement chart</summary>
           <div class="watch-agreement-heading">
@@ -450,7 +449,7 @@
               <span class="watch-run-state">{% if point.trigger == "changed" %}Meaningful change{% else %}Stable{% endif %}</span>
             </div>
             <strong>{{ point.agreement_score }}<span>/100 agreement</span></strong>
-            <p>{{ point.change_summary or "No meaningful movement detected in this check." }}</p>
+            <p>{% if point.trigger == "changed" %}{{ point.change_summary or "The consensus moved materially in this check." }}{% elif point.restated and point.change_summary %}<span class="watch-run-restated">Restated, not moved:</span> {{ point.change_summary }}{% else %}No meaningful movement detected in this check.{% endif %}</p>
             {% if point.has_snapshot and point.run_id %}<a class="watch-version-link" href="{{ watch_selected_version.current_url }}?version={{ point.run_id }}">Open this consensus</a>{% endif %}
           </li>
           {% endfor %}
@@ -474,17 +473,23 @@
       </section>
       {% endif %}
 
-      {% if scoreboard %}
-      <p class="share-method-note">
-        <strong>How this answer was made.</strong> {% if scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %} answered independently, then a judge from a different model family cross-checked the result.{% if watch_page and watch_has_comparison %} Each check is compared with the previous result and only meaningful movement is highlighted.{% endif %}
-        <a href="/consensus-engine">How it works</a>
-      </p>
-      {% endif %}
-
-      <p class="share-disclaimer">
-        This page is a snapshot of an AI-generated consensus answer created with consens.io.
-        AI models can make mistakes – verify important information using the sources above.
-      </p>
+      <!-- Methode und Vorbehalt standen als zwei graue Kleingedruckt-Absaetze
+           nebeneinander. Zusammen beantworten sie "wer, wie, wann" - also
+           bekommen sie eine Ueberschrift statt einer Fussnoten-Optik. Der
+           Irrtumshinweis bleibt woertlich erhalten. -->
+      <section class="share-about" aria-labelledby="shareAboutHeading">
+        <h2 id="shareAboutHeading">About this {% if watch_page %}tracked question{% else %}consensus{% endif %}</h2>
+        <p>
+          {% if scoreboard and scoreboard.model_count %}{{ scoreboard.model_count }} AI model{{ "s" if scoreboard.model_count != 1 }}{% else %}Several AI models{% endif %}
+          answered this question independently{% if date_display %} on {{ date_display }}{% endif %}. A judge from a different model family
+          then cross-checked the answers, scored how far they agree and flagged where they differ.
+          {%- if watch_page and watch_page.interval %} The question is re-checked {{ watch_page.interval }}{% if scoreboard and scoreboard.checks > 1 %} &mdash; this is check {{ scoreboard.checks }} since {{ scoreboard.tracked_since }}{% endif %}, and every earlier version stays on this page.{% endif %}
+        </p>
+        <p class="share-about-caveat">
+          AI models can make mistakes &ndash; verify important information against the sources above.
+        </p>
+        <a class="share-about-link" href="/consensus-engine">How consensus works &rarr;</a>
+      </section>
 
       {% if not is_private %}<div class="share-report">
         <button type="button" id="shareReportToggle" class="share-report-toggle">Report this page</button>

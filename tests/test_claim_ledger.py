@@ -191,7 +191,7 @@ def test_record_summary_anchors_on_material_change_not_on_score_movement():
     runs = [
         run(0, [dimension("No official release date has been announced")], score=90),
         run(1, [dimension("No official release date has been announced")], score=64,
-            change_type="minor", summary="A rumoured window entered the answer."),
+            change_type="major", summary="A rumoured window entered the answer."),
         run(2, [dimension("No official release date has been announced")], score=90),
         run(3, [dimension("No official release date has been announced")], score=64),
     ]
@@ -205,6 +205,25 @@ def test_record_summary_anchors_on_material_change_not_on_score_movement():
     assert record["steady_days"] == 2
     assert record["changed_now"] is False
     assert record["material_events"][0]["summary"] == "A rumoured window entered the answer."
+
+
+def test_a_minor_grade_restates_the_answer_and_does_not_anchor_the_record():
+    """"minor" is the Judge saying the wording moved, not the answer. A record
+    that anchors on it reports a change after nearly every check, which is the
+    state the drift rule was tightened to end."""
+    runs = [
+        run(0, [dimension("No official release date has been announced")]),
+        run(1, [dimension("No official release date has been announced")],
+            change_type="minor", summary="A qualification was rephrased."),
+        run(2, [dimension("No official release date has been announced")],
+            change_type="minor", summary="A citation was swapped."),
+    ]
+
+    record = claim_ledger.build_record_summary(runs)
+
+    assert record["material_count"] == 0
+    assert record["changed_now"] is False
+    assert record["steady_checks"] == 2
 
 
 def test_record_summary_without_any_material_change_points_at_the_first_check():

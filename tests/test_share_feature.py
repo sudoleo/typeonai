@@ -12,7 +12,12 @@ from app.api.routers import share as share_router
 from app.api.routers import admin as admin_router
 from app.services import share_snapshots as snapshots
 from app.services.share_snapshots import ShareError
-from app.services.public_markdown import render_public_markdown, markdown_to_plaintext
+from app.services.public_markdown import (
+    render_public_markdown,
+    markdown_to_plaintext,
+    source_host,
+    source_site_name,
+)
 
 
 # --- Minimaler Firestore-Fake (nur was share_snapshots braucht) ---
@@ -603,6 +608,22 @@ class PublicMarkdownTests(unittest.TestCase):
         self.assertNotIn("[S1, S2]", text)
 
 
+    def test_grounding_redirects_show_the_site_they_point_at(self):
+        # Geminis Grounding-Links tragen alle denselben Google-Host; die echte
+        # Domain steht im Titel. Ohne Aufloesung heisst die halbe Quellenliste
+        # "vertexaisearch.cloud.google.com".
+        redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123"
+        self.assertEqual(source_host(redirect, "belarc.com"), "belarc.com")
+        self.assertEqual(source_site_name(redirect, "belarc.com"), "belarc")
+        # Ein Titel, der keine nackte Domain ist, darf nichts vortaeuschen.
+        self.assertEqual(
+            source_host(redirect, "Prompt Caching in the API"),
+            "vertexaisearch.cloud.google.com",
+        )
+        # Direkte Quellen bleiben unveraendert.
+        self.assertEqual(source_host("https://www.anthropic.com/pricing", "Pricing"), "anthropic.com")
+
+
 class ShareFlowTests(unittest.TestCase):
     def setUp(self):
         self.db = FakeDb()
@@ -1185,7 +1206,7 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn(r"\(\det(DF)=-2\)", body)
         self.assertIn("katex@0.17.0/dist/katex.min.js", body)
         self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
-        self.assertIn('class="page-shell" data-math-render', body)
+        self.assertRegex(body, r'class="page-shell[^"]*" data-math-render')
 
     def test_private_share_requires_owner_and_is_never_publicly_cached(self):
         doc = self._share_doc(visibility="private", owner_uid="owner-1")
@@ -1368,6 +1389,49 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("2026-07-12 08:30 UTC", body)
         self.assertIn("<b>Next</b>", body)
         self.assertIn("Original consensus", body)
+
+    def test_a_rephrased_check_reads_as_stable_on_the_watch_page(self):
+        """Every completed check used to raise the change badge, because the
+        Judge flags a rewritten qualification as `changed` too. The badge now
+        follows the grade, and the Judge's sentence moves into a quiet line."""
+        doc = self._share_doc(
+            consensus_md="Original immutable answer.",
+            differences_data={"agreement": {"score": 71}},
+        )
+        first = datetime(2026, 7, 14, 8, 0, tzinfo=timezone.utc)
+        now = datetime(2026, 7, 21, 8, 0, tzinfo=timezone.utc)
+        run_id = "abcdef1234567890"
+        points = [
+            {"run_id": "0123456789abcdef", "ts": first, "agreement_score": 84,
+             "changed": False, "severity": "minor", "trigger": "stable",
+             "change_summary": "", "has_snapshot": True, "opinion_map": None},
+            {"run_id": run_id, "ts": now, "agreement_score": 82,
+             # The trigger a check of this kind was written with before the rule
+             # was tightened; the page must not take it at face value.
+             "changed": True, "severity": "minor", "trigger": "changed",
+             "change_summary": "A qualification was rephrased.",
+             "has_snapshot": True, "opinion_map": None},
+        ]
+        version = {
+            "run_id": run_id, "ts": now, "consensus_md": "Latest watched answer.",
+            "differences_data": {"agreement": {"score": 82}},
+            "differences_text": "", "sources": [],
+            "included_models": ["OpenAI", "Google Gemini"],
+            "consensus_model": "OpenAI", "answered_at": now.isoformat(),
+        }
+        meta = {
+            "status": "active", "interval": "weekly", "last_run_at": now,
+            "next_run_at": now + timedelta(days=7), "last_successful_run_id": run_id,
+        }
+        path = "/s/%s-%s" % (doc["slug"], self.share_id)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc),                 patch.object(share_router.snapshots, "list_watch_history", return_value=points),                 patch.object(share_router.watch_service, "get_public_watch_meta", return_value=meta),                 patch.object(share_router.snapshots, "get_watch_version", return_value=version):
+            current = self.client.get(path)
+        self.assertIn("Stable since last check", current.text)
+        self.assertNotIn("Changed since last check", current.text)
+        self.assertIn("A qualification was rephrased.", current.text)
+        self.assertIn("The wording moved, the conclusion held", current.text)
+        # Die Zeile darunter wiederholt das Badge nicht mehr.
+        self.assertNotIn("No material change was detected", current.text)
 
     def test_watch_page_renders_latest_version_without_mutating_shared_baseline(self):
         doc = self._share_doc(
@@ -2079,7 +2143,10 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         self.assertIn("diffTeaser", body)
         self.assertIn("3 AI models answered independently", body)
         self.assertIn("agreement 71/100", body)
-        self.assertIn("How it works", body)
+        # Herkunft steht als benannte Sektion da, nicht als Kleingedrucktes.
+        self.assertIn("About this consensus", body)
+        self.assertIn("AI models can make mistakes", body)
+        self.assertIn("How consensus works", body)
 
     def test_date_modified_uses_authoritative_display_version(self):
         doc = self._share_doc()
@@ -2089,6 +2156,48 @@ class ShareSeoEnhancementTests(unittest.TestCase):
         body = response.text
         self.assertIn('"dateModified": "2026-06-11T10:00:00+00:00"', body)
         self.assertIn('"datePublished": "2026-06-11T10:00:00+00:00"', body)
+
+    def test_citations_skip_redirect_urls_that_point_nowhere_readable(self):
+        redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc123"
+        doc = self._share_doc(sources=[
+            {"id": "S1", "title": "belarc.com", "url": redirect},
+            {"id": "S2", "title": "Pricing", "url": "https://docs.anthropic.com/pricing"},
+        ])
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        # Sichtbar traegt die Quelle ihre echte Domain ...
+        self.assertIn("d=belarc.com", body)
+        # ... im JSON-LD steht sie aber nicht als zitierbare URL.
+        self.assertIn('"citation": ["https://docs.anthropic.com/pricing"]', body)
+
+    def test_tracked_page_shows_its_history_as_a_fact_not_only_as_a_chart(self):
+        doc = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=doc),                 patch.object(share_router.snapshots, "list_watch_history", return_value=self._history()):
+            response = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id))
+        body = response.text
+        # Sichtbar im Scoreboard und lesbar im Suchergebnis: die Seite wird
+        # nachgeprueft, sie ist keine einmalige Antwort.
+        self.assertIn("2</b> checks since 20 Jun 2026", body)
+        self.assertIn("2 checks since 20 Jun 2026. ", body)
+
+    def test_historical_version_does_not_claim_the_full_tracking_record(self):
+        doc = self._share_doc()
+        history = self._history()
+        history[0]["run_id"] = "aaaaaaaa11111111"
+        history[0]["has_snapshot"] = True
+        history[1]["run_id"] = "bbbbbbbb22222222"
+        history[1]["has_snapshot"] = True
+        version = {
+            "run_id": "aaaaaaaa11111111", "ts": history[0]["ts"],
+            "consensus_md": "Aeltere Antwort.", "differences_data": doc["differences_data"],
+            "differences_text": "", "sources": [], "included_models": ["OpenAI: gpt-test"],
+            "consensus_model": "Anthropic", "answered_at": history[0]["ts"].isoformat(),
+        }
+        path = "/s/%s-%s?version=aaaaaaaa11111111" % (doc["slug"], self.share_id)
+        with patch.object(share_router.snapshots, "get_share", return_value=doc),                 patch.object(share_router.snapshots, "list_watch_history", return_value=history),                 patch.object(share_router.snapshots, "get_watch_version", return_value=version):
+            response = self.client.get(path)
+        self.assertNotIn("checks since", response.text)
 
     def test_follow_form_only_on_active_public_watch_pages(self):
         doc = self._share_doc()

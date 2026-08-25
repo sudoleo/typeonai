@@ -16,8 +16,8 @@ from app.core.observability import correlation_scope, record_metric, safe_except
 from app.core.site import SITE_URL
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
-    mailer, opinion_map, share_snapshots, telegram_watch, watch_brief,
-    watch_followers, watch_service,
+    drift_signal, mailer, opinion_map, share_snapshots, telegram_watch,
+    watch_brief, watch_followers, watch_service,
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
@@ -195,12 +195,22 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
     }
 
 
-def should_notify(old_score, new_score, changed: bool, severity: str) -> bool:
-    try:
-        delta = abs(float(new_score) - float(old_score))
-    except (TypeError, ValueError):
-        delta = 0
-    return (bool(changed) and severity == "major") or delta >= 15
+def should_notify(old_score, new_score, changed: bool, severity: str,
+                  previous_scores=None) -> bool:
+    """The mail bar, and since the drift rule was unified, the page bar too.
+
+    ``previous_scores`` is the band of the recent checks; without it the
+    predecessor alone forms the band, which is what a two-point history means
+    anyway.
+    """
+    if previous_scores is None:
+        previous_scores = [old_score] if isinstance(old_score, (int, float)) else []
+    return drift_signal.is_material(changed, severity, new_score, previous_scores)
+
+
+def _recent_scores(watch: dict) -> list:
+    points = watch.get("history_points")
+    return drift_signal.recent_scores(points if isinstance(points, list) else [])
 
 
 def notification_kind(watch: dict, result: dict) -> str | None:
@@ -218,6 +228,7 @@ def notification_kind(watch: dict, result: dict) -> str | None:
     if should_notify(
         watch.get("last_agreement_score"), result.get("agreement_score"),
         bool(result.get("changed")), result.get("severity") or "minor",
+        _recent_scores(watch) or None,
     ):
         return "change"
     return None
@@ -311,6 +322,7 @@ async def _send_follower_mails(watch_id: str, watch: dict, result: dict) -> int:
     if not should_notify(
         watch.get("last_agreement_score"), result.get("agreement_score"),
         bool(result.get("changed")), result.get("severity") or "minor",
+        _recent_scores(watch) or None,
     ):
         return 0
     followers = await asyncio.to_thread(watch_followers.list_followers, watch["share_id"])

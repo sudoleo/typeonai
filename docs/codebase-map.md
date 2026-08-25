@@ -2822,6 +2822,17 @@ liefert. Alte kompakte History bleibt lesbar; beim nächsten erfolgreichen Lauf
 wechselt eine Legacy-Watch automatisch in den versionierten Flow. Die bewusst
 groben Event-Typen für spätere Webhooks sind `watch.checked`, `watch.changed`,
 `watch.condition_met` und `watch.run_failed`.
+Ob ein Lauf `changed` oder nur `checked` ist, entscheidet ausschließlich
+`app/services/drift_signal.py` — eine Regel für Badge, Kurve, Dashboard,
+Morning Brief, Mail und Telegram. Material ist ein Lauf, wenn der Change-Judge
+`severity == "major"` vergibt ODER der Agreement-Score mindestens 15 Punkte von
+JEDEM der letzten drei Scores entfernt liegt (Bandregel statt Vorgänger-Delta:
+der Score springt zwischen den Caps 90/84/64/39, ein Pendeln 84↔64 ist damit
+genau ein Ereignis statt eines pro Lauf). Ein `changed=true` mit `severity ==
+"minor"` ist eine Umformulierung: es bleibt als `restated` samt Judge-Satz auf
+der Seite sichtbar, hebt aber kein Badge. Lesepfade rechnen den Trigger aus der
+Serie neu (`drift_signal.annotate_points`) und trauen dem gespeicherten Feld
+nicht — Altläufe wurden unter der lockeren Regel geschrieben.
 Die kanalneutrale Alert-Regel ist pro Watch änderbar (persistiert weiterhin im
 Legacy-Feld `email_mode`): `changes_only` nutzt die bestehende
 Major-/Score-Delta-Schwelle, `condition` lässt den bestehenden Change-Judge eine
@@ -2894,7 +2905,7 @@ Der 30-Minuten-Loop ruft nach `run_watch_tick` ein
 gelesen und transaktional geclaimt (Zeitplan rückt VOR dem Versand vor —
 at-most-once, nie doppelt), dann wird der Digest
 aus `list_watches(include_history=True)` aggregiert (Score/Delta, notable
-Changes seit dem letzten Brief = changed-Flag oder Score-Sprung ≥15) und als
+Changes seit dem letzten Brief = `trigger == "changed"` aus `drift_signal`) und als
 Multipart-Mail versendet. Modus `changes_only` überspringt Briefs ohne notable
 Changes. Kein LLM-Call, kein Watch-Lease nötig; unverifizierte E-Mail-Adressen
 werden übersprungen. `/watch/brief/unsubscribe` (eigener HMAC-Token-Typ,

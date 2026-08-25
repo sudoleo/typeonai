@@ -689,7 +689,11 @@ def test_share_dossier_keeps_only_a_bounded_representation(monkeypatch):
     monkeypatch.setattr(
         seo_dossier.share_snapshots,
         "list_watch_history",
-        lambda share_id, db=None, max_items=100: [{"ts": changed, "changed": True}],
+        # Material in the drift_signal sense: a "minor" grade is the Judge
+        # saying the answer was restated, which does not date a content change.
+        lambda share_id, db=None, max_items=100: [
+            {"ts": changed, "changed": True, "severity": "major", "agreement_score": 64},
+        ],
     )
 
     dossier = seo_dossier.build_share_dossier("abc123")

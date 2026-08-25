@@ -38,3 +38,6 @@ recording/
 
 # Local operator workflow notes
 docs/seo-share-indexing-process.md
+
+# Design-Vorschau aus scripts/render_watch_preview.py (kein Artefakt)
+_preview/

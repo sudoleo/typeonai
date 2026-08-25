@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from bs4 import BeautifulSoup
 
-from app.services import share_snapshots, topics
+from app.services import drift_signal, share_snapshots, topics
 from app.services.public_markdown import markdown_to_plaintext
 
 
@@ -175,7 +175,10 @@ def build_share_dossier(share_id: str, *, db=None) -> dict:
     created_at = data.get("created_at")
     last_checked_at = data.get("last_watch_run_at")
     history = share_snapshots.list_watch_history(share_id, db=db, max_items=100)
-    material_changes = [point.get("ts") for point in history if point.get("changed")]
+    material_changes = [
+        point.get("ts") for point in drift_signal.annotate_points(history)
+        if point.get("trigger") == "changed"
+    ]
     last_material_change = material_changes[-1] if material_changes else created_at
     sources = data.get("sources") if isinstance(data.get("sources"), list) else []
     source_snapshot_at = data.get("answered_at") or created_at

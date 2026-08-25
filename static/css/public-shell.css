@@ -135,6 +135,61 @@ body {
   background: var(--surface);
 }
 
+/* --------------------------------------------------------------------------
+   3b. The watched question is ONE page, not a stack of cards
+
+   A share/watch page is a single document read top to bottom: answer, sources,
+   positions, history. Giving each of those a tinted rectangle put eight grey
+   boxes -- several of them nested inside each other -- between the reader and
+   the text, and the tone stopped meaning anything because everything had it.
+   The sections keep their spacing and their headings and give up their fill:
+   separation is a hairline above each block, and every block starts on the
+   same left edge as the question. Fills stay only where something really is
+   an object: chips, toggles, buttons, inputs and the amber teaser rail.
+   -------------------------------------------------------------------------- */
+.share-shell .legal-panel,
+.share-shell .share-scoreboard,
+.share-shell .watch-meta-compact,
+.share-shell .watch-chart-scroll,
+.share-shell .watch-trajectory-scroll,
+.share-shell .watch-history-latest,
+.share-shell .watch-baseline-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.share-shell .legal-panel,
+.share-shell .watch-baseline-card {
+  /* Luft ueber und unter dem Inhalt, die Haarlinie sitzt in der Mitte des
+     Abstands zwischen zwei Abschnitten. */
+  padding: 24px 0 26px;
+  border-top: 1px solid var(--line-soft);
+}
+
+/* Die Positionskarte ist hier keine Karte in der Karte mehr: sie erbt die
+   Sektionsflaeche, ihre Cluster behalten nur die Schiene. (Auf den kuratierten
+   Topic-Seiten bleibt sie ein eigener Block -- dort sitzt sie in einer Karte.) */
+.share-shell .watch-position-map {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.share-shell .watch-position-cluster { background: transparent; }
+
+/* Der Kopfbereich traegt seine eigene Trennung (Frage, Zustand, Umschalter);
+   ein zweiter Strich direkt darunter waere eine Linie ohne Aussage. */
+.share-shell .share-scoreboard,
+.share-shell .watch-meta-compact {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Die sticky erste Spalte muss decken, sonst scrollt Text unter ihr durch --
+   also die Seitenfarbe statt eines eigenen Tons. */
+.share-shell .watch-trajectory th:first-child { background: var(--ground); }
+
 /* A notice is still a notice: it keeps a rail on its leading edge, which is
    how this system flags something without drawing a coloured box. */
 .notice {
@@ -245,15 +300,30 @@ body {
    -------------------------------------------------------------------------- */
 
 /* Drift on a watched question gets a rail, not a coloured box: a box that
-   changes colour reads as an error, a rail reads as a flag. */
+   changes colour reads as an error, a rail reads as a flag. Die Flaeche
+   bleibt darum die normale Panel-Flaeche - wer zum ersten Mal hier landet,
+   soll die Frage sehen und nicht eine Warnung ueber eine Veraenderung,
+   die er noch gar nicht einordnen kann. */
 .watch-drift-hero {
   border: 0;
-  border-left: 2px solid var(--partial);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  background: var(--partial-bg);
+  border-left: 2px solid var(--agree);
+  border-radius: 0;
+  background: transparent;
 }
 
-.watch-drift-pulse { background: var(--partial); }
+/* Die Schiene und der Punkt sagen dasselbe: gelb erst, wenn sich wirklich
+   etwas bewegt hat. Ein ruhiger Check darf nicht wie eine Warnung aussehen. */
+.watch-drift-hero.is-changed { border-left-color: var(--partial); }
+
+.watch-drift-pulse {
+  background: var(--agree);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--agree) 15%, transparent);
+}
+
+.watch-drift-hero.is-changed .watch-drift-pulse {
+  background: var(--partial);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--partial) 16%, transparent);
+}
 
 .watch-position-map {
   border: 0;
@@ -268,15 +338,13 @@ body {
 
 .watch-position-cluster:nth-child(even) { border-left-color: var(--partial); }
 
-/* The metrics strip drew its own grid out of 1px background bleed. Tone does
-   the same job: three panels on the page, separated by the gap itself. */
-.watch-drift-metrics {
+/* The metrics strip is a line of facts now, not three panels: no tone at all,
+   the gap between the pairs does the separating. */
+.watch-drift-metrics,
+.watch-drift-metrics > div {
   border: 0;
-  gap: 2px;
   background: transparent;
 }
-
-.watch-drift-metrics > div { background: var(--surface); }
 
 .watch-event-major {
   background: var(--dispute-bg);

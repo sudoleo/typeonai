@@ -2378,10 +2378,8 @@ canvas {
 
 .share-models-label {
   color: var(--muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
 }
 
 .share-models-list {
@@ -2735,10 +2733,6 @@ canvas {
   margin-top: 8px;
 }
 
-.share-disclaimer {
-  font-size: var(--font-size-sm);
-  color: var(--muted);
-}
 
 /* Differences-Karten */
 .diff-verdict {
@@ -2902,23 +2896,27 @@ canvas {
 }
 
 /* Consensus Watch history: server-rendered SVG, no chart dependency. */
+/* Ruhige Flaeche, farbiges Signal: der Zustand haengt am Punkt und an der
+   Zeile darueber, nicht an einer getoenten Wand. Ein Erstbesucher liest hier
+   ueber eine Veraenderung, bevor er die Antwort kennt - der Block darf
+   praesent sein, aber nicht schreien. */
 .watch-drift-hero {
-  margin: 22px 0 8px;
-  padding: clamp(18px, 3vw, 26px);
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--border));
-  border-radius: var(--radius-lg);
-  background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, var(--accent) 13%, transparent), transparent 42%),
-    color-mix(in srgb, var(--accent) 5%, var(--panel-bg));
+  margin: 20px 0 4px;
+  /* Nur der Einzug der Schiene. Eine getoente Flaeche haette hier nichts zu
+     sagen, was die Schiene und die Zeile nicht schon sagen -- und die Seite
+     stapelt sonst Kasten auf Kasten. */
+  padding: 2px 0 2px 16px;
+  border: 0;
+  border-radius: 0;
+  background: none;
   text-align: left;
-  box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* Frage, Drift und Scoreboard teilen dieselbe Inhaltsbreite, damit die
    Watch-Seite als zusammenhängendes Dashboard lesbar bleibt. */
 .share-header .watch-drift-hero {
   box-sizing: border-box;
-  width: min(var(--maxw), calc(100vw - 40px));
+  width: 100%;
 }
 
 .share-header .share-scoreboard {
@@ -2926,19 +2924,17 @@ canvas {
   width: min(var(--maxw), calc(100vw - 40px));
 }
 
-.watch-drift-hero.is-changed {
-  border-color: color-mix(in srgb, #d97706 48%, var(--border));
-  background:
-    radial-gradient(circle at 100% 0, color-mix(in srgb, #f59e0b 15%, transparent), transparent 42%),
-    color-mix(in srgb, #f59e0b 5%, var(--panel-bg));
-}
+/* Den Zustand tragen der Punkt und die Schiene links (public-shell.css), nicht
+   die Flaeche. Die Zeile darueber bleibt in der normalen Textfarbe: --partial
+   erreicht im Hellmodus keine 4.5:1 und waere als Kleinschrift nicht lesbar. */
 
-.watch-drift-status { display: flex; align-items: center; gap: 13px; }
+.watch-drift-status { display: flex; align-items: center; gap: 11px; }
 .watch-drift-status .eyebrow { margin: 0 0 3px; }
-.watch-drift-status h2 { margin: 0; color: var(--heading); font-size: var(--font-size-xl); }
-.watch-drift-pulse { width: 13px; height: 13px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 0 6px color-mix(in srgb, #22c55e 14%, transparent); }
-.watch-drift-hero.is-changed .watch-drift-pulse { background: #f59e0b; box-shadow: 0 0 0 6px color-mix(in srgb, #f59e0b 16%, transparent); }
-.watch-drift-summary { max-width: 70ch; margin: 14px 0 0; color: var(--text); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
+.watch-drift-status h2 { margin: 0; color: var(--heading); font-size: var(--font-size-lg); }
+/* Nur Geometrie; die Farbe des Punktes setzt public-shell.css zusammen mit
+   der Schiene, damit beide nie verschiedene Zustaende behaupten. */
+.watch-drift-pulse { width: 13px; height: 13px; border-radius: 50%; }
+.watch-drift-summary { max-width: 70ch; margin: 10px 0 0; color: var(--text); font-size: var(--font-size-base); line-height: var(--line-height-reading); }
 
 .watch-drift-layout {
   display: grid;
@@ -2952,11 +2948,13 @@ canvas {
 
 .watch-drift-copy { min-width: 0; }
 
+/* Die Kurve ist der visuelle Anker des Blocks: seit der Rahmen ruhig ist,
+   traegt sie die eigene Flaeche, damit sie nicht mit ihm verschwimmt. */
 .watch-compact-agreement {
   min-width: 0;
-  padding: 14px 16px 11px;
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--panel-bg) 74%, transparent);
+  padding: 0;
+  border-radius: 0;
+  background: none;
 }
 
 .watch-compact-agreement-heading {
@@ -3011,19 +3009,6 @@ canvas {
 
 .watch-simple-status:not(.is-active) { color: var(--muted); }
 
-.watch-analysis-details { margin-top: 18px; }
-.watch-analysis-details > summary {
-  width: fit-content;
-  padding: 8px 11px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--heading);
-  background: color-mix(in srgb, var(--panel-bg) 78%, transparent);
-  cursor: pointer;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
-}
-
 .watch-baseline-card {
   box-sizing: border-box;
   width: min(var(--maxw), calc(100vw - 40px));
@@ -3038,13 +3023,14 @@ canvas {
 .watch-baseline-card h2 { margin: 0; color: var(--heading); font-size: var(--font-size-xl); }
 .watch-baseline-card p:last-child { max-width: 68ch; margin: 10px 0 0; color: var(--text-secondary); line-height: var(--line-height-reading); }
 
-.watch-drift-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 20px 0 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--border); }
-.watch-drift-metrics > div { min-width: 0; padding: 12px 14px; background: color-mix(in srgb, var(--panel-bg) 88%, transparent); }
-.watch-drift-metrics dt { color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); letter-spacing: var(--tracking-wide); text-transform: uppercase; }
-.watch-drift-metrics dd { margin: 5px 0 0; color: var(--heading); font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); }
-.watch-drift-metrics dd span { color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); }
-.watch-drift-metrics dd.is-text { font-size: var(--font-size-sm); }
-.watch-drift-baseline { margin: 14px 0 0; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+/* Drei Belegzahlen zum Satz darueber. Als Zeile gesetzt, weil ein Kasten pro
+   Zahl dreimal mehr Flaeche kostet, als die Zahlen wert sind. */
+.watch-drift-metrics { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 20px; margin: 10px 0 0; padding: 0; border: 0; border-radius: 0; background: none; }
+.watch-drift-metrics > div { display: flex; align-items: baseline; gap: 7px; min-width: 0; padding: 0; background: none; }
+.watch-drift-metrics dt { color: var(--muted); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
+.watch-drift-metrics dd { margin: 0; color: var(--text); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
+.watch-drift-metrics dd span { color: var(--muted); font-weight: var(--font-weight-medium); }
+.watch-drift-baseline { max-width: 78ch; margin: 10px 0 0; color: var(--muted); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
 .watch-drift-baseline strong { color: var(--heading); }
 
 .watch-version-banner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 18px; margin: 16px -2px -4px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--muted); font-size: var(--font-size-xs); }
@@ -3240,17 +3226,46 @@ canvas {
 .watch-runs li > strong { color: var(--heading); font-size: var(--font-size-base); white-space: nowrap; }
 .watch-runs li > strong span { margin-left: 3px; color: var(--muted); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); }
 .watch-runs li > p { margin: 0; color: var(--text-secondary); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+/* Eine Wortaenderung bleibt lesbar, aber sie bekommt nicht die Stimme einer
+   Bewegung: Vorspann in der Muted-Farbe, Satz normal weiter. */
+.watch-run-restated { color: var(--muted); font-weight: var(--font-weight-semibold); }
 
-.share-method-note {
-  margin: 22px 0 0;
-  padding-top: 16px;
+/* Herkunftsangabe: eine benannte Sektion, kein Kleingedrucktes. Ruhig genug,
+   dass sie den Fuss nicht dominiert, gross genug, dass man sie liest. */
+.share-about {
+  margin: 26px 0 0;
+  padding-top: 18px;
   border-top: 1px solid var(--border);
+}
+
+.share-about h2 {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.share-about p {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--muted);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
+}
+
+.share-about p + p { margin-top: 8px; }
+
+.share-about-link {
+  display: inline-block;
+  margin-top: 10px;
   color: var(--muted);
   font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.share-method-note strong { color: var(--text-secondary); }
-.share-method-note a { color: inherit; font-weight: var(--font-weight-semibold); text-decoration: underline; text-underline-offset: 3px; }
 
 @media (max-width: 900px) {
   .watch-drift-layout { grid-template-columns: 1fr; }
@@ -3375,7 +3390,6 @@ canvas {
   .watch-events li { grid-template-columns: auto auto 1fr; }
   .watch-events p { grid-column: 1 / -1; }
   .watch-events .watch-version-link { grid-column: 1 / -1; }
-  .watch-drift-metrics { grid-template-columns: 1fr; }
   .share-header .watch-drift-hero,
   .share-header .share-scoreboard { width: 100%; }
   .watch-versions li { grid-template-columns: 68px minmax(0, 1fr) auto; }

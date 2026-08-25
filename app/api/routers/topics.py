@@ -17,7 +17,7 @@ from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
-from app.services import claim_ledger, favicons, mailer, topic_runner, topics
+from app.services import claim_ledger, drift_signal, favicons, mailer, topic_runner, topics
 from app.services.history_view import build_history_view
 from app.services.public_markdown import (
     markdown_to_plaintext,
@@ -651,9 +651,15 @@ async def admin_create_topic_run(
                 topic_runner.run_topic_now, topic_id, actor_uid=actor_uid
             )
         topic_after = await asyncio.to_thread(topics.get_topic, topic_id)
-        should_notify = (
-            run["change_type"] in {"minor", "major"} and mailer.is_configured()
+        # Same bar as the Watch pages: a rewritten qualification ("minor") is
+        # not what a follower subscribed to, and it is not what the page marks
+        # as movement either.
+        is_material = drift_signal.is_material(
+            run["change_type"] in {"minor", "major"}, run["change_type"],
+            run.get("agreement_score"),
+            [old_score] if isinstance(old_score, (int, float)) else [],
         )
+        should_notify = is_material and mailer.is_configured()
         if should_notify:
             background_tasks.add_task(
                 _notify_topic_followers, topic_after, run, old_score
@@ -664,7 +670,7 @@ async def admin_create_topic_run(
             "notifications_queued": should_notify,
             "notification_warning": (
                 "Run saved, but SMTP is not configured; follower e-mails were not queued."
-                if run["change_type"] in {"minor", "major"} and not should_notify
+                if is_material and not should_notify
                 else ""
             ),
         }
