@@ -11,6 +11,7 @@ from fastapi.templating import Jinja2Templates
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.security import verify_user_token, extract_id_token, is_user_admin
+from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.services import drift_signal, og_image
 from app.services import share_snapshots as snapshots
@@ -454,7 +455,8 @@ def questions_hub(request: Request):
             "Questions answered by multiple AI models independently, "
             "cross-checked and scored for agreement."
         ),
-        "isPartOf": {"@type": "WebSite", "name": "consens.io", "url": SITE_URL + "/"},
+        "isPartOf": seo_entity.SITE_REF,
+        "publisher": seo_entity.ORG_REF,
         "mainEntity": {
             "@type": "ItemList",
             "numberOfItems": len(entries),
@@ -469,7 +471,7 @@ def questions_hub(request: Request):
             ],
         },
     }
-    jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
+    jsonld_html = seo_entity.dumps(seo_entity.page_graph(jsonld))
 
     response = templates.TemplateResponse(request=request, name="questions.html", context={
         "entries": entries,
@@ -842,12 +844,9 @@ def share_page(request: Request, slug_id: str):
         "datePublished": published_iso or date_iso,
         "dateModified": modified_iso,
         "mainEntityOfPage": {"@type": "WebPage", "@id": page_url},
-        "author": {"@type": "Organization", "name": "consens.io", "url": SITE_URL},
-        "publisher": {
-            "@type": "Organization",
-            "name": "consens.io",
-            "logo": {"@type": "ImageObject", "url": SITE_URL + "/static/favicon-square.png"},
-        },
+        "author": seo_entity.ORG_REF,
+        "publisher": seo_entity.ORG_REF,
+        "isPartOf": seo_entity.SITE_REF,
         # Nur Quellen, deren URL wirklich auf die zitierte Seite zeigt. Ein
         # signierter Grounding-Redirect ist als Zitat wertlos und verdraengt
         # sonst die echten Belege aus den ersten zehn.
@@ -859,7 +858,7 @@ def share_page(request: Request, slug_id: str):
     if og_is_card:
         jsonld["image"] = og_image_url
     # "</" escapen, damit Snapshot-Inhalte das <script>-Element nie schließen können.
-    jsonld_html = json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/")
+    jsonld_html = seo_entity.dumps(seo_entity.page_graph(jsonld))
 
     response = templates.TemplateResponse(request=request, name="share.html", context={
         "share_id": share_id,

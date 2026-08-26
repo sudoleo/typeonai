@@ -26,12 +26,16 @@
   {
     "@context": "https://schema.org",
     "@graph": [
+      {{ organization_jsonld | safe }},
+      {{ website_jsonld | safe }},
       {
         "@type": "WebPage",
         "@id": "https://www.consens.io/benchmark#webpage",
         "url": "https://www.consens.io/benchmark",
         "name": "Consensus Benchmark (MMLU-Pro)",
-        "description": "A reproducible MMLU-Pro snapshot comparing consens.io's consensus answer against six leading AI models on 314 expert-level, closed-book questions."
+        "description": "A reproducible MMLU-Pro snapshot comparing consens.io's consensus answer against six leading AI models on 314 expert-level, closed-book questions.",
+        "isPartOf": { "@id": "{{ website_id }}" },
+        "publisher": { "@id": "{{ organization_id }}" }
       },
       {
         "@type": "Dataset",
@@ -39,7 +43,7 @@
         "name": "consens.io consensus benchmark: MMLU-Pro pooled snapshot",
         "description": "314 MMLU-Pro multiple-choice questions answered closed-book by six models plus a fused consensus; graded against ground truth.",
         "license": "https://creativecommons.org/licenses/by/4.0/",
-        "creator": { "@type": "Organization", "name": "consens.io" },
+        "creator": { "@id": "{{ organization_id }}" },
         "measurementTechnique": "Multiple-choice accuracy vs. ground truth"
       }
     ]

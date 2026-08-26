@@ -25,16 +25,20 @@
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "AboutPage",
-    "@id": "https://www.consens.io/about#about",
-    "url": "https://www.consens.io/about",
-    "name": "About consens.io",
-    "description": "consens.io is an independent tool for comparing AI model answers, spotting agreement, and making disagreements easier to inspect.",
-    "isPartOf": {
-      "@type": "WebSite",
-      "name": "consens.io",
-      "url": "https://www.consens.io/"
-    }
+    "@graph": [
+      {{ organization_jsonld | safe }},
+      {{ website_jsonld | safe }},
+      {
+        "@type": "AboutPage",
+        "@id": "https://www.consens.io/about#about",
+        "url": "https://www.consens.io/about",
+        "name": "About consens.io",
+        "description": "consens.io is an independent tool for comparing AI model answers, spotting agreement, and making disagreements easier to inspect.",
+        "isPartOf": { "@id": "{{ website_id }}" },
+        "mainEntity": { "@id": "{{ organization_id }}" },
+        "publisher": { "@id": "{{ organization_id }}" }
+      }
+    ]
   }
   </script>
   <script>

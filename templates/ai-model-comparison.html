@@ -26,12 +26,16 @@
   {
     "@context": "https://schema.org",
     "@graph": [
+      {{ organization_jsonld | safe }},
+      {{ website_jsonld | safe }},
       {
         "@type": "WebPage",
         "@id": "https://www.consens.io/ai-model-comparison#webpage",
         "url": "https://www.consens.io/ai-model-comparison",
         "name": "AI Model Comparison Tool",
-        "description": "Compare AI model answers from leading providers side by side and create a structured consensus."
+        "description": "Compare AI model answers from leading providers side by side and create a structured consensus.",
+        "isPartOf": { "@id": "{{ website_id }}" },
+        "publisher": { "@id": "{{ organization_id }}" }
       },
       {
         "@type": "FAQPage",

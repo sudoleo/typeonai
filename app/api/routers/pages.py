@@ -31,10 +31,13 @@ from app.services.llm.provider_runtime import (
 # We'll import templates from main or setup a generic one here.
 from fastapi.templating import Jinja2Templates
 from app.core.assets import register_asset_globals
+from app.core.seo_entity import register_seo_globals
 
 templates = Jinja2Templates(directory="templates")
 # Content-hashed asset URLs replace the hand-maintained ?v= marks.
 register_asset_globals(templates)
+# Organization/WebSite als EIN Knoten, siehe app/core/seo_entity.py.
+register_seo_globals(templates)
 
 router = APIRouter()
 

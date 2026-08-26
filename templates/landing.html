@@ -28,17 +28,15 @@
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
   <link rel="apple-touch-icon" href="/static/favicon-square-dark.png?v=20260621-logo2">
+  {#- Die Entitaet hinter der Domain steht in app/core/seo_entity.py und wird
+      hier eingebunden statt abgeschrieben, damit Name und Beschreibung auf
+      allen Seiten zeichengleich bleiben. -#}
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@graph": [
-      {
-        "@type": "Organization",
-        "@id": "https://www.consens.io/#organization",
-        "name": "consens.io",
-        "url": "https://www.consens.io/",
-        "logo": "https://www.consens.io/static/favicon-square.png"
-      },
+      {{ organization_jsonld | safe }},
+      {{ website_jsonld | safe }},
       {
         "@type": "WebApplication",
         "@id": "https://www.consens.io/#app",
@@ -47,9 +45,8 @@
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "Web browser",
         "description": "consens.io independently measures where leading AI answers agree, contradict one another, and change over time.",
-        "creator": {
-          "@id": "https://www.consens.io/#organization"
-        },
+        "creator": { "@id": "{{ organization_id }}" },
+        "isPartOf": { "@id": "{{ website_id }}" },
         "offers": {
           "@type": "Offer",
           "price": "0",

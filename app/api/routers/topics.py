@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Requ
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from app.core import seo_entity
 from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
@@ -274,7 +275,7 @@ async def topics_hub(request: Request):
     response = templates.TemplateResponse(request=request, name="topics.html", context={
         "entries": entries,
         "categories": categories,
-        "jsonld": json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/"),
+        "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
     return response
@@ -426,12 +427,9 @@ async def topic_page(
         "datePublished": runs[0]["observed_at"] if runs else selected["observed_at"],
         "dateModified": runs[-1]["observed_at"] if runs else selected["observed_at"],
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},
-        "author": {"@type": "Organization", "name": "consens.io", "url": SITE_URL},
-        "publisher": {
-            "@type": "Organization",
-            "name": "consens.io",
-            "logo": {"@type": "ImageObject", "url": SITE_URL + "/static/favicon-square.png"},
-        },
+        "author": seo_entity.ORG_REF,
+        "publisher": seo_entity.ORG_REF,
+        "isPartOf": seo_entity.SITE_REF,
         "citation": list(dict.fromkeys(citations))[:30],
         "isAccessibleForFree": True,
     }
@@ -454,7 +452,7 @@ async def topic_page(
         "page_title": title,
         "meta_description": meta_description,
         "robots_meta": robots,
-        "jsonld": json.dumps(jsonld, ensure_ascii=False).replace("</", "<\\/"),
+        "jsonld": seo_entity.dumps(seo_entity.page_graph(jsonld)),
         "is_current": current,
     })
     response.headers["X-Robots-Tag"] = robots

@@ -26,12 +26,16 @@
   {
     "@context": "https://schema.org",
     "@graph": [
+      {{ organization_jsonld | safe }},
+      {{ website_jsonld | safe }},
       {
         "@type": "WebPage",
         "@id": "https://www.consens.io/consensus-engine#webpage",
         "url": "https://www.consens.io/consensus-engine",
         "name": "How the Consensus Engine Works",
-        "description": "A user-friendly but technical explanation of how consens.io compares model answers, builds a consensus, and shows differences."
+        "description": "A user-friendly but technical explanation of how consens.io compares model answers, builds a consensus, and shows differences.",
+        "isPartOf": { "@id": "{{ website_id }}" },
+        "publisher": { "@id": "{{ organization_id }}" }
       },
       {
         "@type": "FAQPage",
