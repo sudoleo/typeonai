@@ -11,6 +11,7 @@ from urllib.parse import quote
 
 import openai
 import requests
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from starlette.requests import ClientDisconnect
 
@@ -61,7 +62,13 @@ SSE_HEADERS = {
 
 
 def sse_pack(event: str, data: Dict[str, Any]) -> str:
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+    # SSE bypasses FastAPI's normal response encoder. Final events can contain
+    # compact Firestore metadata (for example DatetimeWithNanoseconds from a
+    # freshly written bookmark), so normalize through the same JSON boundary
+    # before calling json.dumps. Without this, the result and bookmark were
+    # already persisted but the last event crashed while being serialized.
+    encoded = jsonable_encoder(data)
+    return f"event: {event}\ndata: {json.dumps(encoded, ensure_ascii=False)}\n\n"
 
 
 SSE_KEEPALIVE_INTERVAL_SECONDS = 15.0

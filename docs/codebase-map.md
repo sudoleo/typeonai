@@ -1320,7 +1320,11 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    free_usage_remaining, deep_remaining, is_pro_user, key_used}`. Bei Fehler kommt
    ein `final` mit `error`. Provider-SDK-Content-Blöcke werden an dieser Grenze
    rekursiv zu Text normalisiert; Objektwerte gelangen weder als Delta noch als
-   `[object Object]` ins Frontend. Frontend rendert Deltas und wertet `final` aus.
+   `[object Object]` ins Frontend. `sse_pack` führt außerdem jeden Event-Payload
+   durch FastAPIs `jsonable_encoder`, weil SSE die normale Response-Kodierung
+   umgeht; Firestore-`DatetimeWithNanoseconds` aus kompakten Bookmark-Metadaten
+   wird dadurch vor dem abschließenden `json.dumps` zum ISO-Zeitstring. Frontend
+   rendert Deltas und wertet `final` aus.
    Nicht-SSE-Antworten werden zuerst als Text gelesen und, falls möglich, als
    JSON geparst; Plain-Text-/Proxy-/HTTP-Fehler bleiben dadurch sichtbar und
    werden nicht mehr zur generischen „No response received“-Meldung.

@@ -4,6 +4,7 @@ import unittest
 from unittest import mock
 
 import anyio
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 from types import SimpleNamespace
 
@@ -187,6 +188,25 @@ class SSEPackTests(unittest.TestCase):
         self.assertTrue(packed.endswith("\n\n"))
         events = parse_sse_text(packed)
         self.assertEqual(events, [("delta", {"text": "Hällo\nWelt"})])
+
+    def test_pack_normalizes_firestore_timestamp_in_final_metadata(self):
+        timestamp = DatetimeWithNanoseconds.from_rfc3339(
+            "2026-08-26T11:12:39.123456789Z"
+        )
+
+        packed = sse_pack("final", {
+            "bookmark_persisted": True,
+            "bookmark_meta": {"id": "b_run", "timestamp": timestamp},
+        })
+
+        events = parse_sse_text(packed)
+        self.assertEqual(events[0][0], "final")
+        self.assertTrue(events[0][1]["bookmark_persisted"])
+        self.assertEqual(events[0][1]["bookmark_meta"]["id"], "b_run")
+        self.assertEqual(
+            events[0][1]["bookmark_meta"]["timestamp"],
+            "2026-08-26T11:12:39.123456+00:00",
+        )
 
     def test_iter_sse_events_multiple(self):
         raw = (

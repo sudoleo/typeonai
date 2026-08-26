@@ -879,6 +879,102 @@ body.agent-mode-running .agent-mode-chip[data-response-state="pending"]::before 
   padding-block: 0.12em;
 }
 
+/* Markdown tables keep their native semantics and get one dedicated scroll
+   surface. This avoids widening the whole answer while preserving readable
+   columns on phones and for unusually wide model output. */
+.markdown-table-wrap {
+  width: 100%;
+  max-width: 100%;
+  margin: 1.15em 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--raise) 52%, var(--ground));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.markdown-table-wrap:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 3px;
+}
+
+.markdown-table {
+  width: 100%;
+  min-width: 32rem;
+  margin: 0;
+  border: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: var(--text-color);
+  font-size: 0.93em;
+  line-height: var(--line-height-ui);
+}
+
+.markdown-table th,
+.markdown-table td {
+  min-width: 7rem;
+  padding: 10px 13px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-table th {
+  background: color-mix(in srgb, var(--ink) 7%, var(--raise));
+  color: var(--text-color);
+  font-size: 0.88em;
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.markdown-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ink) 2.7%, transparent);
+}
+
+.markdown-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.markdown-table .is-numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.markdown-table td > :first-child {
+  margin-top: 0;
+}
+
+.markdown-table td > :last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .markdown-table-wrap {
+    margin-block: 1em;
+  }
+
+  .markdown-table th,
+  .markdown-table td {
+    min-width: 6.5rem;
+    padding: 9px 11px;
+  }
+}
+
+@media print {
+  .markdown-table-wrap {
+    overflow: visible;
+    break-inside: avoid;
+  }
+
+  .markdown-table {
+    width: 100%;
+  }
+}
+
 .consensus-main {
   /* Volle Breite: die 80/20-Spaltenteilung ist entfallen. */
   flex: 1 1 auto;

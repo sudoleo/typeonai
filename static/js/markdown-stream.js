@@ -47,9 +47,68 @@ function renderMarkdownHtml(md) {
   }
 }
 
+function isNumericTableValue(value) {
+  const normalized = String(value || "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+  if (!normalized) return false;
+  return /^\(?[+-]?\s*(?:[$€£¥]\s*)?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d+)?(?:\s*%)?\)?$/.test(normalized);
+}
+
+function markNumericTableColumns(table) {
+  const rows = Array.from(table.tBodies || [])
+    .flatMap(body => Array.from(body.rows || []));
+  if (!rows.length) return;
+
+  const columnCount = Math.max(...rows.map(row => row.cells.length), 0);
+  for (let column = 0; column < columnCount; column += 1) {
+    const cells = rows
+      .map(row => row.cells[column])
+      .filter(Boolean);
+    const numericCount = cells.filter(cell => isNumericTableValue(cell.textContent)).length;
+    // Allow one label row such as "Total" in an otherwise numeric column.
+    if (numericCount < Math.max(2, cells.length - 1)) continue;
+
+    Array.from(table.rows || []).forEach(row => {
+      const cell = row.cells[column];
+      if (cell && (cell.closest("thead") || isNumericTableValue(cell.textContent))) {
+        cell.classList.add("is-numeric");
+      }
+    });
+  }
+}
+
+function enhanceMarkdownTables(root) {
+  const tables = Array.from(root?.querySelectorAll?.("table") || []);
+  tables.forEach((table, index) => {
+    if (table.closest(".markdown-table-wrap")) return;
+
+    table.classList.add("markdown-table");
+    markNumericTableColumns(table);
+
+    const headings = Array.from(table.querySelectorAll("thead th"))
+      .map(cell => cell.textContent.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    const wrapper = document.createElement("div");
+    wrapper.className = "markdown-table-wrap";
+    wrapper.setAttribute("role", "region");
+    wrapper.setAttribute(
+      "aria-label",
+      headings.length ? `Table: ${headings.join(", ")}` : `Table ${index + 1}`
+    );
+    wrapper.tabIndex = 0;
+
+    table.parentNode.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+}
+
 // Utils: Markdown → HTML (sanitised) + deine Addons
 function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources) {
   el.innerHTML = renderMarkdownHtml(md);
+
+  enhanceMarkdownTables(el);
 
   if (window.addCopyButtons) window.addCopyButtons(el);
   if (window.addNewTabToLinks) window.addNewTabToLinks(el);
@@ -89,6 +148,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
     if (isActiveFn && !isActiveFn()) return;
     lastRenderAt = Date.now();
     outputEl.innerHTML = renderMarkdownHtml(text);
+    enhanceMarkdownTables(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
   }
 

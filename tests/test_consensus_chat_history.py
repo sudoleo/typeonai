@@ -6,6 +6,7 @@ import re
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
 from app.api.routers import bookmarks as bookmarks_router
 from app.api.routers import chat as chat_router
@@ -146,7 +147,11 @@ def test_consensus_persists_requested_bookmark_before_successful_final_event(
             "id": data["bookmarkId"],
             "query": data["question"],
             "title": "What changed?",
-            "timestamp": "server-time",
+            # Production Firestore returns this concrete datetime subtype. A
+            # plain string fake hid the SSE final-event serialization failure.
+            "timestamp": DatetimeWithNanoseconds.from_rfc3339(
+                "2026-08-26T11:12:39.123456789Z"
+            ),
             "responses": {"consensus": authoritative["consensus"]},
             "sources": authoritative["sources"],
         }

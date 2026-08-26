@@ -15,6 +15,11 @@ incorporate the owner's feedback and apply to every future draft.
   sentence mechanically; express the idea through evidence.
 - Write like a thoughtful founder or product researcher, not a generic AI
   marketing account. Avoid inflated claims, canned hooks, and AI clichés.
+- In a feature announcement, lead unambiguously with the user value. Trust,
+  safeguards, and limitations should explain why the feature is well designed;
+  they must not make consens.io appear to argue against or "roast" the feature
+  it is launching. A nuanced caveat may support the story, but it cannot become
+  a competing thesis unless the owner explicitly asks for a critical post.
 
 ## Brand accuracy
 
@@ -26,8 +31,10 @@ incorporate the owner's feedback and apply to every future draft.
 - Product mockups must match the current product, including copy, scores,
   provider assignments, marker color, line style, thickness, and offset.
 - Marker styling is not remembered from an older post. It is inspected in the
-  current CSS every time. As of 2026-07-29, markers use solid underlines:
-  1 px for a minor or split signal and 2 px amber for a major contradiction.
+  current CSS every time. As of 2026-08-26, checked claims use translucent
+  highlighter fills with cloned fragments across line breaks: green for full
+  agreement, grey for nuance, amber for split support, and red for a genuine
+  contradiction. Do not reintroduce underline styling in an asset.
 
 ## Art direction
 
