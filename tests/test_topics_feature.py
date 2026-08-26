@@ -354,6 +354,72 @@ def test_slug_uniqueness_and_evidence_url_validation():
         )
 
 
+def test_renamed_topic_keeps_its_runs_and_redirects_the_old_url(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(
+        topic["id"], run_payload(agreement_score=61), actor_uid="admin", db=db, now=NOW
+    )
+
+    renamed = topics.update_topic(
+        topic["id"],
+        topic_payload(slug="when-will-gpt-6-be-released"),
+        actor_uid="admin",
+        db=db,
+        now=NOW,
+    )
+
+    # The record lives under the topic id, so the rename cannot touch it.
+    assert renamed["slug_history"] == ["gpt-6"]
+    assert renamed["run_count"] == 2
+    assert len(topics.list_runs(topic["id"], db=db)) == 2
+    assert topics.list_indexed_topic_urls(db=db)[0]["path"] == (
+        "/topics/when-will-gpt-6-be-released"
+    )
+    found, retired = topics.resolve_topic_by_slug("gpt-6", db=db)
+    assert retired is True and found["id"] == topic["id"]
+    assert topics.resolve_topic_by_slug("when-will-gpt-6-be-released", db=db)[1] is False
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    moved = client.get("/topics/gpt-6", follow_redirects=False)
+    assert moved.status_code == 301
+    assert moved.headers["location"] == "/topics/when-will-gpt-6-be-released"
+    assert client.get("/topics/when-will-gpt-6-be-released").status_code == 200
+    assert client.get("/topics/never-existed", follow_redirects=False).status_code == 404
+
+
+def test_a_retired_slug_cannot_be_claimed_and_can_be_taken_back(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.update_topic(
+        topic["id"], topic_payload(slug="gpt-6-release-date"),
+        actor_uid="admin", db=db, now=NOW,
+    )
+
+    # The old URL still belongs to this topic, so nobody else gets its traffic.
+    with pytest.raises(topics.TopicError, match="slug is already"):
+        topics.create_topic(
+            topic_payload(title="Other", slug="gpt-6"),
+            actor_uid="admin", db=db, now=NOW,
+        )
+
+    back = topics.update_topic(
+        topic["id"], topic_payload(slug="gpt-6"), actor_uid="admin", db=db, now=NOW
+    )
+    assert back["slug"] == "gpt-6"
+    assert back["slug_history"] == ["gpt-6-release-date"]
+    # Canonical again: it must stop redirecting to itself.
+    assert topics.resolve_topic_by_slug("gpt-6", db=db)[1] is False
+    assert topics.resolve_topic_by_slug("gpt-6-release-date", db=db)[1] is True
+
+
 @pytest.mark.parametrize(("url", "expected"), [
     ("https://openai.com/index/update", "primary"),
     ("https://arxiv.org/abs/2607.12345", "research"),

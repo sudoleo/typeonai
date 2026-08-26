@@ -7,10 +7,10 @@ import logging
 import re
 from datetime import datetime
 from typing import Optional
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Body, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.site import SITE_URL
@@ -311,7 +311,9 @@ async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
     try:
-        topic = await asyncio.to_thread(topics.get_topic_by_slug, slug)
+        topic, retired_slug = await asyncio.to_thread(
+            topics.resolve_topic_by_slug, slug
+        )
     except topics.TopicError:
         raise HTTPException(status_code=404, detail="Topic not found")
     except Exception as exc:
@@ -325,6 +327,15 @@ async def topic_page(
         or not topic.get("latest_run_id")
     ):
         raise HTTPException(status_code=404, detail="Topic not found")
+    if retired_slug:
+        # The topic was renamed. Everything the old URL earned moves to the new
+        # one instead of dying in a 404.
+        target = "/topics/" + quote(str(topic["slug"]))
+        if version:
+            target += "?version=" + quote(version)
+        redirect = RedirectResponse(url=target, status_code=301)
+        redirect.headers["Cache-Control"] = "public, max-age=3600"
+        return redirect
 
     runs_raw = await asyncio.to_thread(topics.list_runs, topic["id"])
     runs = [topics.run_public_view(run) for run in runs_raw]
@@ -486,7 +497,7 @@ async def topic_favicon(request: Request, d: str = Query(default="", max_length=
 @limiter.limit("3/minute")
 async def follow_topic(request: Request, slug: str, data: dict = Body(default={})):
     try:
-        topic = await asyncio.to_thread(topics.get_topic_by_slug, slug)
+        topic, _retired = await asyncio.to_thread(topics.resolve_topic_by_slug, slug)
         if not topic:
             raise topics.TopicError("not_found", "This topic cannot be followed.")
         pending = await asyncio.to_thread(

@@ -22,9 +22,11 @@ from app.services.watch_service import WatchError, parse_token_payload, sign_tok
 
 
 TOPICS_COLLECTION = "topics"
+SLUG_ALIASES_COLLECTION = "topic_slug_aliases"
 FOLLOWERS_COLLECTION = "topic_followers"
 DELIVERIES_COLLECTION = "topic_follower_deliveries"
 MAX_FOLLOWERS_PER_TOPIC = 500
+MAX_SLUG_ALIASES = 25
 CONFIRM_TOKEN_MAX_AGE_DAYS = 3
 
 TOPIC_STATUSES = {"active", "paused", "archived"}
@@ -510,12 +512,27 @@ def normalize_topic_input(data: dict, *, existing: dict | None = None) -> dict:
     }
 
 
+def _alias_ref(slug: str, *, db):
+    return db.collection(SLUG_ALIASES_COLLECTION).document(slug)
+
+
+def _alias_topic_id(slug: str, *, db) -> str:
+    snapshot = _alias_ref(slug, db=db).get()
+    if not getattr(snapshot, "exists", False):
+        return ""
+    return str((snapshot.to_dict() or {}).get("topic_id") or "")
+
+
 def _slug_in_use(slug: str, *, exclude_id: str = "", db=None) -> bool:
     db = db if db is not None else db_firestore
     for doc in db.collection(TOPICS_COLLECTION).where("slug", "==", slug).stream():
         if doc.id != exclude_id:
             return True
-    return False
+    # A retired slug keeps redirecting to its topic for as long as the old URL
+    # is linked or indexed, so no other topic may claim it: that would hand one
+    # topic's accumulated history to another topic.
+    owner = _alias_topic_id(slug, db=db)
+    return bool(owner) and owner != exclude_id
 
 
 def _topic_from_doc(doc) -> dict | None:
@@ -536,6 +553,41 @@ def get_topic_by_slug(slug: str, *, db=None) -> dict | None:
     for doc in db.collection(TOPICS_COLLECTION).where("slug", "==", normalized).stream():
         return _topic_from_doc(doc)
     return None
+
+
+def resolve_topic_by_slug(slug: str, *, db=None) -> tuple[dict | None, bool]:
+    """Return ``(topic, is_retired_slug)`` for a public topic URL.
+
+    A retired slug is the old URL of a renamed topic. It still resolves, but
+    only so the caller can answer with a permanent redirect to the canonical
+    path instead of a 404.
+    """
+    db = db if db is not None else db_firestore
+    topic = get_topic_by_slug(slug, db=db)
+    if topic:
+        return topic, False
+    owner = _alias_topic_id(normalize_slug(slug), db=db)
+    if not owner:
+        return None, False
+    topic = get_topic(owner, db=db)
+    if not topic or normalize_slug(slug) == str(topic.get("slug") or ""):
+        return None, False
+    return topic, True
+
+
+def _retire_slug(topic_id: str, slug: str, *, db, now) -> None:
+    """Keep the old URL resolving to its topic after a rename."""
+    _alias_ref(slug, db=db).set({
+        "topic_id": topic_id,
+        "slug": slug,
+        "created_at": now,
+    })
+
+
+def _reclaim_slug(topic_id: str, slug: str, *, db) -> None:
+    """Renaming back to an earlier slug makes it canonical again."""
+    if _alias_topic_id(slug, db=db) == topic_id:
+        _alias_ref(slug, db=db).delete()
 
 
 def create_topic(data: dict, *, actor_uid: str, db=None, now=None) -> dict:
@@ -582,11 +634,25 @@ def update_topic(
     normalized = normalize_topic_input(data, existing=existing)
     if _slug_in_use(normalized["slug"], exclude_id=topic_id, db=db):
         raise TopicError("conflict", "This topic slug is already in use.")
+    previous_slug = str(existing.get("slug") or "")
+    slug_changed = bool(previous_slug) and normalized["slug"] != previous_slug
     updates = {
         **normalized,
         "updated_at": now,
         "updated_by": actor_uid,
     }
+    if slug_changed:
+        history = [
+            item for item in (existing.get("slug_history") or [])
+            if isinstance(item, str) and item and item != normalized["slug"]
+        ]
+        if previous_slug not in history:
+            history.append(previous_slug)
+        updates["slug_history"] = history[-MAX_SLUG_ALIASES:]
+        # Written before the rename lands: an alias that points at a topic which
+        # still carries that very slug is inert, while a rename without its
+        # alias would drop the old URL on the floor.
+        _retire_slug(topic_id, previous_slug, db=db, now=now)
     if (
         normalized["update_interval"] != existing.get("update_interval")
         or normalized["status"] != existing.get("status")
@@ -603,6 +669,8 @@ def update_topic(
         updates["claimed_until"] = None
         updates["current_run_id"] = ""
     db.collection(TOPICS_COLLECTION).document(topic_id).set(updates, merge=True)
+    if slug_changed:
+        _reclaim_slug(topic_id, normalized["slug"], db=db)
     return {**existing, **updates}
 
 

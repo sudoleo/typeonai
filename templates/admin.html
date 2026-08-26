@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/static/style.css?v=20260826-flat2">
     <link rel="stylesheet" href="/static/css/admin.css?v=20260825-watcheffective1">
 
-    <script type="module" src="/static/js/admin.js?v=20260825-watcheffective1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260826-slugalias1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -340,7 +340,9 @@
                         <form id="topicAdminForm" class="topic-admin-form" hidden>
                             <div class="topic-form-grid">
                                 <label>Title<input id="adminTopicTitle" maxlength="140" required></label>
-                                <label>URL slug<input id="adminTopicSlug" maxlength="80" required></label>
+                                <label>URL slug<input id="adminTopicSlug" maxlength="80" required>
+                                    <span id="adminTopicSlugHistory" class="section-hint" hidden></span>
+                                </label>
                                 <label class="wide">Ticker question<input id="adminTopicQuestion" maxlength="500" required placeholder="What is the current evidence about...?"></label>
                                 <label>Category<input id="adminTopicCategory" maxlength="80" required></label>
                                 <label>Status

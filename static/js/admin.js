@@ -1788,6 +1788,12 @@ function fillAdminTopic(topic, runs) {
     document.getElementById('topicAdminForm').hidden = false;
     document.getElementById('adminTopicTitle').value = topic.title || '';
     document.getElementById('adminTopicSlug').value = topic.slug || '';
+    const slugHistory = document.getElementById('adminTopicSlugHistory');
+    const retired = (topic.slug_history || []).filter(Boolean);
+    slugHistory.hidden = retired.length === 0;
+    slugHistory.textContent = retired.length
+        ? `Redirecting (301): ${retired.map((item) => `/topics/${item}`).join(', ')}`
+        : '';
     document.getElementById('adminTopicQuestion').value = topic.lead_question || '';
     document.getElementById('adminTopicCategory').value = topic.category || '';
     document.getElementById('adminTopicSummary').value = topic.summary || '';
