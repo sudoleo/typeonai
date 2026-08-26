@@ -56,36 +56,66 @@
   <span class="src-quality-label">{{ item.quality_label }}</span>
 </a>
 {%- endmacro %}
-{% macro claim_row(claim, checks) -%}
-<li class="claim-row{% if claim.contested %} is-contested{% endif %}{% if claim.is_new %} is-new{% endif %}{% if not claim.holding %} is-retired{% endif %}">
-  <p class="claim-label">{{ claim.label }}</p>
-  <div class="claim-meta">
-    {% if not claim.holding %}
-    <span class="claim-flag is-retired">Last stated {{ claim.last_display }}</span>
-    <span class="claim-flag">Held {{ claim.appearances }} of {{ checks }} checks</span>
-    {% elif claim.is_new %}
-    <span class="claim-flag is-new">New since {{ claim.first_display }}</span>
-    {% else %}
-    <span class="claim-flag">Held {{ claim.streak }} of {{ checks }} checks</span>
-    {% endif %}
-    {% if claim.contested %}<span class="claim-flag is-split">Models split</span>{% endif %}
-    {% if claim.partial %}<span class="claim-flag is-partial">Stated by {{ claim.model_count }} of {{ claim.run_model_count }} models</span>{% endif %}
-  </div>
-  {% if claim.contested and claim.positions | length > 1 %}
-  <div class="claim-positions">
-    {% for position in claim.positions %}
-    <div class="claim-position">
-      <p>{{ position.stance }}</p>
-      <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+{#- One statement of the answer. The band it sits in says what kind of
+    statement it is; the row repeats that as a tag, so a row stays readable
+    when it is linked to directly or read out of its group. -#}
+{% macro fact_row(claim, checks, kind, tag) -%}
+<details class="fact-row is-{{ kind }}" id="fact-{{ kind }}-{{ claim.first_index }}-{{ claim.last_index }}">
+  <summary>
+    <span class="fact-tag is-{{ kind }}"><i aria-hidden="true"></i>{{ tag }}</span>
+    <p class="fact-text">{{ claim.label }}</p>
+    <span class="fact-side">
+      <span class="claim-lifeline" role="img"
+            aria-label="Stated in {{ claim.appearances }} of {{ checks }} checks, first on {{ claim.first_display }}, last on {{ claim.last_display }}">
+        {% for tick in claim.lifeline %}<i class="is-{{ tick.state }}" title="{{ tick.date }} &middot; {% if tick.state == 'on' %}stated{% elif tick.state == 'gap' %}check listed no claims{% else %}not stated{% endif %}"></i>{% endfor %}
+      </span>
+      <span class="fact-count">
+        {%- if not claim.holding %}last {{ claim.last_display }}
+        {%- else %}{{ claim.streak }}/{{ checks }}{% endif -%}
+      </span>
+      <span class="fact-chevron" aria-hidden="true">&rsaquo;</span>
+    </span>
+  </summary>
+  <div class="fact-body">
+    <div class="fact-meta">
+      {% if claim.partial %}
+      <span class="claim-flag is-partial">Stated by {{ claim.model_count }} of {{ claim.run_model_count }} models</span>
+      {% elif claim.model_count %}
+      <span class="claim-flag is-full">Stated by all {{ claim.model_count }} models</span>
+      {% endif %}
+      {% if claim.holding %}
+      <span class="claim-flag">Held {{ claim.streak }} of {{ checks }} checks</span>
+      {% else %}
+      <span class="claim-flag is-retired">Last stated {{ claim.last_display }}</span>
+      <span class="claim-flag">Held {{ claim.appearances }} of {{ checks }} checks</span>
+      {% endif %}
+      {% if claim.is_new %}<span class="claim-flag is-new">Entered {{ claim.first_display }}</span>
+      {% else %}<span class="claim-flag">First stated {{ claim.first_display }}</span>{% endif %}
+      {% if claim.contested %}<span class="claim-flag is-split">The models do not state it the same way</span>{% endif %}
     </div>
-    {% endfor %}
+    {% if claim.contested and claim.positions | length > 1 %}
+    <div class="claim-positions">
+      {% for position in claim.positions %}
+      <div class="claim-position{% if not loop.first %} is-other{% endif %}">
+        <p>{{ position.stance }}</p>
+        <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if claim.sources %}
+    <div class="fact-sources">
+      {% for item in claim.sources %}
+      <a class="fact-source" href="{{ item.url }}" target="_blank" rel="nofollow noopener noreferrer">
+        {{ src_favicon(item) }}
+        <span>{% if item.show_title %}{{ item.title }}{% else %}{{ item.site or item.host }}{% endif %}</span>
+        <b>{{ item.host or item.site }}</b>
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
-  {% endif %}
-  <span class="claim-lifeline" role="img"
-        aria-label="Stated in {{ claim.appearances }} of {{ checks }} checks, first on {{ claim.first_display }}, last on {{ claim.last_display }}">
-    {% for tick in claim.lifeline %}<i class="is-{{ tick.state }}" title="{{ tick.date }} &middot; {% if tick.state == 'on' %}stated{% elif tick.state == 'gap' %}check listed no claims{% else %}not stated{% endif %}"></i>{% endfor %}
-  </span>
-</li>
+</details>
 {%- endmacro %}
 {% macro timeline_row(run, slug, latest_run_id) -%}
 <li class="is-{{ run.change_type }}{% if run.is_selected %} is-selected{% endif %}">
@@ -123,7 +153,7 @@
   <title>{{ page_title }} | consens.io</title>
   <script type="application/ld+json">{{ jsonld | safe }}</script>
 <link rel="stylesheet" href="/static/css/public-pages.css?v=20260825-flat2">
-  <link rel="stylesheet" href="/static/css/topics.css?v=20260812-ledger1">
+  <link rel="stylesheet" href="/static/css/topics.css?v=20260826-finding1">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -145,52 +175,68 @@
   <main class="page-shell topic-detail-shell" data-math-render>
     <header class="topic-detail-header">
       <div class="topic-breadcrumb"><a href="/topics">Topics</a><span>/</span><span>{{ topic.category }}</span></div>
-      <div class="topic-title-row">
-        <div>
-          <div class="topic-title-meta">
-            <span class="topic-state{% if topic.status == 'paused' %} is-paused{% endif %}">{{ "Paused" if topic.status == "paused" else "Live" }}</span>
-            <span>Checked {{ topic.update_interval }}</span>
-            <span>{{ topic.run_count }} version{{ "s" if topic.run_count != 1 }}</span>
-          </div>
-          <h1>{{ topic.title }}</h1>
-          <p class="topic-lead-question">{{ topic.lead_question }}</p>
-        </div>
-        <div class="topic-current-score{% if selected.agreement_score >= 75 %} is-high{% elif selected.agreement_score >= 50 %} is-mid{% else %} is-low{% endif %}">
-          <span>Agreement</span>
-          <strong>{{ selected.agreement_score }}</strong>
-          <small>out of 100</small>
-        </div>
+      <div class="topic-title-meta">
+        <span class="topic-state{% if topic.status == 'paused' %} is-paused{% endif %}">{{ "Paused" if topic.status == "paused" else "Live" }}</span>
+        <span>Checked {{ topic.update_interval }}</span>
+        <span>{{ topic.run_count }} check{{ "s" if topic.run_count != 1 }}</span>
       </div>
-      {% if record %}
-      <div class="topic-record-strip{% if record.changed_now %} is-moved{% endif %}">
-        <p class="eyebrow">The record</p>
-        {% if record.changed_now %}
-        <strong>The consensus moved in the latest check.</strong>
-        {% elif record.steady_checks %}
-        <strong>Unchanged through {{ record.steady_checks }} check{{ "s" if record.steady_checks != 1 }}{% if record.steady_days %}, {{ record.steady_days }} day{{ "s" if record.steady_days != 1 }}{% endif %}.</strong>
-        {% else %}
-        <strong>First check on this question.</strong>
+      <h1>{{ topic.title }}</h1>
+      <p class="topic-lead-question">{{ topic.lead_question }}</p>
+
+      {% if finding %}
+      {#- Layer 0. Everything above this line is context; this is the answer. -#}
+      <section class="topic-finding is-{{ finding.state }}" id="finding">
+        <p class="topic-finding-state"><i aria-hidden="true"></i>{{ finding.state_label }}</p>
+        <h2 class="topic-finding-line{% if finding.is_long %} is-long{% endif %}">{{ finding.line }}</h2>
+        {% if finding.support %}
+        <p class="topic-finding-support">{{ finding.support | join(" ") }}</p>
         {% endif %}
-        <p class="topic-record-detail">
-          {% if record.material_count %}
-          Last material change on {{ record.anchor_display }}{% if record.anchor_run_id and record.anchor_run_id != selected.id %} (<a href="/topics/{{ topic.slug }}?version={{ record.anchor_run_id }}">open that version</a>){% endif %}.
-          {% else %}
-          No material change since the first check on {{ record.first_display }}.
+        <div class="topic-finding-assurance">
+          {% if finding.voice %}<span class="is-voice">{{ finding.voice }}</span>{% endif %}
+          {% if finding.state == "moved" %}
+          <span>Moved in the latest check</span>
+          {% elif finding.steady_checks %}
+          <span>Unchanged through {{ finding.steady_checks }} check{{ "s" if finding.steady_checks != 1 }}{% if finding.steady_days %}, {{ finding.steady_days }} day{{ "s" if finding.steady_days != 1 }}{% endif %}</span>
           {% endif %}
-          {{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if sources.tracked_count %}, {{ sources.tracked_count }} source{{ "s" if sources.tracked_count != 1 }} dated{% endif %}.
-        </p>
-        {% if record.material_count and record.anchor_summary %}
-        <p class="topic-record-anchor">{{ record.anchor_summary }}</p>
-        {% endif %}
-      </div>
+          {% if finding.checks > 1 %}<span>Checked {{ finding.checks }} times since {{ finding.tracked_since }}</span>{% endif %}
+          {% if finding.split_count %}<a class="is-split" href="#facts">{{ finding.split_count }} open disagreement{{ "s" if finding.split_count != 1 }}</a>{% endif %}
+        </div>
+      </section>
       {% endif %}
-      <ul class="share-scoreboard-facts topic-scoreboard-facts">
-        {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
-        {% if scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
-        {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
-        {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
-      </ul>
-      <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge from a different model family cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
+
+      {% if strip | length > 1 %}
+      <section class="topic-strip-block" aria-labelledby="stripHeading">
+        <div class="topic-strip-legend">
+          <span id="stripHeading">Every check, oldest first</span>
+          <span>{{ strip | length }} check{{ "s" if strip | length != 1 }}</span>
+        </div>
+        <div class="topic-strip" id="topicStrip" data-slug="{{ topic.slug }}">
+          {% for cell in strip %}
+          <button type="button" class="topic-strip-cell is-{{ cell.kind }}{% if cell.is_latest %} is-latest{% endif %}"
+                  data-date="{{ cell.date }}" data-iso="{{ cell.iso }}" data-kind="{{ cell.kind }}"
+                  data-note="{{ cell.note }}"{% if cell.score is not none %} data-score="{{ cell.score }}"{% endif %}
+                  {% if cell.run_id %}data-run="{{ cell.run_id }}"{% endif %}
+                  aria-label="{{ cell.date }}: {{ cell.note }}"></button>
+          {% endfor %}
+        </div>
+        <div class="topic-strip-foot"><span>{{ strip[0].date }}</span><span>{{ strip[-1].date }}</span></div>
+        <p class="topic-strip-read" id="topicStripRead" role="status">
+          {{ strip[-1].date }} &mdash; {{ strip[-1].note }}
+        </p>
+      </section>
+      {% endif %}
+
+      {#- Filled in by static/js/topic-page.js when this browser has been here
+          before. Server-rendered empty so the page never shows a stale claim. -#}
+      <section class="topic-return" id="topicReturn" hidden></section>
+
+      <p class="topic-provenance-line">
+        {{ scoreboard.model_count or "Several" }} AI models answered independently &middot;
+        cross-checked by a judge from another model family &middot;
+        every earlier check stays readable.
+        <a href="/consensus-engine">How it works</a>
+      </p>
+
       {% if not is_current %}
       <div class="topic-version-notice">
         You are viewing snapshot {{ selected.version }} from {{ selected.observed_at[:10] }}, including only what was known then.
@@ -202,272 +248,332 @@
     <div class="topic-detail-layout">
       <article class="topic-main-column">
         {% if ledger %}
-        <section class="legal-panel topic-panel topic-ledger" id="record">
+        {#- Layer 1. One row per statement. The Claim Ledger, the Position Map
+            and the consensus prose used to say this three times over; the row
+            says it once and carries its own evidence. -#}
+        <section class="legal-panel topic-panel topic-facts" id="record">
           <div class="topic-panel-head">
             <div>
-              <p class="eyebrow">Claim ledger</p>
-              <h2>What has held, and what moved</h2>
-            </div>
-            <div class="topic-ledger-count">
-              <strong>{{ ledger.checks }}</strong>
-              <span>check{{ "s" if ledger.checks != 1 }} since {{ ledger.tracked_since }}</span>
+              <p class="eyebrow">The answer, statement by statement</p>
+              <h2 id="facts">What the answer is made of</h2>
             </div>
           </div>
-          <p class="topic-panel-lead">Every check splits the answer into individual claims. This is each claim's life in the record: when it entered, how long it has held, whether the models split on it, and whether it is still stated. A single answer from a single model shows you none of that.{% if ledger.thin %} {{ ledger.thin }} of the {{ ledger.checks }} checks listed no claims and count as gaps, not as absences.{% endif %}</p>
-
-          {% if ledger.new %}
-          <div class="claim-group is-new">
-            <h3>New in the record<b>{{ ledger.new | length }}</b></h3>
-            <p class="claim-group-note">First stated within the last {{ ledger.enumerated if ledger.enumerated < 3 else 3 }} checks. New claims are the least tested part of this answer.</p>
-            <ul class="claim-list">{% for claim in ledger.new %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
-          </div>
-          {% endif %}
 
           {% if ledger.contested %}
-          <div class="claim-group is-contested">
-            <h3>Contested<b>{{ ledger.contested | length }}</b></h3>
-            <p class="claim-group-note">Still in the answer, but the models do not state it the same way.</p>
-            <ul class="claim-list">{% for claim in ledger.contested %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          {#- Disagreement leads: it is the one thing asking a single model
+              cannot show you, and the reason to read further. -#}
+          <div class="fact-group is-split">
+            <div class="fact-group-head">
+              <span class="fact-group-tag"><i aria-hidden="true"></i>Split</span>
+              <h3>The models do not agree here</h3>
+              <b>{{ ledger.contested | length }}</b>
+            </div>
+            <p class="fact-group-note">Still in the answer, stated differently by different models. Open a row to read each position and who holds it.</p>
+            <div class="fact-list">{% for claim in ledger.contested %}{{ fact_row(claim, ledger.enumerated, "split", "Split") }}{% endfor %}</div>
           </div>
           {% endif %}
 
           {% if ledger.holding %}
-          <div class="claim-group is-holding">
-            <h3>Holding<b>{{ ledger.holding | length }}</b></h3>
-            <p class="claim-group-note">Still stated in the newest check. The longest unbroken run of restatements on this Topic stands at {{ ledger.longest_streak }} check{{ "s" if ledger.longest_streak != 1 }}.</p>
-            <ul class="claim-list">{% for claim in ledger.holding %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
+          <div class="fact-group is-settled">
+            <div class="fact-group-head">
+              <span class="fact-group-tag"><i aria-hidden="true"></i>Settled</span>
+              <h3>Restated check after check</h3>
+              <b>{{ ledger.holding | length }}</b>
+            </div>
+            <p class="fact-group-note">The load-bearing part of this answer. The longest unbroken run on this Topic stands at {{ ledger.longest_streak }} check{{ "s" if ledger.longest_streak != 1 }}.</p>
+            <div class="fact-list">{% for claim in ledger.holding %}{{ fact_row(claim, ledger.enumerated, "settled", "Settled") }}{% endfor %}</div>
+          </div>
+          {% endif %}
+
+          {% if ledger.new %}
+          <div class="fact-group is-new">
+            <div class="fact-group-head">
+              <span class="fact-group-tag"><i aria-hidden="true"></i>New</span>
+              <h3>Entered the record recently</h3>
+              <b>{{ ledger.new | length }}</b>
+            </div>
+            <p class="fact-group-note">First stated within the last {{ ledger.enumerated if ledger.enumerated < 3 else 3 }} checks &mdash; the least tested part of this answer.</p>
+            <div class="fact-list">{% for claim in ledger.new %}{{ fact_row(claim, ledger.enumerated, "new", "New") }}{% endfor %}</div>
           </div>
           {% endif %}
 
           {% if ledger.retired %}
-          <div class="claim-group is-retired">
-            <h3>No longer stated<b>{{ ledger.retired_count }}</b></h3>
-            <p class="claim-group-note">Stated in more than one earlier check, absent from this snapshot. Nothing here was retracted &mdash; the models simply stopped saying it.{% if ledger.one_off_count %} A further {{ ledger.one_off_count }} claim{{ "s" if ledger.one_off_count != 1 }} appeared in a single check only and {{ "are" if ledger.one_off_count != 1 else "is" }} left out as one-off phrasing.{% endif %}</p>
-            <ul class="claim-list">{% for claim in ledger.retired %}{{ claim_row(claim, ledger.enumerated) }}{% endfor %}</ul>
-          </div>
+          <details class="fact-group is-dropped">
+            <summary>
+              <span class="fact-group-tag"><i aria-hidden="true"></i>Dropped</span>
+              <span class="fact-group-summary">{{ ledger.retired_count }} statement{{ "s" if ledger.retired_count != 1 }} the models stopped making{% if ledger.one_off_count %} &middot; {{ ledger.one_off_count }} one-off phrasing{{ "s" if ledger.one_off_count != 1 }} left out{% endif %}</span>
+              <b aria-hidden="true">+</b>
+            </summary>
+            <p class="fact-group-note">Stated in more than one earlier check, absent from this one. Nothing here was retracted &mdash; the models simply stopped saying it.{% if ledger.thin %} {{ ledger.thin }} of the {{ ledger.checks }} checks listed no statements at all and count as gaps, not as absences.{% endif %}</p>
+            <div class="fact-list">{% for claim in ledger.retired %}{{ fact_row(claim, ledger.enumerated, "dropped", "Dropped") }}{% endfor %}</div>
+          </details>
           {% endif %}
         </section>
         {% endif %}
 
-        <details class="legal-panel topic-analysis-disclosure" open>
-          <summary>
-            <span><small>Full dossier</small><strong>Consensus, model positions, score history and current sources</strong></span>
-            <b aria-hidden="true">+</b>
-          </summary>
-          <div class="topic-analysis-stack">
-        <section class="legal-panel topic-panel topic-consensus-panel">
-          <div class="topic-panel-head">
-            <div>
-              <p class="eyebrow">Snapshot {{ selected.version }} of {{ topic.run_count }} &middot; {{ selected.observed_at[:10] }}</p>
-              <h2>{% if is_current %}What the models say now{% else %}What the models said then{% endif %}</h2>
-            </div>
-            <span class="topic-change-badge is-{{ selected.change_type }}">{{ selected.change_type }}</span>
-          </div>
-          {% if selected.change_summary %}
-          <div class="topic-change-summary is-{{ selected.change_type }}">
-            <span>What changed</span>
-            <p>{{ selected.change_summary }}</p>
-          </div>
-          {% endif %}
-          <div class="topic-consensus prose">{{ selected.consensus_html | safe }}</div>
-          {% if selected.models %}
-          <div class="topic-models">
-            <span>Models in this snapshot</span>
-            <div>{% for model in selected.models %}<span>{{ model }}</span>{% endfor %}</div>
-          </div>
-          {% endif %}
-        </section>
-
-        {% if history and history.position_map and history.position_map.dimensions %}
-        <section class="legal-panel topic-panel" id="positions">
-          <div class="topic-panel-head">
-            <div>
-              <p class="eyebrow">Position map</p>
-              <h2>Where the models actually split</h2>
-            </div>
-            <div class="watch-direction-score" aria-label="Direction Shift score">
-              {% if history.position_map.shift_score is not none %}
-              <strong>{{ history.position_map.shift_score }}<span>/100</span></strong>
-              {% else %}
-              <strong>&mdash;</strong>
+        {#- Layer 2. The apparatus: complete, addressable, and out of the way.
+            Every panel stays in the HTML, so nothing here is lost to a crawler
+            or to a reader who wants the whole file. -#}
+        <div class="topic-deep">
+          <details class="legal-panel topic-deep-item" id="answer">
+            <summary>
+              <span class="topic-deep-title">
+                <strong>Read the full answer</strong>
+                <small>Check {{ selected.version }} of {{ topic.run_count }} &middot; {{ selected.observed_at[:10] }} &middot; {{ selected.models | length }} models</small>
+              </span>
+              <b aria-hidden="true">+</b>
+            </summary>
+            <div class="topic-deep-body">
+              <div class="topic-panel-head is-inner">
+                <h3>{% if is_current %}What the models say now{% else %}What the models said then{% endif %}</h3>
+                <span class="topic-change-badge is-{{ selected.change_type }}">{{ selected.change_type }}</span>
+              </div>
+              {% if selected.change_summary %}
+              <div class="topic-change-summary is-{{ selected.change_type }}">
+                <span>What changed</span>
+                <p>{{ selected.change_summary }}</p>
+              </div>
               {% endif %}
-              <span>Direction Shift &middot; {{ history.position_map.shift_label }}</span>
-            </div>
-          </div>
-          <div class="watch-position-map">
-            <p class="topic-panel-lead">Each question keeps its own dimensions. Ask one model and you get one of these positions with no sign that the others exist.</p>
-            <div class="watch-position-dimensions" aria-label="Model positions in this snapshot">
-              {% for dimension in history.position_map.dimensions %}
-              <article class="watch-position-dimension">
-                <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Contradiction{% elif dimension.type == "claim" %}Key claim{% else %}Different emphasis{% endif %}</span>
-                <h4>{{ dimension.label }}</h4>
-                <div class="watch-position-clusters">
-                  {% for position in dimension.positions %}
-                  <div class="watch-position-cluster">
-                    {% if position.stance and position.stance != dimension.label %}
-                    <p>{{ position.stance }}</p>
-                    {% else %}
-                    <p class="watch-position-supported">Supported by</p>
-                    {% endif %}
-                    <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+              <div class="topic-consensus prose">{{ selected.consensus_html | safe }}</div>
+              {% if selected.models %}
+              <div class="topic-models">
+                <span>Models in this check</span>
+                <div>{% for model in selected.models %}<span>{{ model }}</span>{% endfor %}</div>
+              </div>
+              {% endif %}
+              {% if selected.opinion_changes %}
+              <div class="opinion-change-list">
+                <h4 class="topic-inner-heading">Important opinion changes</h4>
+                {% for change in selected.opinion_changes %}
+                <article class="opinion-change">
+                  <div class="opinion-change-model">{{ change.model or "Cross-model shift" }}</div>
+                  {% if change.from or change.to %}
+                  <div class="opinion-direction">
+                    <span>{{ change.from or "Earlier position" }}</span><b aria-hidden="true">&rarr;</b><span>{{ change.to or "Current position" }}</span>
                   </div>
+                  {% endif %}
+                  <div class="prose">{{ change.summary_html | safe }}</div>
+                </article>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+          </details>
+
+          <details class="legal-panel topic-deep-item" id="evidence">
+            <summary>
+              <span class="topic-deep-title">
+                <strong>Where this comes from</strong>
+                <small>{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }} in this check{% if sources and sources.tracked_count %} &middot; {{ sources.tracked_count }} dated across the record{% endif %}{% if sources and sources.new_count %} &middot; {{ sources.new_count }} new{% endif %}</small>
+              </span>
+              <b aria-hidden="true">+</b>
+            </summary>
+            <div class="topic-deep-body">
+              {% if sources and sources.sites %}
+              <div class="topic-site-bars">
+                <p class="topic-site-bars-head">Sites the record keeps returning to</p>
+                {% for site in sources.sites %}
+                <div class="topic-site-bar">
+                  <span class="topic-site-host">{{ site.host }}</span>
+                  <span class="topic-site-track"><b style="width: {{ (100 * site.checks / sources.checks) | round | int }}%"></b></span>
+                  <span class="topic-site-count">{{ site.checks }}/{{ sources.checks }}</span>
+                </div>
+                {% endfor %}
+              </div>
+              {% endif %}
+              {% if selected.evidence %}
+              {% set featured_evidence = selected.evidence[:5] %}
+              {% set remaining_evidence = selected.evidence[5:] %}
+              {% if featured_evidence %}
+                <h4 class="topic-source-group-title">Best available sources</h4>
+                <div class="src-embed-grid">
+                  {% for item in featured_evidence %}{{ source_embed(item, true) }}{% endfor %}
+                </div>
+              {% endif %}
+              {% if remaining_evidence %}
+                <details class="topic-secondary-sources">
+                  <summary>Show {{ remaining_evidence | length }} more source{{ "s" if remaining_evidence | length != 1 }}</summary>
+                  <div class="src-embed-grid">
+                    {% for item in remaining_evidence %}{{ source_embed(item, true) }}{% endfor %}
+                  </div>
+                </details>
+              {% endif %}
+              {% else %}
+              <p class="topic-empty">No sources were attached to this check yet.</p>
+              {% endif %}
+              {% if sources and sources.retired %}
+              <details class="topic-secondary-sources topic-history-evidence">
+                <summary>Sources that left the record ({{ sources.retired_count }})</summary>
+                <p class="topic-panel-lead">A source dropping out is part of the record too: it carried an earlier version of this answer and is not part of the current one. The models re-run their own web search on every check, so single links come and go. The {{ sources.retired | length }} most recently dropped are shown here, dated to their last appearance.</p>
+                <div class="src-embed-grid">
+                  {% for item in sources.retired %}{{ source_embed(item, false) }}{% endfor %}
+                </div>
+              </details>
+              {% endif %}
+            </div>
+          </details>
+
+          {% if history and history.position_map and history.position_map.dimensions %}
+          <details class="legal-panel topic-deep-item" id="positions">
+            <summary>
+              <span class="topic-deep-title">
+                <strong>Every position, model by model</strong>
+                <small>Direction Shift {% if history.position_map.shift_score is not none %}{{ history.position_map.shift_score }}/100{% else %}&mdash;{% endif %} &middot; {{ history.position_map.shift_label }}</small>
+              </span>
+              <b aria-hidden="true">+</b>
+            </summary>
+            <div class="topic-deep-body">
+              <div class="watch-position-map">
+                <h3 class="topic-inner-heading">Where the models actually split</h3>
+                <p class="topic-panel-lead">Each question keeps its own dimensions. Ask one model and you get one of these positions with no sign that the others exist.</p>
+                <div class="watch-position-dimensions" aria-label="Model positions in this check">
+                  {% for dimension in history.position_map.dimensions %}
+                  <article class="watch-position-dimension">
+                    <div class="watch-position-question">
+                      <span class="watch-dimension-type">{% if dimension.type == "contradiction" %}Contradiction{% elif dimension.type == "claim" %}Key claim{% else %}Different emphasis{% endif %}</span>
+                      <h3>{{ dimension.label }}</h3>
+                    </div>
+                    <div class="watch-position-clusters">
+                      {% for position in dimension.positions %}
+                      <div class="watch-position-cluster">
+                        {% if position.stance and position.stance != dimension.label %}
+                        <p>{{ position.stance }}</p>
+                        {% else %}
+                        <p class="watch-position-supported">Supported by</p>
+                        {% endif %}
+                        <ul>{% for model in position.models %}<li>{{ model }}</li>{% endfor %}</ul>
+                      </div>
+                      {% endfor %}
+                    </div>
+                  </article>
                   {% endfor %}
                 </div>
-              </article>
-              {% endfor %}
+                {% if history.position_map.trajectories and history.position_map.dates | length > 1 %}
+                <div class="watch-trajectory-scroll">
+                  <table class="watch-trajectory">
+                    <caption class="sr-only">Model position movement by check date</caption>
+                    <thead>
+                      <tr><th scope="col">Model</th>{% for date in history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
+                    </thead>
+                    <tbody>
+                      {% for row in history.position_map.trajectories %}
+                      <tr>
+                        <th scope="row">{{ row.provider }}</th>
+                        {% for cell in row.cells %}
+                        <td>
+                          {% if cell.score is not none %}
+                          <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
+                                aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position moved, {{ cell.score }} out of 100{% else %}stable{% endif %}"
+                                title="{{ row.provider }} &middot; {{ cell.date }} &middot; {% if cell.moved %}moved {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}stable{% endif %}"></span>
+                          {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
+                        </td>
+                        {% endfor %}
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Stable</span><span><i class="is-moved"></i>Moved</span></div>
+                {% endif %}
+              </div>
             </div>
-            {% if history.position_map.trajectories and history.position_map.dates | length > 1 %}
-            <div class="watch-trajectory-scroll">
-              <table class="watch-trajectory">
-                <caption class="sr-only">Model position movement by snapshot date</caption>
-                <thead>
-                  <tr><th scope="col">Model</th>{% for date in history.position_map.dates %}<th scope="col">{{ date }}</th>{% endfor %}</tr>
-                </thead>
-                <tbody>
-                  {% for row in history.position_map.trajectories %}
-                  <tr>
-                    <th scope="row">{{ row.provider }}</th>
-                    {% for cell in row.cells %}
-                    <td>
-                      {% if cell.score is not none %}
-                      <span class="watch-motion-marker{% if cell.moved %} is-moved{% else %} is-stable{% endif %}"
-                            aria-label="{{ row.provider }} on {{ cell.date }}: {% if cell.moved %}position moved, {{ cell.score }} out of 100{% else %}stable{% endif %}"
-                            title="{{ row.provider }} &middot; {{ cell.date }} &middot; {% if cell.moved %}moved {{ cell.score }}/100{% if cell.summary %}: {{ cell.summary }}{% endif %}{% else %}stable{% endif %}"></span>
-                      {% else %}<span class="watch-motion-marker is-missing" aria-label="No comparable position">&mdash;</span>{% endif %}
-                    </td>
-                    {% endfor %}
-                  </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-            <div class="watch-motion-legend" aria-hidden="true"><span><i class="is-stable"></i>Stable</span><span><i class="is-moved"></i>Moved</span></div>
-            {% endif %}
-          </div>
-        </section>
-        {% endif %}
-
-        {% if history and history.points | length > 1 %}
-        <section class="legal-panel topic-panel" id="agreement">
-          <div class="topic-panel-head">
-            <div>
-              <p class="eyebrow">Agreement over time</p>
-              <h2>How this answer held up</h2>
-            </div>
-            <strong class="watch-history-latest">{{ history.latest_score }}<span>/100</span><small> at this snapshot</small></strong>
-          </div>
-          <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. A single answer cannot show you whether it was stable or moved.</p>
-          <div class="watch-chart-scroll">
-            <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
-                 aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}">
-              <line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>
-              <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
-              <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
-              <text class="watch-axis-label" x="4" y="23">100</text>
-              <text class="watch-axis-label" x="13" y="94">50</text>
-              <text class="watch-axis-label" x="21" y="165">0</text>
-              <path class="watch-chart-line" d="{{ history.path }}"></path>
-              {% for point in history.points %}
-              <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == "changed" %}5{% else %}4{% endif %}">
-                <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %}. {{ point.change_summary }}{% endif %}</title>
-              </circle>
-              {% endfor %}
-              <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
-              <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
-            </svg>
-          </div>
-          {% if record and record.material_events %}
-          <ol class="watch-events">
-            {% for event in record.material_events %}
-            <li>
-              <time datetime="{{ event.iso }}">{{ event.display }}</time>
-              <strong>{{ event.agreement_score }}/100</strong>
-              {% if event.change_type == "major" %}<span class="watch-event-major">Major</span>{% endif %}
-              {% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
-              {% if event.run_id and event.run_id != selected.id %}<a class="watch-version-link" href="/topics/{{ topic.slug }}?version={{ event.run_id }}">View this version</a>{% endif %}
-            </li>
-            {% endfor %}
-          </ol>
-          {% else %}
-          <p class="topic-empty">No check in this window was graded a material change. The steps in the curve are wording-level differences between two answers that say the same thing &mdash; the score moves between a small set of grading levels, so a step on its own is not a shift in substance.</p>
+          </details>
           {% endif %}
-        </section>
-        {% endif %}
 
-        {% if selected.opinion_changes %}
-        <section class="legal-panel topic-panel">
-          <div class="topic-panel-head">
-            <div><p class="eyebrow">Model movement</p><h2>Important opinion changes</h2></div>
-          </div>
-          <div class="opinion-change-list">
-            {% for change in selected.opinion_changes %}
-            <article class="opinion-change">
-              <div class="opinion-change-model">{{ change.model or "Cross-model shift" }}</div>
-              {% if change.from or change.to %}
-              <div class="opinion-direction">
-                <span>{{ change.from or "Earlier position" }}</span><b aria-hidden="true">&rarr;</b><span>{{ change.to or "Current position" }}</span>
+          {% if record %}
+          <details class="legal-panel topic-deep-item" id="history">
+            <summary>
+              <span class="topic-deep-title">
+                <strong>The record behind this page</strong>
+                <small>{{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if record.material_count %} &middot; {{ record.material_count }} material change{{ "s" if record.material_count != 1 }}{% else %} &middot; no material change yet{% endif %}</small>
+              </span>
+              <b aria-hidden="true">+</b>
+            </summary>
+            <div class="topic-deep-body">
+              <div class="topic-record-strip{% if record.changed_now %} is-moved{% endif %}">
+                <p class="eyebrow">The record</p>
+                {% if record.changed_now %}
+                <strong>The consensus moved in the latest check.</strong>
+                {% elif record.steady_checks %}
+                <strong>Unchanged through {{ record.steady_checks }} check{{ "s" if record.steady_checks != 1 }}{% if record.steady_days %}, {{ record.steady_days }} day{{ "s" if record.steady_days != 1 }}{% endif %}.</strong>
+                {% else %}
+                <strong>First check on this question.</strong>
+                {% endif %}
+                <p class="topic-record-detail">
+                  {% if record.material_count %}
+                  Last material change on {{ record.anchor_display }}{% if record.anchor_run_id and record.anchor_run_id != selected.id %} (<a href="/topics/{{ topic.slug }}?version={{ record.anchor_run_id }}">open that version</a>){% endif %}.
+                  {% else %}
+                  No material change since the first check on {{ record.first_display }}.
+                  {% endif %}
+                  {{ record.checks }} check{{ "s" if record.checks != 1 }} kept in full{% if sources.tracked_count %}, {{ sources.tracked_count }} source{{ "s" if sources.tracked_count != 1 }} dated{% endif %}.
+                </p>
+                {% if record.material_count and record.anchor_summary %}
+                <p class="topic-record-anchor">{{ record.anchor_summary }}</p>
+                {% endif %}
+              </div>
+
+              <ul class="share-scoreboard-facts topic-scoreboard-facts">
+                {% if scoreboard.model_count %}<li><b>{{ scoreboard.model_count }}</b> AI models</li>{% endif %}
+                {% if scoreboard.contradiction_count %}<li class="is-contradiction"><b>{{ scoreboard.contradiction_count }}</b> contradiction{{ "s" if scoreboard.contradiction_count != 1 }}</li>{% endif %}
+                {% if scoreboard.source_count %}<li><b>{{ scoreboard.source_count }}</b> source{{ "s" if scoreboard.source_count != 1 }}</li>{% endif %}
+                {% if scoreboard.version_count > 1 %}<li><b>{{ scoreboard.version_count }}</b> checks since {{ scoreboard.tracked_since }}</li>{% endif %}
+              </ul>
+              <p class="share-provenance">Not one AI's answer: {{ scoreboard.model_count or "several" }} models answered this question independently, a judge from a different model family cross-checked them, and every earlier version stays readable. <a href="/consensus-engine">How it works</a></p>
+
+              {% if history and history.points | length > 1 %}
+              <div class="topic-history-block" id="agreement">
+                <div class="topic-panel-head is-inner">
+                  <h3>How this answer held up</h3>
+                  <strong class="watch-history-latest">{{ history.latest_score }}<span>/100</span><small> agreement at this check</small></strong>
+                </div>
+                <p class="topic-panel-lead">The same question, re-asked {{ history.points | length }} times. The score moves between a small set of grading levels, so read the steps as levels, not as measurements.</p>
+                <div class="watch-chart-scroll">
+                  <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="img"
+                       aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}">
+                    <line class="watch-grid" x1="38" y1="18" x2="38" y2="160"></line>
+                    <line class="watch-grid" x1="38" y1="89" x2="622" y2="89"></line>
+                    <line class="watch-grid" x1="38" y1="160" x2="622" y2="160"></line>
+                    <text class="watch-axis-label" x="4" y="23">100</text>
+                    <text class="watch-axis-label" x="13" y="94">50</text>
+                    <text class="watch-axis-label" x="21" y="165">0</text>
+                    <path class="watch-chart-line" d="{{ history.path }}"></path>
+                    {% for point in history.points %}
+                    <circle class="watch-chart-point{% if point.trigger == "changed" %} is-change{% endif %}" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.trigger == "changed" %}5{% else %}4{% endif %}">
+                      <title>{{ point.ts.strftime("%Y-%m-%d") }}: {{ point.agreement_score }}/100{% if point.change_summary %}. {{ point.change_summary }}{% endif %}</title>
+                    </circle>
+                    {% endfor %}
+                    <text class="watch-date-label" x="38" y="184">{{ history.start_date }}</text>
+                    <text class="watch-date-label" x="622" y="184" text-anchor="end">{{ history.end_date }}</text>
+                  </svg>
+                </div>
+                {% if record.material_events %}
+                <ol class="watch-events">
+                  {% for event in record.material_events %}
+                  <li>
+                    <time datetime="{{ event.iso }}">{{ event.display }}</time>
+                    <strong>{{ event.agreement_score }}/100</strong>
+                    {% if event.change_type == "major" %}<span class="watch-event-major">Major</span>{% endif %}
+                    {% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
+                    {% if event.run_id and event.run_id != selected.id %}<a class="watch-version-link" href="/topics/{{ topic.slug }}?version={{ event.run_id }}">View this version</a>{% endif %}
+                  </li>
+                  {% endfor %}
+                </ol>
+                {% else %}
+                <p class="topic-empty">No check in this window was graded a material change. The steps in the curve are wording-level differences between two answers that say the same thing.</p>
+                {% endif %}
               </div>
               {% endif %}
-              <div class="prose">{{ change.summary_html | safe }}</div>
-            </article>
-            {% endfor %}
-          </div>
-        </section>
-        {% endif %}
-
-        <section class="legal-panel topic-panel topic-sources-panel" id="evidence">
-          <div class="topic-panel-head">
-            <div><p class="eyebrow">Embedded sources</p><h2>Where this snapshot comes from</h2></div>
-            {% if selected.evidence %}<span class="topic-sources-count">{{ selected.evidence | length }} source{{ "s" if selected.evidence | length != 1 }}{% if sources and sources.new_count %} &middot; {{ sources.new_count }} new{% endif %}</span>{% endif %}
-          </div>
-          {% if sources and sources.sites %}
-          <p class="topic-source-sites">
-            <span>Sites the record keeps returning to</span>
-            {% for site in sources.sites %}<b>{{ site.host }}<i>{{ site.checks }}/{{ sources.checks }}</i></b>{% endfor %}
-          </p>
-          {% endif %}
-          {% if selected.evidence %}
-          {% set featured_evidence = selected.evidence[:5] %}
-          {% set remaining_evidence = selected.evidence[5:] %}
-          {% if featured_evidence %}
-            <h3 class="topic-source-group-title">Best available sources</h3>
-            <div class="src-embed-grid">
-              {% for item in featured_evidence %}{{ source_embed(item, true) }}{% endfor %}
             </div>
+          </details>
           {% endif %}
-          {% if remaining_evidence %}
-            <details class="topic-secondary-sources">
-              <summary>Show {{ remaining_evidence | length }} more source{{ "s" if remaining_evidence | length != 1 }}</summary>
-              <div class="src-embed-grid">
-                {% for item in remaining_evidence %}{{ source_embed(item, true) }}{% endfor %}
-              </div>
-            </details>
-          {% endif %}
-          {% else %}
-          <p class="topic-empty">No sources were attached to this snapshot yet.</p>
-          {% endif %}
-        </section>
-          </div>
-        </details>
-
-        {% if sources and sources.retired %}
-        <details class="legal-panel topic-panel topic-history-evidence">
-          <summary><span><small>Sources that left the record</small><strong>The links that carried an earlier answer and are no longer cited</strong></span><b aria-hidden="true">+</b></summary>
-          <div class="topic-disclosure-body">
-            <p class="topic-panel-lead">A source dropping out is part of the record too: it was the basis for an earlier version of this answer and is not part of the current one. The models re-run their own web search on every check, so single links come and go; {{ sources.retired_count }} have dropped out in total. The {{ sources.retired | length }} most recently dropped are shown here, dated to their last appearance.</p>
-            <div class="src-embed-grid">
-              {% for item in sources.retired %}{{ source_embed(item, false) }}{% endfor %}
-            </div>
-          </div>
-        </details>
-        {% endif %}
+        </div>
       </article>
 
       <aside class="topic-side-column">
         <section class="legal-panel topic-follow-card">
           <p class="eyebrow">Follow this Topic</p>
-          <h2>Know when the consensus moves.</h2>
-          <p>Get one e-mail when a new run detects a material consensus change. Double opt-in, no account required.</p>
+          <h2>Know when the answer moves.</h2>
+          <p>One e-mail when a check finds a real change &mdash; not one per check. Double opt-in, no account required.</p>
           {% if topic.status == "active" %}
           <form id="topicFollowForm" data-slug="{{ topic.slug }}">
             <label class="visually-hidden" for="topicFollowEmail">E-mail address</label>
@@ -478,10 +584,13 @@
           {% else %}
           <p class="topic-follow-status">This Topic is paused. Its public history remains available.</p>
           {% endif %}
+          <p class="topic-next-check">
+            Last checked <b>{{ finding.latest_display if finding else selected.observed_at[:10] }}</b>{% if topic.next_run_display %} &middot; next check <b>{{ topic.next_run_display }}</b>{% endif %}
+          </p>
         </section>
 
         <details class="legal-panel topic-timeline-card" open>
-          <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved snapshot{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
+          <summary><span><small>Timeline</small><strong>Browse {{ runs | length }} saved check{{ "s" if runs | length != 1 }}</strong></span><b aria-hidden="true">+</b></summary>
           <ol class="topic-timeline">
             {% for entry in timeline %}
             {% if entry.kind == "quiet" %}
@@ -518,6 +627,7 @@
 
   {% include "partials/public_footer.html" %}
 
+  <script defer src="/static/js/topic-page.js?v=20260826-finding1"></script>
   <script>
     (function () {
       const form = document.getElementById("topicFollowForm");
@@ -559,6 +669,8 @@
       let timer = null;
       function flash(target) {
         if (!target) return;
+        const holder = target.closest("details");
+        if (holder && !holder.open) holder.open = true;
         target.scrollIntoView({behavior: "smooth", block: "center"});
         target.classList.add("is-cited");
         if (timer) window.clearTimeout(timer);

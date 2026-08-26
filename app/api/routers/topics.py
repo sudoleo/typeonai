@@ -17,7 +17,10 @@ from app.core.site import SITE_URL
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
 from app.core.security import extract_id_token, is_user_admin, verify_user_token
-from app.services import claim_ledger, drift_signal, favicons, mailer, topic_runner, topics
+from app.services import (
+    claim_ledger, drift_signal, favicons, mailer, topic_finding, topic_runner,
+    topics,
+)
 from app.services.history_view import build_history_view
 from app.services.public_markdown import (
     markdown_to_plaintext,
@@ -372,6 +375,11 @@ async def topic_page(
     ledger = claim_ledger.build_claim_ledger(runs_upto)
     record = claim_ledger.build_record_summary(runs_upto)
     sources = claim_ledger.apply_source_chronicle(runs_upto, selected)
+    claim_ledger.attach_claim_sources(ledger, runs_upto)
+    strip = claim_ledger.build_check_strip(runs_upto, ledger)
+    finding = topic_finding.build_finding(
+        ledger, record, selected, lead_question=topic.get("lead_question") or ""
+    )
     # The timeline stays complete even on an older version, because it is the
     # navigation between versions.
     timeline = claim_ledger.collapse_timeline(runs_desc)
@@ -382,15 +390,32 @@ async def topic_page(
         change["summary_html"] = render_public_markdown(change.get("summary"))
 
     public_topic = topics.topic_public_view(topic)
+    # A page that promises a next check has to name the date, and only for the
+    # version that is actually still being checked.
+    public_topic["next_run_display"] = (
+        _date_label(public_topic["next_run_at"])
+        if current and public_topic.get("next_run_at")
+        and public_topic.get("status") == "active" else ""
+    )
     canonical_url = f"{SITE_URL}/topics/{public_topic['slug']}"
     page_url = canonical_url + (f"?version={selected['id']}" if version else "")
     seo = public_topic.get("seo") or {}
     title = seo.get("title") or f"{public_topic['title']} Consensus Timeline"
-    meta_description = seo.get("description") or (
+    # A description that answers the query outranks one that describes the
+    # apparatus, so the finding leads when there is no editorial override.
+    default_description = (
         f"{public_topic['lead_question']} Current agreement "
         f"{selected['agreement_score']}/100, with a versioned consensus timeline "
         "and time-matched evidence."
     )
+    if finding:
+        default_description = (
+            f"{finding['line']} Checked {len(runs_upto)} time"
+            f"{'s' if len(runs_upto) != 1 else ''} across "
+            f"{scoreboard['model_count'] or 'several'} AI models, most recently "
+            f"{selected['observed_at'][:10]}. {public_topic['lead_question']}"
+        )[:300]
+    meta_description = seo.get("description") or default_description
     robots = "noindex, follow" if seo.get("noindex") or version else "index, follow"
     citations = [item["url"] for run in runs for item in run["evidence"]]
     jsonld = {
@@ -410,6 +435,8 @@ async def topic_page(
         "citation": list(dict.fromkeys(citations))[:30],
         "isAccessibleForFree": True,
     }
+    if finding:
+        jsonld["abstract"] = finding["line"][:300]
     response = templates.TemplateResponse(request=request, name="topic.html", context={
         "topic": public_topic,
         "selected": selected,
@@ -417,6 +444,8 @@ async def topic_page(
         "history": history,
         "scoreboard": scoreboard,
         "ledger": ledger,
+        "finding": finding,
+        "strip": strip,
         "record": record,
         "sources": sources,
         "timeline": timeline,

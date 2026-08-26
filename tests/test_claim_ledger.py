@@ -344,3 +344,92 @@ def test_a_topic_without_any_position_map_has_no_ledger():
     assert claim_ledger.build_claim_ledger([run(0, [])]) is None
     assert claim_ledger.build_claim_ledger([]) is None
     assert claim_ledger.build_record_summary([]) is None
+
+
+def test_a_claim_clipped_mid_citation_does_not_keep_half_a_marker():
+    """Position Map labels are stored clipped, so a citation marker can be cut
+    in half. A reader must never see "[S4" as part of the sentence."""
+    stored = (
+        "As of the latest official information available, there is no confirmed "
+        "OpenAI blog post, product page, API model entry, or release note that "
+        "says when GPT-6 will launch.[S4"
+    )
+
+    text = claim_ledger._claim_text(stored)
+
+    assert text.endswith("will launch.")
+    assert "[S" not in text
+
+
+def test_a_claim_carries_the_sources_its_own_wording_cites():
+    """Evidence is numbered per run, so a claim's markers only resolve against
+    the run its current wording came from."""
+    early = source("https://openai.com/early", title="Early note")
+    late = source("https://openai.com/late", title="Release notes")
+    runs = [
+        run(0, [dimension("No release date has been announced[S1]")],
+            evidence=[{**early, "id": "S1"}]),
+        run(1, [dimension("No release date has been announced for GPT-6[S2]")],
+            evidence=[{**late, "id": "S1"}, {**early, "id": "S2"}]),
+    ]
+
+    ledger = claim_ledger.build_claim_ledger(runs)
+    claim_ledger.attach_claim_sources(ledger, runs)
+    claim = ledger["holding"][0]
+
+    assert claim["source_ids"] == ["2"]
+    # S2 in the newest run, not S2 as it would have been numbered earlier.
+    assert [item["url"] for item in claim["sources"]] == ["https://openai.com/early"]
+
+
+def test_a_claim_without_markers_lists_no_sources_of_its_own():
+    runs = [run(0, [dimension("No release date has been announced")],
+                evidence=[{**source("https://openai.com/a"), "id": "S1"}])]
+
+    ledger = claim_ledger.build_claim_ledger(runs)
+    claim_ledger.attach_claim_sources(ledger, runs)
+
+    assert ledger["holding"][0]["sources"] == []
+
+
+def test_the_check_strip_gives_every_check_one_cell_and_a_reason():
+    """One cell per check, oldest first, each saying what happened in it."""
+    held = "No release date has been announced for GPT-6"
+    runs = [
+        run(0, [dimension(held), dimension("The GPT-5.6 family is current")]),
+        run(1, [dimension(held), dimension("The GPT-5.6 family is current")]),
+        run(2, [dimension(held), dimension("The GPT-5.6 family is current")],
+            change_type="major", summary="A rumoured window entered the answer."),
+        run(3, [dimension(held), dimension("Pricing has not been published")]),
+    ]
+
+    ledger = claim_ledger.build_claim_ledger(runs)
+    strip = claim_ledger.build_check_strip(runs, ledger)
+
+    assert [cell["kind"] for cell in strip] == ["first", "stable", "material", "event"]
+    assert strip[0]["note"] == "First check. The record starts here."
+    assert strip[2]["note"] == "A rumoured window entered the answer."
+    # The last check both gained and lost a statement, and says so.
+    assert "entered" in strip[3]["note"] and "dropped out" in strip[3]["note"]
+    assert strip[-1]["is_latest"] is True
+    assert [cell["is_latest"] for cell in strip[:-1]] == [False, False, False]
+    assert strip[2]["run_id"] == "run-2"
+
+
+def test_the_check_strip_stands_alone_without_a_ledger():
+    """Manually seeded Topics carry no Position Map. The strip is still the
+    record, so it has to render from the runs alone."""
+    strip = claim_ledger.build_check_strip([run(0, []), run(1, [])])
+
+    assert [cell["kind"] for cell in strip] == ["first", "stable"]
+    assert claim_ledger.build_check_strip([]) == []
+
+
+def test_the_check_strip_keeps_the_newest_checks_when_a_topic_runs_long():
+    runs = [run(index, [dimension("No release date has been announced")])
+            for index in range(claim_ledger.MAX_STRIP_CELLS + 12)]
+
+    strip = claim_ledger.build_check_strip(runs)
+
+    assert len(strip) == claim_ledger.MAX_STRIP_CELLS
+    assert strip[-1]["run_id"] == runs[-1]["id"]

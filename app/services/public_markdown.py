@@ -32,7 +32,7 @@ _URL_SCHEMES = {"http", "https", "mailto"}
 _LINK_REL = "nofollow noopener noreferrer"
 
 # Läufe wie "[S1]", "[S1, S2]" oder "[1, 3]" (gleiches Muster wie im Frontend).
-_SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
+SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
 _TERMINAL_SOURCE_ORDER_RE = re.compile(
     r"[ \t]*(\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\])"
     r"([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$)",
@@ -115,7 +115,7 @@ def _link_source_tags(md_text, labels):
     def replace_outside_code(segment):
         # Fussnoten am Satzende folgen dem Satzzeichen: `Aussage.[S1]`.
         segment = _TERMINAL_SOURCE_ORDER_RE.sub(r"\3\1", segment)
-        return _SOURCE_RUN_RE.sub(replace_run, segment)
+        return SOURCE_RUN_RE.sub(replace_run, segment)
 
     parts = _CODE_SEGMENT_RE.split(md_text)
     return "".join(
@@ -149,7 +149,7 @@ def markdown_to_plaintext(md_text, limit=None):
     Quellen-Marker wie "[S1]" werden entfernt – in einem SEO-Snippet sind sie
     nur technisches Rauschen.
     """
-    text = _SOURCE_RUN_RE.sub("", str(md_text or ""))
+    text = SOURCE_RUN_RE.sub("", str(md_text or ""))
     html = _MD.render(text)
     text = nh3.clean(html, tags=set())
     text = re.sub(r"\s+", " ", text).strip()

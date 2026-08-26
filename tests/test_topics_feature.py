@@ -622,12 +622,23 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     assert 'id="evidence"' in detail
     assert 'id="record"' in detail
     assert 'class="claim-lifeline"' in detail
-    # The record leads; the answer the models give now follows it.
-    assert detail.index("topic-record-strip") < detail.index("topic-ledger")
-    assert detail.index("topic-ledger") < detail.index("topic-analysis-disclosure")
+    # The finding leads, the statements it is made of follow, and the
+    # apparatus that produced them sits behind a disclosure below both.
+    assert detail.index("topic-finding-line") < detail.index("topic-facts")
+    assert detail.index("topic-facts") < detail.index('class="topic-deep"')
+    assert 'id="topicStrip"' in detail
+    # The band is for readers who have been here before; it ships empty and
+    # hidden, and CSS has to leave the hidden attribute alone.
+    assert 'id="topicReturn" hidden' in detail
+    # The Position Map grid takes exactly two children: the label block and
+    # the clusters. A bare type + heading + clusters puts the clusters under
+    # the label and stretches the type across the row.
+    assert 'class="watch-position-question"' in detail
     assert 'id="topicFollowForm"' in detail
     assert 'class="topic-now-grid"' not in detail
-    assert 'class="legal-panel topic-analysis-disclosure" open' in detail
+    # The apparatus opens on demand; nothing above it is hidden.
+    assert '<details class="legal-panel topic-deep-item" id="answer">' in detail
+    assert 'topic-deep-item" id="answer" open' not in detail
     assert 'class="legal-panel topic-timeline-card" open' in detail
     assert "selected.evidence[:5]" in detail
     assert "selected.evidence[5:]" in detail
@@ -910,9 +921,14 @@ def test_topic_page_shows_the_position_map_and_agreement_history(monkeypatch):
     assert "Return to the current consensus" in historical.text
 
 
-def test_topic_page_leads_with_the_record_and_folds_unchanged_checks(monkeypatch):
-    """The page has to answer "what happened to this answer over time" before it
-    repeats the answer itself, which any single model can produce."""
+def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatch):
+    """The page states the finding first, then the statements it is made of,
+    then the record that produced them.
+
+    The record is what makes this page worth more than one model's answer, but
+    it is the second question a reader has. A page that opens on the archive
+    makes them work for the sentence they came for.
+    """
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
@@ -967,13 +983,20 @@ def test_topic_page_leads_with_the_record_and_folds_unchanged_checks(monkeypatch
     page = client.get("/topics/gpt-6")
 
     assert page.status_code == 200
-    # The record statement stands above the answer.
+    # The finding is a sentence about the world, not a score, and it is the
+    # first thing on the page after the question itself.
+    assert '<h2 class="topic-finding-line' in page.text
+    assert held + "." in page.text
+    assert page.text.index("topic-finding-line") < page.text.index("What the answer is made of")
+    assert page.text.index("What the answer is made of") < page.text.index("Read the full answer")
+    # How long it has stood is stated next to the finding, not instead of it.
     assert "Unchanged through 3 checks" in page.text
     assert "Last material change on Jul 24, 2026" in page.text
-    assert page.text.index("The record") < page.text.index("What the models say now")
-    # The claim ledger reports the claim's life, not one row per run.
-    assert "What has held, and what moved" in page.text
+    # One strip cell per check, oldest first.
+    assert page.text.count('class="topic-strip-cell') == 5
+    # Each statement carries its own life, not one row per run.
     assert "Held 5 of 5 checks" in page.text
+    assert "Restated check after check" in page.text
     # Unchanged checks are folded away instead of listed one by one.
     assert "2 checks, no material change" in page.text
     # A wording-only score step is not presented as a change event.
@@ -1018,3 +1041,67 @@ def test_public_topic_history_is_ssr_and_historical_version_is_noindex(monkeypat
     assert "No confirmed release date exists." in historical.text
     assert historical.headers["x-robots-tag"] == "noindex, follow"
     assert "Return to the current consensus" in historical.text
+
+
+def test_disagreement_leads_the_statement_list_and_is_labelled_as_its_own_kind(
+    monkeypatch,
+):
+    """Where the models split is the one thing asking a single model cannot
+    show. It opens the list, and every row says which kind of statement it is
+    in a word, a colour and a shape -- not by its position alone."""
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    for index in range(3):
+        observed = datetime(2026, 7, 23 + index, 12, 0, tzinfo=timezone.utc)
+        topics.create_run(
+            topic["id"],
+            run_payload(
+                observed_at=observed,
+                opinion_map={
+                    "schema_version": 1,
+                    "dimensions": [
+                        {
+                            "label": "When does the model ship?",
+                            "type": "contradiction",
+                            "positions": [
+                                {"stance": "A late-2026 launch", "models": ["OpenAI"]},
+                                {"stance": "Nothing before 2027", "models": ["Gemini"]},
+                            ],
+                        },
+                        {
+                            "label": "OpenAI has not announced a release date",
+                            "type": "claim",
+                            "positions": [{
+                                "stance": "No date announced",
+                                "models": ["OpenAI", "Gemini"],
+                            }],
+                        },
+                    ],
+                    "models": [],
+                    "shift_score": 0,
+                    "shift_label": "Stable",
+                    "center": [],
+                },
+            ),
+            actor_uid="admin", db=db, now=observed,
+        )
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+
+    page = client.get("/topics/gpt-6")
+
+    assert page.status_code == 200
+    assert "The models do not agree here" in page.text
+    assert page.text.index("The models do not agree here") < page.text.index(
+        "Restated check after check"
+    )
+    # Each row repeats its kind, so a linked row still says what it is.
+    assert '<span class="fact-tag is-split">' in page.text
+    assert '<span class="fact-tag is-settled">' in page.text
+    # The finding names the disagreement without claiming a contested statement.
+    assert "OpenAI has not announced a release date." in page.text
+    assert "The models disagree" in page.text
+    assert "1 open disagreement" in page.text

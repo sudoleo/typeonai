@@ -751,6 +751,10 @@ def create_run(
         "agreement_score": _normalize_score(data.get("agreement_score")),
         "change_type": change_type,
         "change_summary": change_summary,
+        # Optional editorial one-liner. When empty -- which it is for every run
+        # published so far -- the page derives the finding from the claim
+        # record instead, so this field never has to be backfilled.
+        "headline": _clean(data.get("headline"), limit=240, label="Headline"),
         "opinion_changes": normalize_opinion_changes(data.get("opinion_changes")),
         "evidence": evidence,
         "models": models,
@@ -977,6 +981,8 @@ def topic_public_view(topic: dict) -> dict:
         "seo": dict(topic.get("seo") or {}),
         "latest_run_id": str(topic.get("latest_run_id") or ""),
         "latest_run_at": _public_datetime(topic.get("latest_run_at")),
+        # The page promises a next check, so it has to know when that is.
+        "next_run_at": _public_datetime(topic.get("next_run_at")),
         "latest_agreement_score": topic.get("latest_agreement_score"),
         "latest_change_type": str(topic.get("latest_change_type") or ""),
         "latest_change_summary": str(topic.get("latest_change_summary") or ""),
@@ -995,6 +1001,7 @@ def run_public_view(run: dict) -> dict:
         "agreement_score": run.get("agreement_score"),
         "change_type": str(run.get("change_type") or "stable"),
         "change_summary": str(run.get("change_summary") or ""),
+        "headline": str(run.get("headline") or ""),
         "opinion_changes": list(run.get("opinion_changes") or []),
         "evidence": list(run.get("evidence") or []),
         "models": list(run.get("models") or []),

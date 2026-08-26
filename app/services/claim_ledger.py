@@ -24,7 +24,7 @@ from datetime import datetime
 
 from app.services import drift_signal
 from app.services.opinion_map import similarity
-from app.services.public_markdown import markdown_to_plaintext
+from app.services.public_markdown import SOURCE_RUN_RE, markdown_to_plaintext
 
 
 # Same threshold the Position Map uses to call two generated labels the same
@@ -36,6 +36,10 @@ MAX_LIFELINE_TICKS = 40
 MAX_RETIRED_CLAIMS = 6
 MAX_RETIRED_SOURCES = 8
 MAX_RECORD_SITES = 6
+# One cell per check. A Topic that has run for a year would otherwise draw a
+# strip nobody can aim at; the oldest checks stay reachable in the timeline.
+MAX_STRIP_CELLS = 60
+MAX_CLAIM_SOURCES = 4
 # Movement, in the sense the record strip and the change badge use, is what
 # app.services.drift_signal grades as material: the Change Judge's "major".
 # A "minor" grade is the Judge saying the answer was restated, not moved, and
@@ -48,6 +52,10 @@ RESTATED_CHANGE_TYPES = {"minor"}
 ENUMERATING_MIN_CLAIMS = 2
 MIN_CLAIM_TOKENS = 4
 _WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)
+# A label clipped mid-citation keeps half a marker ("...will launch.[S4"). The
+# marker regex only matches a closed run, so the remnant has to go separately
+# or it is read as part of the sentence.
+_DANGLING_MARKER_RE = re.compile(r"\[\s*[Ss]?\d[\dSs,\s]*…?\s*$")
 # The Differences judge sometimes quotes half a sentence ("recent releases
 # have focused on the"). A fragment cannot be tracked as a claim, and it ends
 # on a word no finished statement ends on.
@@ -80,6 +88,22 @@ def _days_between(earlier, later) -> int:
     return max(0, (end - start).days)
 
 
+def _source_ids(value) -> list[str]:
+    """The [S3] markers a generated label carries, in order.
+
+    ``_claim_text`` strips them for display, so they are read off the raw
+    label first. They point at the evidence numbering of the run the label
+    was written in, which is what lets a single claim show its own sources.
+    """
+    ids = []
+    for run in SOURCE_RUN_RE.findall(str(value or "")):
+        for token in run.split(","):
+            token = token.strip().lstrip("sS").lstrip("0") or "0"
+            if token.isdigit() and token not in ids:
+                ids.append(token)
+    return ids
+
+
 def _claim_text(value) -> str:
     """Generated labels carry markdown and [S3] citation markers; the ledger
     lists them as sentences, so both are stripped before display and before
@@ -89,7 +113,9 @@ def _claim_text(value) -> str:
     written, so a long one can end mid-word. Marking that is the difference
     between a sentence that looks broken and one that is visibly cut short.
     """
-    text = markdown_to_plaintext(value, limit=200)
+    text = _DANGLING_MARKER_RE.sub("", markdown_to_plaintext(value, limit=200))
+    if not text:
+        return text
     if len(text) >= 130 and text[-1] not in ".!?…":
         return text.rstrip(",;:-— ") + "…"
     return text
@@ -117,6 +143,7 @@ def _appearance(run: dict, dimension: dict) -> dict:
                 models.append(model)
     return {
         "label": _claim_text(dimension.get("label")),
+        "source_ids": _source_ids(dimension.get("label")),
         "key": str(dimension.get("key") or ""),
         "type": str(dimension.get("type") or "emphasis"),
         "positions": positions,
@@ -240,6 +267,12 @@ def _claim_view(entry: dict, dates, enumerating: list[bool]) -> dict:
     return {
         "label": entry["label"],
         "type": entry["type"],
+        # The evidence numbering is per run, so a claim's markers only resolve
+        # against the run its current wording came from.
+        "source_ids": entry.get("source_ids") or [],
+        "source_run_index": entry["last_index"],
+        "first_index": entry["first_index"],
+        "last_index": entry["last_index"],
         "positions": entry["positions"],
         "models": entry["models"],
         "model_count": len(entry["models"]),
@@ -328,6 +361,98 @@ def build_claim_ledger(runs) -> dict | None:
         "holding_count": len(fresh) + len(contested) + len(holding),
         "longest_streak": max((claim["streak"] for claim in claims), default=0),
     }
+
+
+def attach_claim_sources(ledger, runs) -> None:
+    """Resolve every listed claim's [S3] markers into evidence items, in place.
+
+    A claim is only worth reading if a reader can get from it to the link it
+    rests on without scrolling through the whole source list, so each claim
+    carries its own -- taken from the run its current wording came from.
+    """
+    if not ledger:
+        return
+    runs = list(runs or [])
+    by_run: list[dict] = []
+    for run in runs:
+        by_run.append({
+            str(item.get("id") or ""): item for item in run.get("evidence") or []
+        })
+    for group in ("new", "contested", "holding", "retired"):
+        for claim in ledger.get(group) or []:
+            index = claim.get("source_run_index")
+            if not isinstance(index, int) or not 0 <= index < len(by_run):
+                claim["sources"] = []
+                continue
+            lookup = by_run[index]
+            found = []
+            for number in claim.get("source_ids") or []:
+                item = lookup.get("S" + number)
+                if item and item not in found:
+                    found.append(item)
+            claim["sources"] = found[:MAX_CLAIM_SOURCES]
+
+
+def build_check_strip(runs, ledger=None) -> list[dict]:
+    """One cell per check, oldest first -- the whole record in a single row.
+
+    The strip is the only place on the page that shows every check at once.
+    Its job is not precision but shape: a reader has to see "this has not
+    moved in weeks" before reading a single sentence, and see it again, one
+    cell longer, on the next visit.
+    """
+    runs = list(runs or [])
+    if not runs:
+        return []
+    # Only inventory changes that stuck are marked. Wording churn produces a
+    # claim that enters and vanishes again almost every check; marking those
+    # would paint a rock-steady record as constant motion, which is the exact
+    # reading the strip exists to prevent.
+    entered: dict[int, int] = {}
+    left: dict[int, int] = {}
+    if ledger:
+        for group in ("new", "contested", "holding"):
+            for claim in ledger.get(group) or []:
+                first = claim.get("first_index")
+                if isinstance(first, int) and first > 0:
+                    entered[first] = entered.get(first, 0) + 1
+        for claim in ledger.get("retired") or []:
+            last = claim.get("last_index")
+            if isinstance(last, int):
+                left[last + 1] = left.get(last + 1, 0) + 1
+    latest_index = len(runs) - 1
+    cells = []
+    for index, run in enumerate(runs):
+        change_type = str(run.get("change_type") or "stable")
+        material = change_type in MATERIAL_CHANGE_TYPES
+        came, went = entered.get(index, 0), left.get(index, 0)
+        if index == 0:
+            kind, note = "first", "First check. The record starts here."
+        elif material:
+            kind = "material"
+            note = str(run.get("change_summary") or "") or "The answer moved."
+        elif came or went:
+            kind = "event"
+            parts = []
+            if came:
+                parts.append(f"{came} statement{'s' if came != 1 else ''} entered")
+            if went:
+                parts.append(f"{went} dropped out")
+            note = ", ".join(parts).capitalize() + "."
+        elif change_type in RESTATED_CHANGE_TYPES:
+            kind, note = "restated", "Same answer, different wording."
+        else:
+            kind, note = "stable", "No change."
+        cells.append({
+            "date": _date_display(run),
+            "iso": str(run.get("observed_at") or "")[:10],
+            "kind": kind,
+            "is_latest": index == latest_index,
+            "run_id": run.get("id"),
+            "score": run.get("agreement_score"),
+            "note": note,
+        })
+    return cells[-MAX_STRIP_CELLS:]
 
 
 def build_record_summary(runs) -> dict | None:

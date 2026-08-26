@@ -1677,3 +1677,671 @@
     transform: none;
   }
 }
+
+/* ======================================================================
+   Layer 0-2: the finding, the check strip, the statement list
+   ----------------------------------------------------------------------
+   The page used to open on the apparatus and keep the answer four screens
+   down. These blocks invert that: one sentence, one shape, then the
+   statements it is made of, then everything else behind a disclosure.
+   Nothing below replaces a rule above -- the older panels keep their styles
+   because they still render, one level deeper.
+   ====================================================================== */
+
+/* --- The finding ---------------------------------------------------- */
+.topic-finding {
+  margin-top: 22px;
+  border-top: 2px solid var(--text-primary);
+  padding-top: 18px;
+}
+
+.topic-finding-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.topic-finding-state i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Semantic colour rides the state glyph and its label, never a fill behind
+   the sentence. A settled answer is the normal case and stays in ink. */
+.topic-finding.is-settled .topic-finding-state { color: var(--agree); }
+.topic-finding.is-split .topic-finding-state { color: var(--dispute); }
+.topic-finding.is-moved .topic-finding-state { color: var(--dispute); }
+.topic-finding.is-forming .topic-finding-state,
+.topic-finding.is-first .topic-finding-state { color: var(--partial); }
+
+.topic-finding-line {
+  margin: 0 0 12px;
+  max-width: 22ch;
+  color: var(--text-primary);
+  font-size: clamp(1.75rem, 4.4vw, 2.6rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.08;
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+/* A claim the judge wrote long stays one sentence; it just stops shouting. */
+.topic-finding-line.is-long {
+  max-width: 34ch;
+  font-size: clamp(1.35rem, 3vw, 1.85rem);
+  line-height: 1.2;
+}
+
+.topic-finding-support {
+  margin: 0 0 16px;
+  max-width: 62ch;
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-reading);
+}
+
+.topic-finding-assurance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.topic-finding-assurance > span,
+.topic-finding-assurance > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.topic-finding-assurance > * + *::before {
+  content: "";
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--border-light);
+}
+
+.topic-finding-assurance .is-voice {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.topic-finding-assurance a.is-split {
+  color: var(--dispute);
+  font-weight: var(--font-weight-semibold);
+  text-decoration: none;
+}
+
+.topic-finding-assurance a.is-split:hover { text-decoration: underline; }
+
+/* --- The check strip ------------------------------------------------ */
+/* Every check as one cell. It answers "has this been stable?" before a word
+   is read, and it is one cell longer on every return visit. */
+.topic-strip-block { margin-top: 26px; }
+
+.topic-strip-legend,
+.topic-strip-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+}
+
+.topic-strip-legend {
+  margin-bottom: 7px;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.topic-strip-foot { margin-top: 7px; }
+
+.topic-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 34px;
+}
+
+.topic-strip-cell {
+  flex: 1 1 0;
+  min-width: 4px;
+  height: 22px;
+  border: 0;
+  border-radius: 3px;
+  padding: 0;
+  background: color-mix(in srgb, var(--text-primary) 13%, transparent);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+
+.topic-strip-cell.is-stable,
+.topic-strip-cell.is-restated {
+  background: color-mix(in srgb, var(--agree) 40%, transparent);
+}
+
+.topic-strip-cell.is-first {
+  height: 28px;
+  background: color-mix(in srgb, var(--text-primary) 34%, transparent);
+}
+
+.topic-strip-cell.is-event {
+  height: 30px;
+  background: var(--partial);
+}
+
+.topic-strip-cell.is-material {
+  height: 34px;
+  background: var(--dispute);
+}
+
+.topic-strip-cell.is-latest {
+  height: 34px;
+  background: var(--agree);
+}
+
+.topic-strip-cell.is-latest.is-material { background: var(--dispute); }
+
+/* Checks this browser has not seen before keep a mark until the next visit. */
+.topic-strip-cell.is-unseen {
+  box-shadow: inset 0 0 0 1.5px var(--text-primary);
+}
+
+.topic-strip-cell:hover,
+.topic-strip-cell:focus-visible {
+  transform: translateY(-2px);
+  outline: none;
+  box-shadow: 0 0 0 2px var(--text-primary);
+}
+
+/* The readout sits on the page ground, so it steps up to be a surface at
+   all; the source chips sit inside a panel and step down for the same
+   reason. Same distance either way, opposite direction. */
+.topic-strip-read {
+  margin: 9px 0 0;
+  border-radius: var(--radius-xs);
+  padding: 8px 12px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  min-height: 34px;
+}
+
+.topic-strip-read b { color: var(--text-primary); }
+.topic-strip-read a { color: var(--text-primary); }
+.topic-strip-score { color: var(--text-muted); }
+
+/* --- The returning reader ------------------------------------------- */
+/* The band only exists for a reader who has been here before. `display:flex`
+   would otherwise beat the UA rule for [hidden] and leave an empty box. */
+.topic-return[hidden] { display: none; }
+
+.topic-return {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+  margin-top: 20px;
+  border: 1px solid color-mix(in srgb, var(--partial) 38%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  background: var(--partial-bg);
+}
+
+.topic-return.is-moved {
+  border-color: color-mix(in srgb, var(--dispute) 38%, transparent);
+  background: var(--dispute-bg);
+}
+
+.topic-return-tag {
+  color: var(--partial);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.topic-return.is-moved .topic-return-tag { color: var(--dispute); }
+
+.topic-return p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+.topic-return a { color: var(--text-primary); }
+
+.topic-provenance-line {
+  margin: 20px 0 0;
+  max-width: 74ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.topic-provenance-line a { color: var(--text-secondary); }
+
+/* --- Layer 1: the statement list ------------------------------------ */
+.topic-facts .topic-panel-head { margin-bottom: 4px; }
+
+.fact-group {
+  margin-top: 26px;
+  border-left: 2px solid var(--border-light);
+  padding-left: 16px;
+}
+
+.fact-group.is-split { border-left-color: var(--dispute); }
+.fact-group.is-settled { border-left-color: var(--agree); }
+.fact-group.is-new { border-left-color: var(--partial); }
+.fact-group.is-dropped { border-left-color: var(--border-light); }
+
+.fact-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+
+.fact-group-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+}
+
+.fact-group-head > b {
+  min-width: 22px;
+  border-radius: var(--radius-pill);
+  padding: 1px 8px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro);
+  text-align: center;
+}
+
+.fact-group-note {
+  margin: 7px 0 0;
+  max-width: 64ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-reading);
+}
+
+/* The category has to be readable at a glance, and readable without colour:
+   every state gets its own word, its own colour and its own shape. */
+.fact-group-tag,
+.fact-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  white-space: nowrap;
+}
+
+.fact-group-tag i,
+.fact-tag i {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
+
+/* Settled: a filled square, flat on its base. */
+.fact-group-tag.is-settled,
+.fact-tag.is-settled { color: var(--agree); }
+
+/* New: the same square, turned up on a corner -- not set down yet. */
+.fact-group-tag.is-new,
+.fact-tag.is-new { color: var(--partial); }
+.fact-group-tag.is-new > i,
+.fact-tag.is-new > i { transform: rotate(45deg); }
+
+/* Split: two halves that do not line up. */
+.fact-group-tag.is-split,
+.fact-tag.is-split { color: var(--dispute); }
+.fact-group-tag.is-split > i,
+.fact-tag.is-split > i {
+  width: 11px;
+  background: none;
+  border-top: 3px solid currentColor;
+  border-bottom: 3px solid currentColor;
+  border-left: 0;
+  border-right: 0;
+  transform: skewX(-18deg);
+}
+
+/* Dropped: the outline of a square nothing fills any more. */
+.fact-group-tag.is-dropped,
+.fact-tag.is-dropped { color: var(--text-muted); }
+.fact-group-tag.is-dropped > i,
+.fact-tag.is-dropped > i {
+  background: none;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.fact-list { margin-top: 12px; }
+
+.fact-row { border-top: 1px solid var(--border-subtle); }
+.fact-row:first-child { border-top: 0; }
+
+.fact-row > summary {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 14px;
+  padding: 13px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.fact-row > summary::-webkit-details-marker { display: none; }
+
+.fact-row > summary:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.fact-text {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-reading);
+}
+
+.fact-row.is-dropped .fact-text { color: var(--text-muted); }
+
+.fact-side {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.fact-count {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fact-chevron {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  transition: transform 0.15s ease;
+}
+
+.fact-row[open] > summary .fact-chevron { transform: rotate(90deg); }
+
+.fact-row.is-split .claim-lifeline i.is-on { background: var(--dispute); }
+.fact-row.is-dropped .claim-lifeline i.is-on { background: var(--text-muted); }
+.fact-row.is-new .claim-lifeline i.is-on { background: var(--partial); }
+
+.fact-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 0 18px;
+}
+
+.fact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+}
+
+.claim-flag.is-full { color: var(--agree); }
+
+.claim-position.is-other { border-left-color: var(--border-light); }
+.fact-row.is-split .claim-position { border-left-color: var(--dispute); }
+.fact-row.is-split .claim-position.is-other { border-left-color: var(--border-light); }
+
+.fact-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fact-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  padding: 6px 11px 6px 7px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  text-decoration: none;
+}
+
+.fact-source:hover {
+  border-color: var(--border-light);
+  color: var(--text-primary);
+}
+
+.fact-source > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 30ch;
+}
+
+.fact-source > b {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-regular);
+}
+
+/* The dropped group is itself a disclosure: it is archive, not answer. */
+details.fact-group.is-dropped > summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+details.fact-group.is-dropped > summary::-webkit-details-marker { display: none; }
+
+.fact-group-summary {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+details.fact-group.is-dropped > summary b {
+  color: var(--text-muted);
+  font-size: var(--font-size-base);
+  transition: transform 0.15s ease;
+}
+
+details.fact-group.is-dropped[open] > summary b { transform: rotate(45deg); }
+
+/* --- Layer 2: the apparatus ----------------------------------------- */
+.topic-deep {
+  display: grid;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+/* Same reason as the columns above: a grid item defaults to min-width:auto,
+   and a paragraph's max-content width is the whole paragraph on one line. */
+.topic-deep > *,
+.topic-deep-body > *,
+.fact-body > * {
+  min-width: 0;
+}
+
+.topic-deep-item { padding: 0; overflow: clip; }
+
+.topic-deep-item > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.topic-deep-item > summary::-webkit-details-marker { display: none; }
+
+.topic-deep-item > summary:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -2px;
+}
+
+.topic-deep-title { display: grid; gap: 3px; }
+
+.topic-deep-title strong {
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+}
+
+.topic-deep-title small {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+}
+
+.topic-deep-item > summary b {
+  color: var(--text-muted);
+  font-size: var(--font-size-lg);
+  transition: transform 0.15s ease;
+}
+
+.topic-deep-item[open] > summary b { transform: rotate(45deg); }
+.topic-deep-item[open] > summary { border-bottom: 1px solid var(--border-subtle); }
+
+.topic-deep-body { padding: 20px; }
+.topic-deep-body > * + * { margin-top: 18px; }
+
+.topic-panel-head.is-inner {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 12px;
+}
+
+.topic-panel-head.is-inner h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
+}
+
+/* The dimension type is a label above the claim, not a chip. It inherits a
+   tint from the chip group in public-shell.css, which in this two-column
+   layout reads as a stray filled rectangle beside the heading. Scoped here so
+   the Share page, which does not load this file, keeps what it has. */
+.watch-position-question .watch-dimension-type {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+/* Its own class on purpose: a descendant selector on h3 would land on the
+   Position Map's dimension headings too and outrank their own rule. */
+.topic-inner-heading {
+  margin: 0 0 10px;
+  color: var(--text-primary);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+}
+
+/* --- Which sites the record keeps returning to ----------------------- */
+.topic-site-bars { display: grid; gap: 7px; }
+
+.topic-site-bars-head {
+  margin: 0 0 3px;
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.topic-site-bar {
+  display: grid;
+  grid-template-columns: minmax(90px, 150px) 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-size: var(--font-size-xs);
+}
+
+.topic-site-host {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.topic-site-track {
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted);
+  overflow: hidden;
+}
+
+.topic-site-track b {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--text-muted);
+}
+
+.topic-site-count {
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+  font-variant-numeric: tabular-nums;
+}
+
+.topic-next-check {
+  margin: 14px 0 0;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+  color: var(--text-muted);
+  font-size: var(--font-size-micro);
+}
+
+.topic-next-check b {
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 640px) {
+  .fact-row > summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+  .fact-tag { grid-column: 1 / -1; }
+  .fact-side { align-self: center; }
+  .topic-finding-line { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topic-strip-cell,
+  .fact-chevron,
+  .topic-deep-item > summary b { transition: none; }
+}
