@@ -212,11 +212,15 @@
         </div>
         <div class="topic-strip" id="topicStrip" data-slug="{{ topic.slug }}">
           {% for cell in strip %}
-          <button type="button" class="topic-strip-cell is-{{ cell.kind }}{% if cell.is_latest %} is-latest{% endif %}"
-                  data-date="{{ cell.date }}" data-iso="{{ cell.iso }}" data-kind="{{ cell.kind }}"
-                  data-note="{{ cell.note }}"{% if cell.score is not none %} data-score="{{ cell.score }}"{% endif %}
-                  {% if cell.run_id %}data-run="{{ cell.run_id }}"{% endif %}
-                  aria-label="{{ cell.date }}: {{ cell.note }}"></button>
+          {#- A cell is a link to the check it stands for, so it can be opened,
+              middle-clicked and tabbed to like any other link. Hovering it
+              only previews what happened in that check. -#}
+          <a class="topic-strip-cell is-{{ cell.kind }}{% if cell.is_latest %} is-latest{% endif %}"
+             href="/topics/{{ topic.slug }}{% if cell.run_id and cell.run_id != topic.latest_run_id %}?version={{ cell.run_id }}{% endif %}"
+             data-date="{{ cell.date }}" data-iso="{{ cell.iso }}" data-kind="{{ cell.kind }}"
+             data-note="{{ cell.note }}"{% if cell.score is not none %} data-score="{{ cell.score }}"{% endif %}
+             {% if cell.run_id %}data-run="{{ cell.run_id }}"{% endif %}
+             aria-label="Open the check of {{ cell.date }}: {{ cell.note }}"></a>
           {% endfor %}
         </div>
         <div class="topic-strip-foot"><span>{{ strip[0].date }}</span><span>{{ strip[-1].date }}</span></div>

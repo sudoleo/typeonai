@@ -992,8 +992,12 @@ def test_topic_page_leads_with_the_finding_and_folds_unchanged_checks(monkeypatc
     # How long it has stood is stated next to the finding, not instead of it.
     assert "Unchanged through 3 checks" in page.text
     assert "Last material change on Jul 24, 2026" in page.text
-    # One strip cell per check, oldest first.
-    assert page.text.count('class="topic-strip-cell') == 5
+    # One strip cell per check, oldest first, each one a link into that check.
+    strip = page.text.split('id="topicStrip"')[1].split("</div>")[0]
+    assert strip.count('<a class="topic-strip-cell') == 5
+    assert strip.count('href="/topics/gpt-6?version=') == 4
+    # The newest check is the page itself, so its cell carries no version.
+    assert strip.count('href="/topics/gpt-6"') == 1
     # Each statement carries its own life, not one row per run.
     assert "Held 5 of 5 checks" in page.text
     assert "Restated check after check" in page.text

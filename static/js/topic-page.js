@@ -19,17 +19,15 @@
     );
     var resting = read.innerHTML;
 
+    // Without a pointer that can hover there is no way to read a cell before
+    // following it, so the first tap previews and the second one opens.
+    var canHover = !window.matchMedia || window.matchMedia("(hover: hover)").matches;
+    var previewed = null;
+
     function show(cell) {
       var parts = ["<b>" + cell.dataset.date + "</b> &mdash; " + cell.dataset.note];
       if (cell.dataset.score) {
         parts.push('<span class="topic-strip-score">' + cell.dataset.score + "/100 agreement</span>");
-      }
-      var run = cell.dataset.run;
-      if (run && !cell.classList.contains("is-latest")) {
-        parts.push(
-          '<a href="/topics/' + encodeURIComponent(strip.dataset.slug) +
-          "?version=" + encodeURIComponent(run) + '">Open this check</a>'
-        );
       }
       read.innerHTML = parts.join(" ");
     }
@@ -37,7 +35,13 @@
     cells.forEach(function (cell) {
       cell.addEventListener("mouseenter", function () { show(cell); });
       cell.addEventListener("focus", function () { show(cell); });
-      cell.addEventListener("click", function () { show(cell); });
+      cell.addEventListener("click", function (event) {
+        if (!canHover && previewed !== cell) {
+          event.preventDefault();
+          previewed = cell;
+          show(cell);
+        }
+      });
     });
     strip.addEventListener("mouseleave", function () { read.innerHTML = resting; });
     return {strip: strip, cells: cells};
