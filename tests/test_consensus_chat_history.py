@@ -7,6 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.api.routers import bookmarks as bookmarks_router
 from app.api.routers import chat as chat_router
 from app.core.rate_limit import limiter
 from app.services.chat_store import ChatNotFound, TurnQuestionConflict
@@ -130,6 +131,74 @@ def test_consensus_without_chat_ids_remains_legacy_compatible(chat_consensus_api
     assert "chat_persisted" not in response.json()
     assert store.validations == []
     assert store.completions == []
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_consensus_persists_requested_bookmark_before_successful_final_event(
+    chat_consensus_api, stream
+):
+    client, store, monkeypatch = chat_consensus_api
+    writes = []
+
+    def persist(uid, data, authoritative):
+        writes.append((uid, data, authoritative))
+        return {
+            "id": data["bookmarkId"],
+            "query": data["question"],
+            "title": "What changed?",
+            "timestamp": "server-time",
+            "responses": {"consensus": authoritative["consensus"]},
+            "sources": authoritative["sources"],
+        }
+
+    monkeypatch.setattr(
+        bookmarks_router, "persist_authoritative_consensus_bookmark", persist
+    )
+    if stream:
+        monkeypatch.setattr(
+            chat_router,
+            "stream_consensus",
+            lambda *args, **kwargs: iter([{"type": "final", "text": "Consensus"}]),
+        )
+        monkeypatch.setattr(
+            chat_router,
+            "stream_differences",
+            lambda *args, **kwargs: iter([{
+                "type": "final",
+                "text": "Differences",
+                "data": {"agreement": {"score": 88}},
+            }]),
+        )
+
+    response = client.post(
+        "/consensus",
+        headers=AUTH,
+        json=_base_payload(
+            stream=stream,
+            bookmarkId="stable_bookmark",
+            previousQuestion="Earlier question",
+            previousTurn={
+                "question": "Earlier question",
+                "consensus": "Earlier consensus",
+            },
+        ),
+    )
+    body = _final_sse_payload(response) if stream else response.json()
+
+    assert response.status_code == 200
+    assert body["bookmark_persisted"] is True
+    assert body["bookmark_meta"]["id"] == "stable_bookmark"
+    assert len(writes) == 1
+    uid, data, authoritative = writes[0]
+    assert uid == UID
+    assert data["chatId"] == CHAT_ID
+    assert data["turnId"] == TURN_ID
+    assert data["previousTurn"]["consensus"] == "Earlier consensus"
+    assert authoritative["model_responses"] == {
+        "OpenAI": "OpenAI answer",
+        "Mistral": "Mistral answer",
+    }
+    assert store.completions
 
 
 @pytest.mark.parametrize("missing", ["chat_id", "turn_id"])

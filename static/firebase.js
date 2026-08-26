@@ -1611,18 +1611,16 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
     || window.App.bookmarkSession?.currentId?.()
     || bookmarkIdForQuestion(question);
   const waitForDeleteOutcome = !bookmarkWriteAllowed(requestUid, bookmarkId);
-  const sources = Array.isArray(conversation?.sources)
-    ? conversation.sources.map(source => ({ ...source }))
-    : (window.currentEvidenceSources || []).map(source => ({ ...source }));
+  // Only identifiers and the small legacy-required text copies travel over
+  // this compatibility path. Sources, structured differences, labels and
+  // provider answers are materialized from the owner-bound completed run.
+  // Sending those ignored copies used to reject valid runs at source 25 even
+  // though the authoritative snapshot supports 50.
   const payloadSnapshot = {
     question: String(question || ""),
     consensusText: String(consensusText || ""),
     differencesText: String(differencesText || ""),
-    differencesData: snapshotBookmarkValue(differencesData) || null,
     resultId: resultId || null,
-    consensusModel: String(consensusModel || ""),
-    modelLabels: snapshotBookmarkValue(modelLabels) || null,
-    modelResponses: snapshotBookmarkValue(conversation?.modelResponses) || null,
     chatId: conversation?.chatId || null,
     turnId: conversation?.turnId || null,
     previousQuestion: String(previousQuestion || ""),
@@ -1634,38 +1632,53 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
     if (!id_token || !isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
     try {
-      const res = await fetch("/bookmark/consensus", {
-         method: "POST",
-         headers: { "Content-Type": "application/json" },
-         body: JSON.stringify({
-           id_token: id_token,
-           question: payloadSnapshot.question,
-           consensusText: payloadSnapshot.consensusText,
-           differencesText: payloadSnapshot.differencesText,
-           // Strukturierte Differences (Verdict, Karten, Badges) mitspeichern,
-           // damit das Bookmark dieselbe Ansicht wie eine echte Query zeigt.
-           differencesData: payloadSnapshot.differencesData,
-           sources: sources,
-           resultId: payloadSnapshot.resultId,
-           consensusModel: payloadSnapshot.consensusModel,
-           modelLabels: payloadSnapshot.modelLabels,
-           modelResponses: payloadSnapshot.modelResponses,
-           bookmarkId: bookmarkId || null,
-           chatId: payloadSnapshot.chatId,
-           turnId: payloadSnapshot.turnId,
-           previousQuestion: payloadSnapshot.previousQuestion,
-           previousTurn: payloadSnapshot.previousTurn
-         })
+      const requestBody = JSON.stringify({
+        id_token: id_token,
+        question: payloadSnapshot.question,
+        consensusText: payloadSnapshot.consensusText,
+        differencesText: payloadSnapshot.differencesText,
+        resultId: payloadSnapshot.resultId,
+        bookmarkId: bookmarkId || null,
+        chatId: payloadSnapshot.chatId,
+        turnId: payloadSnapshot.turnId,
+        previousQuestion: payloadSnapshot.previousQuestion,
+        previousTurn: payloadSnapshot.previousTurn
       });
-      if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
-      const data = await res.json();
+      let res = null;
+      let data = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          res = await fetch("/bookmark/consensus", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: requestBody,
+            keepalive: true
+          });
+          data = await res.json().catch(() => ({}));
+        } catch (networkError) {
+          if (attempt >= 2) throw networkError;
+          await new Promise(resolve => setTimeout(resolve, 250 * (4 ** attempt)));
+          if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+          continue;
+        }
+        const retryable = res.status === 408 || res.status === 425
+          || res.status === 429 || res.status >= 500;
+        if (res.ok || !retryable || attempt >= 2) break;
+        const retryDelay = res.status === 429
+          ? 1000 * (attempt + 1)
+          : 250 * (4 ** attempt);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
+      }
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
       if (!res.ok) {
-        console.error("Error saving consensus bookmark:", data.detail);
+        const errorDetail = data.detail || data.error || "Consensus bookmark save failed";
+        data.detail = errorDetail;
+        console.error("Error saving consensus bookmark:", errorDetail, data.details || "");
         if (boundRunId) {
           window.App.runRegistry?.notePersistence?.(boundRunId, {
             status: "error",
-            error: { type: "consensus", status: res.status, detail: data.detail || "Consensus bookmark save failed" }
+            error: { type: "consensus", status: res.status, detail: errorDetail }
           });
         }
         if (!boundRunId || window.App.runRegistry?.isVisible?.(boundRunId)) {
@@ -1705,6 +1718,23 @@ async function saveBookmarkConsensus(question, consensusText, differencesText, d
   }, boundRunId);
 }
 window.saveBookmarkConsensus = saveBookmarkConsensus;
+
+window.acceptPersistedConsensusBookmark = function (bookmarkMeta, conversation = null) {
+  const runId = String(conversation?.runId || "").trim() || null;
+  const requestUid = conversation?.auth?.uid || auth.currentUser?.uid || null;
+  if (!bookmarkMeta?.id || !requestUid) return false;
+  upsertBookmarkMeta(bookmarkMeta, {
+    runId,
+    writeType: "consensus",
+    requestUid
+  });
+  if (!runId) window.App.bookmarkSession?.restore?.(bookmarkMeta.id);
+  trackAppEvent("app_bookmark_saved", {
+    type: "consensus",
+    source: "consensus_final"
+  });
+  return true;
+};
 
 let bookmarkShareResultVersion = 0;
 window.currentBookmarkShareResultPromise = null;

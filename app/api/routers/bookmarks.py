@@ -7,7 +7,7 @@ import hmac
 import json
 import logging
 import unicodedata
-from typing import Literal
+from typing import Any, Literal
 from firebase_admin import firestore
 from fastapi import APIRouter, Request, Body, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
@@ -64,7 +64,12 @@ class BookmarkModelRequest(BaseModel):
     previousQuestion: StrictStr = Field(default="", max_length=4_000)
     chatId: StrictStr | None = Field(default=None, max_length=32)
     turnId: StrictStr | None = Field(default=None, max_length=32)
-    sources: list[dict] | None = Field(default=None, max_length=24)
+    # Keep the request contract aligned with share_snapshots.MAX_SOURCES. A
+    # direct-comparison run passes the accumulated evidence list, not only the
+    # current provider's sources.
+    sources: list[dict] | None = Field(
+        default=None, max_length=share_snapshots.MAX_SOURCES
+    )
     attachments: list[dict] | None = Field(default=None, max_length=10)
 
 
@@ -73,14 +78,21 @@ class BookmarkConsensusRequest(BaseModel):
 
     id_token: StrictStr | None = Field(default=None, max_length=20_000)
     question: StrictStr = Field(min_length=1, max_length=8_000)
-    consensusText: StrictStr = Field(max_length=100_000)
-    differencesText: StrictStr = Field(max_length=50_000)
-    differencesData: dict | None = None
-    sources: list[dict] | None = Field(default=None, max_length=24)
+    # These fields were part of the old client-owned bookmark snapshot. The
+    # handler deliberately ignores them and materializes the result from the
+    # owner-bound pending result/completed turn instead. Validating ignored
+    # copies made persistence less reliable than the authoritative source: the
+    # UI and share snapshot both support 50 sources, while this legacy copy was
+    # capped at 24 and rejected otherwise valid runs with HTTP 422. Keep the
+    # names for deployed/cached clients, but never let their shape veto a save.
+    consensusText: Any = None
+    differencesText: Any = None
+    differencesData: Any = None
+    sources: Any = None
     resultId: StrictStr | None = Field(default=None, max_length=64)
-    consensusModel: StrictStr | None = Field(default=None, max_length=80)
-    modelLabels: dict[str, StrictStr] | None = None
-    modelResponses: dict[str, StrictStr] | None = None
+    consensusModel: Any = None
+    modelLabels: Any = None
+    modelResponses: Any = None
     bookmarkId: StrictStr | None = Field(default=None, max_length=100)
     chatId: StrictStr | None = Field(default=None, max_length=32)
     turnId: StrictStr | None = Field(default=None, max_length=32)
@@ -601,11 +613,18 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
         raise HTTPException(status_code=500, detail="Error saving bookmark")
 
 
-@router.post("/bookmark/consensus")
-@limiter.limit("120/minute")
-def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest):
-    data = payload.model_dump()
-    id_token = extract_id_token(request, data)
+def persist_authoritative_consensus_bookmark(
+    uid: str,
+    data: dict,
+    authoritative: dict,
+) -> dict:
+    """Persist one trusted consensus snapshot and return the merged bookmark.
+
+    Both ``/consensus`` and the compatibility save endpoint use this function.
+    The former already owns the completed engine output; the latter first
+    resolves the same output through a pending result or completed chat turn.
+    Keeping the mutation in one place prevents the two paths from drifting.
+    """
     question = data.get("question")
     result_id = str(data.get("resultId") or "").strip()
     previous_question = _clean_previous_question(data.get("previousQuestion"))
@@ -615,16 +634,8 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
     # in the request schema only for cached clients and are never persisted.
     model_responses = None
 
-    if not id_token or not question:
+    if not question:
         raise HTTPException(status_code=400, detail="Missing required fields.")
-
-    try:
-        uid = verify_user_token(id_token)
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed")
-    _enforce_bookmark_uid_rate_limit(uid, "consensus_save")
-
-    authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
     if not _same_question(authoritative["question"], question):
         raise HTTPException(status_code=409, detail="Bookmark question does not match the completed run.")
     consensusText = authoritative["consensus"][:100_000]
@@ -710,16 +721,44 @@ def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest)
             uid=uid, doc_ref=doc_ref, patch=dataToMerge, db=db_firestore
         )
         bookmark["id"] = doc_id
-        return {
-            "status": "success",
-            "message": "Consensus and differences saved.",
-            "bookmark": bookmark,
-        }
+        return bookmark
     except persistence_guard.PersistenceLimitError as exc:
         status = 413 if exc.code in {"bookmark_too_large", "bookmark_storage_limit"} else 429
         raise HTTPException(status_code=status, detail=exc.message) from None
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Error saving consensus")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.error(
+            "Error saving consensus bookmark category=%s", safe_exception(exc)
+        )
+        raise HTTPException(status_code=500, detail="Error saving consensus") from exc
+
+
+@router.post("/bookmark/consensus")
+@limiter.limit("120/minute")
+def save_bookmark_consensus(request: Request, payload: BookmarkConsensusRequest):
+    data = payload.model_dump()
+    id_token = extract_id_token(request, data)
+    question = data.get("question")
+    result_id = str(data.get("resultId") or "").strip()
+    chat_binding = _chat_binding(data)
+
+    if not id_token or not question:
+        raise HTTPException(status_code=400, detail="Missing required fields.")
+
+    try:
+        uid = verify_user_token(id_token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Authentication failed") from exc
+    _enforce_bookmark_uid_rate_limit(uid, "consensus_save")
+
+    authoritative = _authoritative_consensus_payload(uid, result_id, chat_binding)
+    bookmark = persist_authoritative_consensus_bookmark(uid, data, authoritative)
+    return {
+        "status": "success",
+        "message": "Consensus and differences saved.",
+        "bookmark": bookmark,
+    }
 
 
 @router.post("/bookmark/consensus/share-result")

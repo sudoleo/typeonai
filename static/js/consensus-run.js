@@ -780,6 +780,9 @@
         model_sources: modelSources,
         model_labels: modelLabels,
         consensus_model: context.config.consensusModel,
+        bookmarkId: context.bookmark.id,
+        previousQuestion: context.previousExchange?.question || "",
+        previousTurn: context.previousExchange?.turn || null,
         excluded_models: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
           .filter(provider => !context.config.providers.some(item => item.provider === provider)),
         openai_key: context.credentials?.openaiKey || "",
@@ -917,21 +920,29 @@
 
       let savePromise = null;
       if (registry.isAuthCurrent(context) && data.chat_replayed !== true) {
-        // Enqueue the authoritative consensus snapshot before publishing the
-        // terminal status. Otherwise an older model snapshot from the same
-        // bookmark can briefly make the sidebar row look fully persisted.
-        savePromise = window.saveBookmarkConsensus?.(
-          context.question,
-          context.consensus.text,
-          context.consensus.differences,
-          context.consensus.differencesData,
-          context.consensus.resultId,
-          context.config.consensusModel,
-          modelLabels,
-          context.previousExchange?.question || "",
-          context.previousExchange?.turn || null,
-          conversation
-        );
+        if (data.bookmark_persisted === true && data.bookmark_meta) {
+          // The successful /consensus final event is now emitted only after
+          // the primary server-side bookmark write. Apply its compact metadata
+          // locally; no second network roundtrip is needed for the normal path.
+          window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, conversation);
+          context.persistence.consensusWrite = true;
+          savePromise = Promise.resolve(data.bookmark_meta);
+        } else {
+          // Cached servers and a failed primary write retain the idempotent
+          // compatibility endpoint as a bounded, keepalive-enabled retry path.
+          savePromise = window.saveBookmarkConsensus?.(
+            context.question,
+            context.consensus.text,
+            context.consensus.differences,
+            context.consensus.differencesData,
+            context.consensus.resultId,
+            context.config.consensusModel,
+            modelLabels,
+            context.previousExchange?.question || "",
+            context.previousExchange?.turn || null,
+            conversation
+          );
+        }
         context.persistence.consensusPromise = savePromise || null;
         savePromise?.catch?.(() => undefined);
       } else if (data.chat_replayed === true) {
@@ -1411,6 +1422,8 @@
         markReasoning() {},
         stop() {}
       };
+      const bookmarkPreviousQuestion = followup.previousQuestionForBookmark();
+      const bookmarkPreviousTurn = followup.previousTurnForBookmark();
       const consensusPayload = {
           id_token: id_token,
           useOwnKeys: useOwnKeys,
@@ -1426,6 +1439,9 @@
           model_sources: model_sources,
           model_labels: shareModelLabels,
           consensus_model: consensus_model,
+          bookmarkId: window.App.bookmarkSession?.currentId?.() || "",
+          previousQuestion: bookmarkPreviousQuestion,
+          previousTurn: bookmarkPreviousTurn,
           excluded_models: excludedModels,
           openai_key: openaiKey,
           mistral_key: mistralKey,
@@ -1569,9 +1585,6 @@
           }
         }
 
-        const bookmarkPreviousQuestion = followup.previousQuestionForBookmark();
-        const bookmarkPreviousTurn = followup.previousTurnForBookmark();
-
         const completedTurn = {
           turn_id: data.turn_id || chatTurnIds?.turnId || "",
           question,
@@ -1645,17 +1658,21 @@
           conversation: bookmarkConversation
         };
         if (!completedReplay && window.auth?.currentUser) {
-          // Auch ein Follow-up schickt die result_id seines eigenen Laufs mit.
-          // Sonst war der Chat-Turn der EINZIGE Beleg fuer "dieser Lauf gehoert
-          // dir" -- und jeder Lauf ohne persistierten Turn endete mit sichtbarer
-          // Antwort und der Meldung, das Bookmark liesse sich nicht speichern.
-          // Der Server setzt share_result_id bei einem Follow-up ohnehin leer.
-          window.saveBookmarkConsensus(
-            question, data.consensus_response, data.differences, data.differences_data,
-            data.result_id || null,
-            consensus_model, shareModelLabels, bookmarkPreviousQuestion,
-            bookmarkPreviousTurn, bookmarkConversation
-          );
+          if (data.bookmark_persisted === true && data.bookmark_meta) {
+            window.acceptPersistedConsensusBookmark?.(data.bookmark_meta, bookmarkConversation);
+          } else {
+            // Auch ein Follow-up schickt die result_id seines eigenen Laufs mit.
+            // Sonst war der Chat-Turn der EINZIGE Beleg fuer "dieser Lauf gehoert
+            // dir" -- und jeder Lauf ohne persistierten Turn endete mit sichtbarer
+            // Antwort und der Meldung, das Bookmark liesse sich nicht speichern.
+            // Der Server setzt share_result_id bei einem Follow-up ohnehin leer.
+            window.saveBookmarkConsensus(
+              question, data.consensus_response, data.differences, data.differences_data,
+              data.result_id || null,
+              consensus_model, shareModelLabels, bookmarkPreviousQuestion,
+              bookmarkPreviousTurn, bookmarkConversation
+            );
+          }
         }
         if (!completedReplay) {
           trackAppEvent("app_consensus_completed", {

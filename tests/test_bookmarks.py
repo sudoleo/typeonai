@@ -2,12 +2,14 @@ import unicodedata
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import bookmarks as bookmarks_router
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
+from app.services import share_snapshots
 from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
 
 
@@ -272,6 +274,88 @@ def test_consensus_save_returns_complete_merged_bookmark():
     assert bookmark["share_result_id"] == "N" * 16
     assert bookmark["consensus_model"] == "Gemini-Pro"
     assert bookmark["model_labels"] == {"Gemini": "Gemini-Pro"}
+
+
+def test_consensus_save_ignores_large_legacy_client_snapshot():
+    """Ignored browser copies must never veto an authoritative run.
+
+    The evidence merger and authoritative snapshot both allow 50 sources. The
+    former request schema allowed only 24, producing the observed intermittent
+    422 before the handler could read the server-owned pending result.
+    """
+    bookmark_id = "source_heavy_run"
+    bookmark_ref = FakeBookmarkRef(bookmark_id, {"responses": {}})
+    fake_db = FakeFirestore(bookmark_ref)
+    app = FastAPI()
+    app.state.limiter = limiter
+    limiter.reset()
+    app.include_router(bookmarks_router.router)
+
+    with (
+        patch.object(bookmarks_router, "verify_user_token", return_value="uid-1"),
+        patch.object(bookmarks_router, "db_firestore", fake_db),
+        patch.object(
+            bookmarks_router,
+            "_authoritative_consensus_payload",
+            return_value={
+                "question": "Who wins?",
+                "consensus": "Authoritative consensus",
+                "differences": "Authoritative differences",
+                "differences_data": None,
+                "sources": [
+                    {"id": f"S{i}", "url": f"https://source-{i}.example"}
+                    for i in range(1, 51)
+                ],
+                "included_models": ["OpenAI: GPT", "Gemini: Gemini"],
+                "model_responses": {"OpenAI": "a", "Gemini": "b"},
+                "result_id": "R" * 16,
+            },
+        ),
+    ):
+        response = TestClient(app).post(
+            "/bookmark/consensus",
+            json={
+                "id_token": "token",
+                "bookmarkId": bookmark_id,
+                "question": "Who wins?",
+                "resultId": "R" * 16,
+                # Deliberately malformed/oversized legacy copies. None of them
+                # is trusted or persisted by this endpoint.
+                "consensusText": {"not": "text"},
+                "differencesText": ["not", "text"],
+                "differencesData": "not-an-object",
+                "sources": [
+                    {"id": f"S{i}", "url": f"https://client-{i}.example"}
+                    for i in range(1, 51)
+                ],
+                "consensusModel": 123,
+                "modelLabels": {"Mistral": None},
+                "modelResponses": ["not", "a", "mapping"],
+            },
+        )
+
+    assert response.status_code == 200
+    bookmark = response.json()["bookmark"]
+    assert bookmark["responses"]["consensus"] == "Authoritative consensus"
+    assert len(bookmark["sources"]) == 50
+
+
+def test_direct_comparison_model_save_accepts_full_evidence_budget():
+    payload = {
+        "id_token": "token",
+        "question": "Compare",
+        "response": "Answer",
+        "modelName": "OpenAI",
+        "mode": "Standard",
+        "sources": [
+            {"id": f"S{i}", "url": f"https://source-{i}.example"}
+            for i in range(1, share_snapshots.MAX_SOURCES + 1)
+        ],
+    }
+    assert bookmarks_router.BookmarkModelRequest.model_validate(payload)
+    payload["sources"].append({"id": "overflow", "url": "https://overflow.example"})
+    with pytest.raises(ValueError):
+        bookmarks_router.BookmarkModelRequest.model_validate(payload)
 
 
 def test_followup_bookmark_keeps_complete_previous_turn_for_restore():
@@ -924,6 +1008,25 @@ def test_bookmark_frontend_prepares_share_and_watch_result():
     assert "prepareBookmarkShareResult(bookmark);" in firebase
     assert "resolveCurrentShareResultId" in share_dialog
     assert "resolveCurrentShareResultId" in watch
+
+
+def test_consensus_frontend_uses_primary_write_and_small_retry_payload():
+    root = Path(__file__).resolve().parents[1]
+    firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
+    consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(
+        encoding="utf-8"
+    )
+    fallback = firebase.split("async function saveBookmarkConsensus(", 1)[1]
+    fallback = fallback.split("window.saveBookmarkConsensus =", 1)[0]
+
+    assert "bookmarkId: context.bookmark.id" in consensus_run
+    assert "data.bookmark_persisted === true && data.bookmark_meta" in consensus_run
+    assert "window.acceptPersistedConsensusBookmark" in firebase
+    assert "keepalive: true" in fallback
+    assert "attempt < 3" in fallback
+    assert "sources:" not in fallback
+    assert "differencesData:" not in fallback
+    assert "modelResponses:" not in fallback
 
 
 def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():

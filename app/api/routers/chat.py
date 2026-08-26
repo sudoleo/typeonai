@@ -1550,6 +1550,95 @@ def consensus(request: Request, data: dict = Body(...)):
             )
             return False
 
+    def persist_consensus_bookmark(
+        consensus_text,
+        differences_text,
+        differences_data,
+        result_id,
+        *,
+        chat_persisted: bool,
+    ) -> Optional[dict]:
+        """Write the sidebar bookmark before the successful result is sent.
+
+        Bookmarking used to start only after the browser received the final
+        consensus event. A closed tab, lost connection, or a rejected legacy
+        copy could therefore leave a completed run without its bookmark. The
+        consensus handler already owns every trusted field, so it is the
+        reliable primary writer; ``/bookmark/consensus`` remains the retry and
+        cached-client compatibility path.
+        """
+        bookmark_id = str(data.get("bookmarkId") or "").strip()
+        if not bookmark_id:
+            return None
+        bookmark_data = {
+            "question": question,
+            "bookmarkId": bookmark_id,
+            "resultId": result_id,
+            "previousQuestion": data.get("previousQuestion") or "",
+            "previousTurn": data.get("previousTurn"),
+        }
+        if chat_persisted and validated_chat_turn_ids is not None:
+            bookmark_data.update({
+                "chatId": validated_chat_turn_ids[0],
+                "turnId": validated_chat_turn_ids[1],
+            })
+        authoritative = {
+            "question": question,
+            "consensus": consensus_text,
+            "differences": differences_text,
+            "differences_data": differences_data,
+            "sources": sanitized_turn_sources,
+            "included_models": [
+                f"{provider}: {allowed_model_labels.get(provider, provider)}"
+                for provider in included_answers
+            ],
+            "model_labels": allowed_model_labels,
+            "consensus_model": consensus_model,
+            "model_responses": included_answers,
+            "vote_subject_id": result_id or "bookmark:" + bookmark_id,
+            "result_id": result_id or "",
+        }
+        try:
+            # Local import avoids coupling router import order while keeping the
+            # shared mutation contract in the bookmark module.
+            from app.api.routers.bookmarks import (
+                _bookmark_meta,
+                persist_authoritative_consensus_bookmark,
+            )
+
+            bookmark = persist_authoritative_consensus_bookmark(
+                uid, bookmark_data, authoritative
+            )
+            return _bookmark_meta(bookmark["id"], bookmark)
+        except Exception as exc:
+            logging.error(
+                "consensus bookmark primary write failed category=%s",
+                safe_exception(exc),
+            )
+            return None
+
+    def add_bookmark_result_fields(
+        payload: dict,
+        consensus_text,
+        differences_text,
+        differences_data,
+        result_id,
+        *,
+        chat_persisted: bool,
+    ) -> None:
+        if not str(data.get("bookmarkId") or "").strip():
+            return
+        bookmark_meta = persist_consensus_bookmark(
+            consensus_text,
+            differences_text,
+            differences_data,
+            result_id,
+            chat_persisted=chat_persisted,
+        )
+        payload["bookmark_persisted"] = bookmark_meta is not None
+        if bookmark_meta is not None:
+            payload["bookmark_meta"] = bookmark_meta
+
     def add_chat_result_fields(
         payload: dict,
         *,
@@ -1717,6 +1806,15 @@ def consensus(request: Request, data: dict = Body(...)):
                 persisted=chat_persisted,
                 state=chat_turn_state,
             )
+            if not stream_failed and not consensus_failed:
+                add_bookmark_result_fields(
+                    payload,
+                    consensus_text,
+                    differences_text,
+                    differences_data,
+                    result_id,
+                    chat_persisted=chat_persisted,
+                )
             payload.update(extra_fields)
             yield sse_pack("final", payload)
 
@@ -1803,6 +1901,15 @@ def consensus(request: Request, data: dict = Body(...)):
         persisted=chat_persisted,
         state=chat_turn_state,
     )
+    if not consensus_failed:
+        add_bookmark_result_fields(
+            response,
+            consensus_answer,
+            differences,
+            differences_data,
+            result_id,
+            chat_persisted=chat_persisted,
+        )
     if usage_result is not None:
         response.update(usage_response_fields(usage_result.snapshot, is_pro))
         response["usage_run_status"] = usage_result.status.value
