@@ -479,10 +479,12 @@ body {
   color: var(--ink-2);
 }
 
-/* An inline source chip is a chip, not an accent-tinted call-out. */
+/* The card footer is a line of text, not a filled bar: painting it
+   --surface-2 laid a page-coloured block across the bottom of every card. */
 .topic-card-link {
   border: 0;
-  background: var(--surface-2);
+  border-top: 1px solid var(--line-soft);
+  background: none;
   color: var(--ink-2);
 }
 
