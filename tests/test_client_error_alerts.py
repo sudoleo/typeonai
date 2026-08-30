@@ -7,6 +7,7 @@ from tests.frontend_order import group_of, loads_before
 
 
 def _client(monkeypatch, captured):
+    limiter.reset()
     monkeypatch.setattr(
         client_errors,
         "send_critical_error_notification",
@@ -44,6 +45,52 @@ def test_client_error_report_is_accepted_and_sanitized(monkeypatch):
         "message": "A browser run failed.",
         "path": "/s/{share_id}",
     }]
+
+
+def test_resource_failure_keeps_only_allowlisted_resource_class(monkeypatch):
+    captured = []
+    client = _client(monkeypatch, captured)
+
+    response = client.post(
+        "/api/client-errors",
+        headers={"Origin": "http://testserver", "Sec-Fetch-Site": "same-origin"},
+        json={
+            "type": "resource_load_failed",
+            "phase": "asset_load",
+            "message": "Failed to load SCRIPT https://private.example/token",
+            "details": "https://private.example/token",
+            "resource_class": "jsdelivr_dependency",
+            "path": "/app",
+        },
+    )
+
+    assert response.status_code == 202
+    assert captured == [{
+        "source": "browser",
+        "type": "resource_load_failed",
+        "phase": "asset_load",
+        "message": "A required browser script or stylesheet failed to load.",
+        "path": "/app",
+        "resource_class": "jsdelivr_dependency",
+    }]
+
+
+def test_resource_failure_drops_unknown_resource_class(monkeypatch):
+    captured = []
+    client = _client(monkeypatch, captured)
+
+    response = client.post(
+        "/api/client-errors",
+        json={
+            "type": "resource_load_failed",
+            "message": "private runtime text",
+            "resource_class": "private-resource@example.test",
+            "path": "/app",
+        },
+    )
+
+    assert response.status_code == 202
+    assert "resource_class" not in captured[0]
 
 
 def test_client_error_report_replaces_unknown_phase_and_route(monkeypatch):

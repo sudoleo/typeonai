@@ -1,5 +1,5 @@
 {
-  "sources": "2ec9ebba88e7",
+  "sources": "521ce5b0d1f8",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -74,7 +74,7 @@
   "scripts": [
     {
       "name": "head",
-      "src": "/static/dist/head.e9307bc65f35.js",
+      "src": "/static/dist/head.a095213a12b1.js",
       "module": false,
       "defer": false
     },

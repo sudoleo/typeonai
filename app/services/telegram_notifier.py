@@ -153,6 +153,7 @@ def _critical_error_message(report: Mapping) -> str:
     phase = _scrub_alert_text(report.get("phase"), limit=80)
     message = _scrub_alert_text(report.get("message") or "No message", limit=700)
     path = _scrub_alert_text(report.get("path"), limit=300)
+    resource_class = _scrub_alert_text(report.get("resource_class"), limit=80)
     details = _scrub_alert_text(report.get("details"), limit=1_200)
     stack = _scrub_alert_text(report.get("stack"), limit=1_800)
     environment = _scrub_alert_text(
@@ -170,6 +171,8 @@ def _critical_error_message(report: Mapping) -> str:
         lines.append(f"Phase: {phase}")
     if path:
         lines.append(f"Path: {path}")
+    if resource_class:
+        lines.append(f"Resource: {resource_class}")
     lines.extend(("", message))
     if details:
         lines.extend(("", f"Details: {details}"))
@@ -190,7 +193,10 @@ def send_critical_error_notification(report: Mapping) -> dict:
     phase = _scrub_alert_text(report.get("phase"), limit=80)
     message = _scrub_alert_text(report.get("message") or "No message", limit=500)
     path = _scrub_alert_text(report.get("path"), limit=200)
-    fingerprint = "\x1f".join((source, error_type, phase, path, message))
+    resource_class = _scrub_alert_text(report.get("resource_class"), limit=80)
+    fingerprint = "\x1f".join(
+        (source, error_type, phase, path, resource_class, message)
+    )
     reservation = _reserve_critical_delivery(fingerprint)
     if reservation != "reserved":
         return {"status": reservation, "attempted_at": attempted_at}

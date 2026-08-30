@@ -119,6 +119,19 @@ def test_critical_error_notification_redacts_and_deduplicates(monkeypatch):
     assert captured[0]["text"].startswith("🚨 consens.io critical error")
 
 
+def test_critical_error_message_includes_safe_resource_class():
+    text = telegram_notifier._critical_error_message({
+        "source": "browser",
+        "type": "resource_load_failed",
+        "phase": "asset_load",
+        "path": "/app",
+        "resource_class": "app_bundle",
+        "message": "A required browser script or stylesheet failed to load.",
+    })
+
+    assert "Resource: app_bundle" in text
+
+
 def test_new_user_registration_notification_is_pii_free(monkeypatch):
     captured = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")

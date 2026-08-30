@@ -30,11 +30,19 @@ _ALLOWED_PHASES = {
     "prepare",
 }
 _GENERIC_MESSAGES = {
-    "resource_load_failed": "A required browser resource failed to load.",
+    "resource_load_failed": "A required browser script or stylesheet failed to load.",
     "run_failed": "A browser run failed.",
     "consensus_failed": "A browser consensus run failed.",
     "unhandled_error": "An unhandled browser error occurred.",
     "unhandled_rejection": "An unhandled browser promise rejection occurred.",
+}
+_ALLOWED_RESOURCE_CLASSES = {
+    "app_bundle",
+    "static_asset",
+    "jsdelivr_dependency",
+    "firebase_dependency",
+    "same_origin_resource",
+    "unknown_resource",
 }
 
 
@@ -102,6 +110,13 @@ def report_client_error(
     phase = raw_phase if raw_phase in _ALLOWED_PHASES else "browser"
     raw_path = _bounded_string(data, "path", 300)
     path = _route_family(raw_path) if raw_path.startswith("/") else "/other"
+    raw_resource_class = _bounded_string(data, "resource_class", 80)
+    resource_class = (
+        raw_resource_class
+        if error_type == "resource_load_failed"
+        and raw_resource_class in _ALLOWED_RESOURCE_CLASSES
+        else ""
+    )
     report = {
         "source": "browser",
         "type": error_type,
@@ -109,5 +124,7 @@ def report_client_error(
         "message": _GENERIC_MESSAGES[error_type],
         "path": path,
     }
+    if resource_class:
+        report["resource_class"] = resource_class
     background_tasks.add_task(send_critical_error_notification, report)
     return {"status": "accepted"}
