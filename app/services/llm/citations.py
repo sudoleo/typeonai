@@ -116,6 +116,28 @@ def _source_key(url: str | None, title: str | None = None) -> str:
     return normalize_url(url) or (title or "").strip().lower()
 
 
+# OpenRouter legt in `url_citation.content` den ausgelesenen Seitentext ab,
+# nicht den zitierten Satz: gemessen bis ~4.000 Zeichen je Quelle und
+# 5.000-10.000 je Antwort. Ungekuerzt stand damit die halbe Seite in der
+# Quellenliste -- der Hover-Teaser klemmt per CSS auf drei Zeilen, die Liste
+# unter der Antwort tut das nicht -- und jeder SSE-Frame trug sie mit. Ein
+# Teaser braucht einen Satz, keine Seite; der Rest steht hinter dem Link.
+SOURCE_SNIPPET_MAX_CHARS = 300
+
+
+def clip_snippet(value: Any) -> str:
+    text = " ".join(str(value or "").split())
+    if len(text) <= SOURCE_SNIPPET_MAX_CHARS:
+        return text
+    cut = text[:SOURCE_SNIPPET_MAX_CHARS]
+    # An der letzten Wortgrenze schneiden, solange dabei nicht mehr als ein
+    # Fuenftel des Teasers verloren geht.
+    space = cut.rfind(" ")
+    if space >= SOURCE_SNIPPET_MAX_CHARS * 0.8:
+        cut = cut[:space]
+    return cut.rstrip(" ,;:.-") + "…"
+
+
 def _fallback_title(url: str | None, title: str | None = None) -> str:
     if title:
         return str(title).strip()
@@ -150,9 +172,10 @@ def _ensure_source(
         "title": _fallback_title(url, title),
         "url": url or "",
     }
-    if snippet:
-        source["snippet"] = str(snippet).strip()
-        source["extract"] = str(snippet).strip()
+    clipped = clip_snippet(snippet) if snippet else ""
+    if clipped:
+        source["snippet"] = clipped
+        source["extract"] = clipped
     if provider:
         source["provider"] = provider
     sources.append(source)
