@@ -1,14 +1,11 @@
 # consens.io
 
 <p align="center">
-  <img src="static/favicon.png" width="72" alt="consens.io">
-</p>
-
-<p align="center">
   <strong>Multi-model consensus for large language models.</strong>
 </p>
 
 <p align="center">
+  <img src="static/favicon.png" height="30" alt="consens.io">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/chatgpt.png" height="28" alt="OpenAI">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/claude.png" height="28" alt="Anthropic">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/gemini.png" height="28" alt="Google Gemini">&nbsp;&nbsp;&nbsp;
