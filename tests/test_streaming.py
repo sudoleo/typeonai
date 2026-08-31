@@ -367,7 +367,7 @@ class OpenRouterStreamTests(unittest.TestCase):
 class ConsensusStreamTests(unittest.TestCase):
     def test_invalid_consensus_engine(self):
         events = list(stream_consensus(
-            "Q?", "a", "b", None, None, None, None,
+            "Q?", {"openai": "a", "mistral": "b"},
             excluded_models=[],
             consensus_model="DoesNotExist",
             api_keys={},
@@ -377,7 +377,7 @@ class ConsensusStreamTests(unittest.TestCase):
 
     def test_differences_without_answers(self):
         events = list(stream_differences(
-            None, None, None, None, None, None,
+            {},
             consensus_answer="c",
             api_keys={},
             differences_model="OpenAI",
@@ -387,7 +387,7 @@ class ConsensusStreamTests(unittest.TestCase):
 
     def test_invalid_differences_engine(self):
         events = list(stream_differences(
-            "answer one", "answer two", None, None, None, None,
+            {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="c",
             api_keys={},
             differences_model="DoesNotExist",
@@ -398,7 +398,7 @@ class ConsensusStreamTests(unittest.TestCase):
 
     def test_invalid_engine_final_is_flagged_as_error(self):
         events = list(stream_consensus(
-            "Q?", "a", "b", None, None, None, None,
+            "Q?", {"openai": "a", "mistral": "b"},
             excluded_models=[],
             consensus_model="DoesNotExist",
             api_keys={},
@@ -413,7 +413,7 @@ class ConsensusRetryTests(unittest.TestCase):
             side_effect=fake_engine,
         ) as patched:
             events = list(stream_consensus(
-                "Q?", "a", "b", None, None, None, None,
+                "Q?", {"openai": "a", "mistral": "b"},
                 excluded_models=[],
                 consensus_model="OpenAI",
                 api_keys={"OpenRouter": "sk-or-test"},

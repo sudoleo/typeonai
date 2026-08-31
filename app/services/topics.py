@@ -74,14 +74,11 @@ _RUMOR_DOMAINS = {
     "kalshi.com", "polymarket.com", "manifold.markets", "myriad.markets",
 }
 _INDIRECT_HOSTS = {"vertexaisearch.cloud.google.com"}
-PROVIDER_ORDER = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
+PROVIDER_ORDER = tuple(cfg.PROVIDERS)
+# Anzeigenamen der Registry, mit den ausgeschriebenen Varianten der Topic-Seiten.
 PROVIDER_LABELS = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
+    **cfg.PROVIDER_LABEL_BY_ID,
     "gemini": "Google Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
 }
 TOPIC_RUN_LEASE_MINUTES = 30
 

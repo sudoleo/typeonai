@@ -40,8 +40,8 @@ def test_neutral_pipeline_owns_fanout_synthesis_parsing_and_scoring():
 
     def synthesize(*args, **kwargs):
         assert args[0] == "Question"
-        assert args[1] == "openai answer"
-        assert args[2] == "mistral answer"
+        assert args[1]["openai"] == "openai answer"
+        assert args[1]["mistral"] == "mistral answer"
         return "Consensus"
 
     def judge(*args, **kwargs):
@@ -74,7 +74,7 @@ def test_neutral_pipeline_can_select_the_first_successful_provider_as_engine():
         return {"text": f"{provider} answer", "sources": []}
 
     def synthesize(*args, **kwargs):
-        assert args[8] == "Mistral"
+        assert args[3] == "Mistral"
         return "Consensus"
 
     result = run_consensus_pipeline(

@@ -24,6 +24,16 @@ ANSWERS = {
     "answer_grok": "sixth candidate text",
 }
 
+# Feldname der Testfixture -> Familie der Provider-Registry.
+ANSWER_FIELD_BY_PROVIDER = {
+    "openai": "answer_openai",
+    "mistral": "answer_mistral",
+    "anthropic": "answer_claude",
+    "gemini": "answer_gemini",
+    "deepseek": "answer_deepseek",
+    "grok": "answer_grok",
+}
+
 
 def build_prompt(
     excluded_models=None,
@@ -36,12 +46,10 @@ def build_prompt(
     answers.update(overrides)
     return _build_consensus_prompt(
         "What is the answer?",
-        answers["answer_openai"],
-        answers["answer_mistral"],
-        answers["answer_claude"],
-        answers["answer_gemini"],
-        answers["answer_deepseek"],
-        answers["answer_grok"],
+        {
+            provider: answers[field]
+            for provider, field in ANSWER_FIELD_BY_PROVIDER.items()
+        },
         excluded_models or [],
         model_sources=model_sources,
         shuffle=shuffle,
@@ -157,7 +165,7 @@ class QueryConsensusFallbackTests(unittest.TestCase):
             side_effect=engine,
         ) as patched:
             result = query_consensus(
-                "Q?", "a", "b", None, None, None, None,
+                "Q?", {"openai": "a", "mistral": "b"},
                 excluded_models=[],
                 consensus_model="OpenAI",
                 api_keys=api_keys,
@@ -222,7 +230,7 @@ class StreamConsensusFallbackTests(unittest.TestCase):
             side_effect=fake_engine,
         ):
             events = list(stream_consensus(
-                "Q?", "a", "b", None, None, None, None,
+                "Q?", {"openai": "a", "mistral": "b"},
                 excluded_models=[],
                 consensus_model="OpenAI",
                 api_keys={"OpenRouter": "sk-or"},

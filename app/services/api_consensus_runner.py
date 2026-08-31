@@ -48,14 +48,7 @@ from app.services.usage_repository import (
 )
 
 
-PROVIDER_ALLOWED_ATTR = {
-    "openai": "ALLOWED_OPENAI_MODELS",
-    "mistral": "ALLOWED_MISTRAL_MODELS",
-    "anthropic": "ALLOWED_ANTHROPIC_MODELS",
-    "gemini": "ALLOWED_GEMINI_MODELS",
-    "deepseek": "ALLOWED_DEEPSEEK_MODELS",
-    "grok": "ALLOWED_GROK_MODELS",
-}
+
 
 
 api_run_repository = FirestoreApiRunRepository(db_firestore)
@@ -74,14 +67,19 @@ _retention_backfilled = False
 
 def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
     preset = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET])
-    providers = {provider: preset[provider] for provider in PROVIDER_ORDER}
+    # Nur die Familien, die das Preset auch besetzt.
+    providers = {
+        provider: preset[provider]
+        for provider in PROVIDER_ORDER
+        if provider in preset
+    }
     if len(providers) < 2:
         raise ValueError("At least two API providers are required")
     consensus_model = cfg.DEEP_THINK_CONSENSUS_MODEL if deep_think else preset["consensus"]
     for provider, model in providers.items():
         validate_model(
             model,
-            getattr(cfg, PROVIDER_ALLOWED_ATTR[provider]),
+            cfg.PROVIDERS[provider].models,
             PROVIDER_LABELS[provider],
             is_pro=is_pro,
         )

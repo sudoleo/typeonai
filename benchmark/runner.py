@@ -1033,12 +1033,7 @@ def _default_consensus_fn(api_keys: dict, consensus_model: str):
     def _fn(question: str, answers: dict, model_sources=None) -> str:
         return query_consensus(
             question,
-            answers.get("openai", ""),
-            answers.get("mistral", ""),
-            answers.get("anthropic", ""),
-            answers.get("gemini", ""),
-            answers.get("deepseek", ""),
-            answers.get("grok", ""),
+            {provider: answers.get(provider, "") for provider in cfg.PROVIDERS},
             excluded_models=[],
             consensus_model=consensus_model,
             api_keys=api_keys,
@@ -1077,6 +1072,11 @@ def _consensus_prompt_template() -> str:
     """
     from app.services.llm.consensus_engine import _build_consensus_prompt
 
+    question, *answers = _CONSENSUS_TEMPLATE_PLACEHOLDERS
     return _build_consensus_prompt(
-        *_CONSENSUS_TEMPLATE_PLACEHOLDERS, [], model_sources=None, shuffle=False
+        question,
+        dict(zip(cfg.PROVIDERS, answers)),
+        [],
+        model_sources=None,
+        shuffle=False,
     )

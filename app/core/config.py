@@ -106,7 +106,10 @@ MISTRAL_PRO_MODEL = "mistral-medium-3-5"
 DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
 ANTHROPIC_PRO_MODEL = "claude-opus-4-8"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
+GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
+GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
+GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
 # Basis-Default wie bei jeder anderen Familie das guenstige Modell. Stand hier
@@ -122,28 +125,105 @@ DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_FLASH_MODEL
 GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"
 GROK_FAST_MODEL = GROK_NO_REASONING_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
+# Modelle hinter den "<Familie>-Pro"-Aliassen, soweit sie nicht schon oben
+# stehen. Bewusst benannt, damit die Provider-Registry ohne Stringliterale
+# auskommt.
+OPENAI_PRO_MODEL = "gpt-5.5"
+GROK_PRO_MODEL = "grok-4.3"
+
+# ---------------------------------------------------------------------------
+# Provider-Registry: die eine Quelle fuer alles, was je Modellfamilie gilt.
+# Eine neue Familie ist ein Eintrag hier plus ihre Modelle in der Admin-DB --
+# nicht ein Dutzend paralleler Dicts. Die abgeleiteten Strukturen darunter
+# (Defaults, Labels, OpenRouter-Praefixe, Judge-Basis, Consensus-Aliasse)
+# behalten ihre bisherigen Namen, weil Module und Tests sie direkt importieren.
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class ProviderConfig:
+    key: str
+    label: str
+    openrouter_prefix: str
+    # Guenstiges Standardmodell der Familie (Alias "<Label>") und Premium-
+    # Modell (Alias "<Label>-Pro"). Der Basis-Default ist IMMER das guenstige
+    # Modell; wo Pro gewollt ist, steht es ausdruecklich da.
+    base_model: str
+    pro_model: str
+    # Erlaubte Modelle. Wird von der Admin-Konfiguration IN PLACE mutiert --
+    # die ALLOWED_*_MODELS-Aliasse zeigen auf genau dieses Set.
+    models: set[str] = field(default_factory=set)
+    # Modelle, die auch nach einem Admin-Override erlaubt bleiben muessen,
+    # weil Presets/Aliasse/Deep-Think auf sie zeigen (base/pro implizit).
+    required_models: frozenset[str] = frozenset()
+
+
+def _provider(key, label, prefix, base, pro, models, required=()):
+    return ProviderConfig(
+        key=key,
+        label=label,
+        openrouter_prefix=prefix,
+        base_model=base,
+        pro_model=pro,
+        models=set(models),
+        required_models=frozenset({base, pro, *required}),
+    )
+
+
+PROVIDERS: dict[str, ProviderConfig] = {
+    provider.key: provider
+    for provider in (
+        _provider(
+            "openai", "OpenAI", "openai/", DEFAULT_OPENAI_MODEL, OPENAI_PRO_MODEL,
+            {
+                "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
+                "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
+                OPENAI_PRO_MODEL, DEFAULT_OPENAI_MODEL,
+                OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
+            },
+            required=(OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL),
+        ),
+        _provider(
+            "mistral", "Mistral", "mistralai/", DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL,
+            {DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL},
+        ),
+        _provider(
+            "anthropic", "Anthropic", "anthropic/", DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL,
+            {DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL},
+        ),
+        _provider(
+            "gemini", "Gemini", "google/", DEFAULT_GEMINI_MODEL, GEMINI_PRO_MODEL,
+            {
+                GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
+                "gemini-3.1-flash-lite-preview", "gemini-2.5-flash",
+                GEMINI_35_FLASH_MODEL,
+                GEMINI_PRO_MODEL, "gemini-2.5-pro",
+            },
+            required=(GEMINI_36_FLASH_MODEL, GEMINI_35_FLASH_MODEL),
+        ),
+        _provider(
+            "deepseek", "DeepSeek", "deepseek/", DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_PRO_MODEL,
+            {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL},
+        ),
+        _provider(
+            "grok", "Grok", "x-ai/", DEFAULT_GROK_MODEL, GROK_PRO_MODEL,
+            {
+                GROK_NO_REASONING_MODEL, "grok-4.20", DEFAULT_GROK_MODEL,
+                GROK_PRO_MODEL,
+            },
+        ),
+    )
+}
+
+def _all_allowed_models() -> set[str]:
+    """Alle erlaubten Modelle ueber alle Familien."""
+    return set().union(*(provider.models for provider in PROVIDERS.values()))
+
 
 DEFAULT_MODEL_BY_PROVIDER = {
-    "openai": DEFAULT_OPENAI_MODEL,
-    "mistral": DEFAULT_MISTRAL_MODEL,
-    "anthropic": DEFAULT_ANTHROPIC_MODEL,
-    "gemini": DEFAULT_GEMINI_MODEL,
-    "deepseek": DEFAULT_DEEPSEEK_MODEL,
-    "grok": DEFAULT_GROK_MODEL,
+    provider.key: provider.base_model for provider in PROVIDERS.values()
 }
 
-GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
-GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
-GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
 # Defaults fuer Nutzer ohne Pro: durchweg die guenstigen Basis-Modelle.
-FREE_DEFAULT_MODEL_BY_PROVIDER = {
-    "openai": DEFAULT_OPENAI_MODEL,
-    "mistral": DEFAULT_MISTRAL_MODEL,
-    "anthropic": DEFAULT_ANTHROPIC_MODEL,
-    "gemini": DEFAULT_GEMINI_MODEL,
-    "deepseek": DEEPSEEK_FLASH_MODEL,
-    "grok": DEFAULT_GROK_MODEL,
-}
+FREE_DEFAULT_MODEL_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
 
 # Unveraenderliche Basis fuer den Free-Default je Provider. Der Admin kann den
 # Free-Default pro Provider in Firestore (Feld "defaults") ueberschreiben; ohne
@@ -170,12 +250,7 @@ WATCH_MODELS_BY_TIER = {
 }
 
 PROVIDER_LABEL_BY_ID = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
+    provider.key: provider.label for provider in PROVIDERS.values()
 }
 
 
@@ -212,32 +287,29 @@ DEEP_THINK_CONSENSUS_MODEL = _BASE_DEEP_THINK_CONSENSUS_MODEL
 # "judge_models") umstellbar; ungueltige Werte fallen je Provider auf die
 # Basis zurueck (siehe apply_judge_models). WICHTIG: das dict wird in-place
 # mutiert, damit Modul-Aliasse (consensus_engine, resolve_engine) live bleiben.
-_BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {
-    "openai": DEFAULT_OPENAI_MODEL,
-    "mistral": DEFAULT_MISTRAL_MODEL,
-    "anthropic": DEFAULT_ANTHROPIC_MODEL,
-    "gemini": GEMINI_FLASH_MODEL,
-    "deepseek": DEFAULT_DEEPSEEK_MODEL,
-    "grok": DEFAULT_GROK_MODEL,
-}
+_BASE_DIFFERENCES_JUDGE_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
+
+# Anzeige-Reihenfolge der Familien-Aliasse im Consensus-Picker. Familien ohne
+# Eintrag haengen in Registry-Reihenfolge hinten an.
+_CONSENSUS_ALIAS_ORDER = ["grok", "openai", "anthropic", "mistral", "gemini", "deepseek"]
+
+
+def _consensus_alias_providers() -> list[ProviderConfig]:
+    ordered = [PROVIDERS[key] for key in _CONSENSUS_ALIAS_ORDER if key in PROVIDERS]
+    listed = {provider.key for provider in ordered}
+    ordered += [
+        provider for provider in PROVIDERS.values() if provider.key not in listed
+    ]
+    return ordered
+
 
 DEFAULT_CONSENSUS_MODELS = [
     GEMINI_35_FLASH_MODEL,
     GEMINI_36_FLASH_MODEL,
     OPENAI_LUNA_MODEL,
-    "Grok",
-    "OpenAI",
-    "Anthropic",
-    "Mistral",
-    "Gemini",
-    "DeepSeek",
-    "Grok-Pro",
-    "OpenAI-Pro",
-    "Anthropic-Pro",
-    "Mistral-Pro",
-    "Gemini-Pro",
-    "DeepSeek-Pro",
+    *(provider.label for provider in _consensus_alias_providers()),
+    *(f"{provider.label}-Pro" for provider in _consensus_alias_providers()),
 ]
 
 ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
@@ -312,23 +384,18 @@ CONSENSUS_PRESET_MODELS = {
 DEFAULT_CONSENSUS_PRESET = "balanced"
 
 VALID_LEADERBOARD_MODELS = {
-    "OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok",
-    "OpenAI-Pro", "Mistral-Pro", "Anthropic-Pro", "Gemini-Pro", "DeepSeek-Pro", "Grok-Pro",
+    label
+    for provider in PROVIDERS.values()
+    for label in (provider.label, f"{provider.label}-Pro")
 }
 
 CONSENSUS_ENGINE_ALIASES = {
-    "OpenAI": ("openai", DEFAULT_OPENAI_MODEL),
-    "OpenAI-Pro": ("openai", "gpt-5.5"),
-    "Mistral": ("mistral", DEFAULT_MISTRAL_MODEL),
-    "Mistral-Pro": ("mistral", MISTRAL_PRO_MODEL),
-    "Anthropic": ("anthropic", DEFAULT_ANTHROPIC_MODEL),
-    "Anthropic-Pro": ("anthropic", ANTHROPIC_PRO_MODEL),
-    "Gemini": ("gemini", GEMINI_FLASH_MODEL),
-    "Gemini-Pro": ("gemini", GEMINI_PRO_MODEL),
-    "DeepSeek": ("deepseek", DEFAULT_DEEPSEEK_MODEL),
-    "DeepSeek-Pro": ("deepseek", DEEPSEEK_PRO_MODEL),
-    "Grok": ("grok", DEFAULT_GROK_MODEL),
-    "Grok-Pro": ("grok", "grok-4.3"),
+    alias: (provider.key, model)
+    for provider in PROVIDERS.values()
+    for alias, model in (
+        (provider.label, provider.base_model),
+        (f"{provider.label}-Pro", provider.pro_model),
+    )
 }
 
 # Pro-Judges der Differences-/Resolve-Engine je Provider. Basis sind die
@@ -336,12 +403,7 @@ CONSENSUS_ENGINE_ALIASES = {
 # "judge_models_pro") umstellbar. Wie DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 # in-place mutiert (Modul-Aliasse bleiben live).
 _BASE_PRO_JUDGE_BY_PROVIDER = {
-    "openai": CONSENSUS_ENGINE_ALIASES["OpenAI-Pro"][1],
-    "mistral": CONSENSUS_ENGINE_ALIASES["Mistral-Pro"][1],
-    "anthropic": CONSENSUS_ENGINE_ALIASES["Anthropic-Pro"][1],
-    "gemini": CONSENSUS_ENGINE_ALIASES["Gemini-Pro"][1],
-    "deepseek": CONSENSUS_ENGINE_ALIASES["DeepSeek-Pro"][1],
-    "grok": CONSENSUS_ENGINE_ALIASES["Grok-Pro"][1],
+    provider.key: provider.pro_model for provider in PROVIDERS.values()
 }
 PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
@@ -369,15 +431,16 @@ LEADERBOARD_MODEL_ALIASES = {
     "Claude": "Anthropic",
 }
 
-ALLOWED_OPENAI_MODELS = {
-    "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
-    "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
-    "gpt-5.5", "gpt-5.4-mini", OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
-}
+# Die erlaubten Modelle stehen in der Provider-Registry. Diese Namen bleiben
+# als Aliasse auf DASSELBE Set-Objekt bestehen: Admin-Loads mutieren in place,
+# und Module/Tests importieren sie direkt.
+ALLOWED_OPENAI_MODELS = PROVIDERS["openai"].models
+ALLOWED_MISTRAL_MODELS = PROVIDERS["mistral"].models
+ALLOWED_ANTHROPIC_MODELS = PROVIDERS["anthropic"].models
+ALLOWED_GEMINI_MODELS = PROVIDERS["gemini"].models
+ALLOWED_DEEPSEEK_MODELS = PROVIDERS["deepseek"].models
+ALLOWED_GROK_MODELS = PROVIDERS["grok"].models
 
-ALLOWED_MISTRAL_MODELS = {
-    "mistral-small-latest", MISTRAL_PRO_MODEL,
-}
 MISTRAL_REASONING_MODELS = {
     DEFAULT_MISTRAL_MODEL,
     MISTRAL_PRO_MODEL,
@@ -387,26 +450,6 @@ MISTRAL_REASONING_MODELS = {
 DEPRECATED_MISTRAL_MODELS = {
     "devstral-small-2507", "devstral-small-latest", "devstral-medium-2507",
     "mistral-large-2411", "pixtral-large-2411", "pixtral-large-latest",
-}
-
-ALLOWED_ANTHROPIC_MODELS = {
-    "claude-haiku-4-5", ANTHROPIC_PRO_MODEL,
-}
-
-ALLOWED_GEMINI_MODELS = {
-    GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
-    "gemini-3.1-flash-lite-preview", "gemini-2.5-flash",
-    GEMINI_35_FLASH_MODEL,
-    GEMINI_PRO_MODEL, "gemini-2.5-pro",
-}
-
-ALLOWED_DEEPSEEK_MODELS = {
-    DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL,
-}
-
-ALLOWED_GROK_MODELS = {
-    GROK_NO_REASONING_MODEL,
-    "grok-4.20", "grok-4.20-non-reasoning", "grok-4.3",
 }
 
 # Alte xAI-Aliasse, die seit Mai 2026 ohnehin auf Grok 4.3 umgeleitet werden.
@@ -462,10 +505,20 @@ REMOVED_MODEL_IDS = {
 
 
 def canonical_model_id(model_id: str | None, provider: str | None = None) -> str:
+    """Migriert eine gespeicherte Modell-ID auf ihre aktuelle Form.
+
+    Ohne Provider werden die Migrationen aller Familien geprueft -- Aufrufer
+    ohne Familienkontext (Consensus-Werte, Preset-Engines) kommen sonst mit
+    einer toten ID durch."""
     value = str(model_id or "").strip()
-    if provider in (None, "grok"):
-        return GROK_MODEL_MIGRATIONS.get(value, value)
-    return value
+    if provider is None:
+        for migrations in PROVIDER_MODEL_MIGRATIONS.values():
+            if value in migrations:
+                return migrations[value]
+        return value
+    return PROVIDER_MODEL_MIGRATIONS.get(
+        str(provider).lower(), {}
+    ).get(value, value)
 
 
 def canonical_model_ids(models, provider: str) -> list[str]:
@@ -477,35 +530,30 @@ def canonical_model_ids(models, provider: str) -> list[str]:
 
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner"}
 
+# Familienspezifische Hygiene. Jede Familie ohne Eintrag braucht keine: der
+# generische Lade-/Initialisierungspfad fragt hier nach, statt pro Familie
+# einen eigenen Block zu fuehren.
+PROVIDER_MODEL_MIGRATIONS: dict[str, dict[str, str]] = {
+    "grok": GROK_MODEL_MIGRATIONS,
+}
+PROVIDER_DEPRECATED_MODELS: dict[str, set[str]] = {
+    "mistral": DEPRECATED_MISTRAL_MODELS,
+    "deepseek": DEPRECATED_DEEPSEEK_MODELS,
+    "grok": DEPRECATED_GROK_MODELS,
+}
+
 def ensure_default_models_allowed():
     """Initialisiert ausschliesslich die Code-Fallback-Konfiguration.
 
     Firestore-Providerlisten sind nach einem erfolgreichen Load autoritativ;
     diese Funktion darf deshalb dort nicht erneut aufgerufen werden.
     """
-    ALLOWED_OPENAI_MODELS.update({
-        DEFAULT_OPENAI_MODEL, OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, "gpt-5.5"
-    })
-    ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
-    ALLOWED_MISTRAL_MODELS.add(DEFAULT_MISTRAL_MODEL)
-    ALLOWED_MISTRAL_MODELS.add(MISTRAL_PRO_MODEL)
-    ALLOWED_ANTHROPIC_MODELS.add(DEFAULT_ANTHROPIC_MODEL)
-    ALLOWED_ANTHROPIC_MODELS.add(ANTHROPIC_PRO_MODEL)
-    ALLOWED_GEMINI_MODELS.add(DEFAULT_GEMINI_MODEL)
-    ALLOWED_GEMINI_MODELS.add(GEMINI_36_FLASH_MODEL)
-    ALLOWED_GEMINI_MODELS.add(GEMINI_35_FLASH_MODEL)
-    ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
-    ALLOWED_DEEPSEEK_MODELS.update({DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL})
-    ALLOWED_GROK_MODELS.update({
-        DEFAULT_GROK_MODEL,
-        "grok-4.3",
-    })
-    ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-    for models in (
-        ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS,
-        ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS,
-    ):
-        models.difference_update(REMOVED_MODEL_IDS)
+    for provider in PROVIDERS.values():
+        provider.models.difference_update(
+            PROVIDER_DEPRECATED_MODELS.get(provider.key, set())
+        )
+        provider.models.update(provider.required_models)
+        provider.models.difference_update(REMOVED_MODEL_IDS)
 
 ensure_default_models_allowed()
 
@@ -517,17 +565,16 @@ PREMIUM_MODELS = {
     MISTRAL_PRO_MODEL,
     GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
-    "grok-4.20", "grok-4.3",
+    "grok-4.20", GROK_PRO_MODEL,
 }
+# Die Pro-Modelle der Registry sind per Definition Premium.
+PREMIUM_MODELS.update(provider.pro_model for provider in PROVIDERS.values())
 PREMIUM_MODELS.difference_update(REMOVED_MODEL_IDS)
 PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
 PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
 
-ALL_ALLOWED_MODELS = (
-    ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
-    ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
-)
+ALL_ALLOWED_MODELS = _all_allowed_models()
 
 MODEL_LABEL_OVERRIDES = {
     OPENAI_LUNA_MODEL: "GPT-5.6 Luna",
@@ -557,18 +604,20 @@ MODEL_LABEL_OVERRIDES = {
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
 
+# Request-Zusaetze je Modell-ID. Reine Daten: eine Reasoning-Variante ist ein
+# Eintrag hier, kein Sonderfall in rebuild_model_configs.
+MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
+    GROK_NO_REASONING_MODEL: {"reasoning": {"effort": "none"}},
+    GROK_PRO_MODEL: {"reasoning": {"effort": "high"}},
+}
+
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
 # Provider-Requests laufen dagegen über OpenRouter und benötigen dessen
 # kanonische Publisher-Präfixe. Diese Auflösung bleibt absichtlich an einer
 # Stelle, damit neue erlaubte IDs nicht in einzelnen Flows Sonderbehandlung
 # brauchen.
 OPENROUTER_MODEL_PREFIXES = {
-    "openai": "openai/",
-    "mistral": "mistralai/",
-    "anthropic": "anthropic/",
-    "gemini": "google/",
-    "deepseek": "deepseek/",
-    "grok": "x-ai/",
+    provider.key: provider.openrouter_prefix for provider in PROVIDERS.values()
 }
 OPENROUTER_MODEL_ALIASES = {
     ("mistral", "mistral-small-latest"): "mistral-small-2603",
@@ -651,14 +700,7 @@ def _fallback_label(model_id: str) -> str:
 
 
 def _provider_allowed_sets() -> dict[str, set]:
-    return {
-        "openai": ALLOWED_OPENAI_MODELS,
-        "mistral": ALLOWED_MISTRAL_MODELS,
-        "anthropic": ALLOWED_ANTHROPIC_MODELS,
-        "gemini": ALLOWED_GEMINI_MODELS,
-        "deepseek": ALLOWED_DEEPSEEK_MODELS,
-        "grok": ALLOWED_GROK_MODELS,
-    }
+    return {provider.key: provider.models for provider in PROVIDERS.values()}
 
 
 def rebuild_model_configs():
@@ -672,28 +714,8 @@ def rebuild_model_configs():
                 label=_fallback_label(model_id),
                 is_free=model_id not in PREMIUM_MODELS,
                 is_pro=model_id in PREMIUM_MODELS,
+                request_config=dict(MODEL_REQUEST_CONFIG.get(model_id, {})),
             )
-
-    MODEL_CONFIGS.update({
-        GROK_NO_REASONING_MODEL: ModelConfig(
-            internal_id=GROK_NO_REASONING_MODEL,
-            provider="grok",
-            api_model=openrouter_model_id(GROK_NO_REASONING_MODEL, "grok"),
-            label=_fallback_label(GROK_NO_REASONING_MODEL),
-            is_free=GROK_NO_REASONING_MODEL not in PREMIUM_MODELS,
-            is_pro=GROK_NO_REASONING_MODEL in PREMIUM_MODELS,
-            request_config={"reasoning": {"effort": "none"}},
-        ),
-        "grok-4.3": ModelConfig(
-            internal_id="grok-4.3",
-            provider="grok",
-            api_model=openrouter_model_id("grok-4.3", "grok"),
-            label=_fallback_label("grok-4.3"),
-            is_free="grok-4.3" not in PREMIUM_MODELS,
-            is_pro="grok-4.3" in PREMIUM_MODELS,
-            request_config={"reasoning": {"effort": "high"}},
-        ),
-    })
 
 
 def virtual_model_ids() -> dict[str, str]:
@@ -1330,7 +1352,7 @@ def _restore_runtime_config(state: dict) -> None:
     global ALL_ALLOWED_MODELS, DEEP_THINK_CONSENSUS_MODEL
     for provider, target in _provider_allowed_sets().items():
         target.clear()
-        target.update(state["providers"][provider])
+        target.update(state["providers"].get(provider, set()))
     PREMIUM_MODELS.clear()
     PREMIUM_MODELS.update(state["premium"])
     ALLOWED_CONSENSUS_MODELS.clear()
@@ -1361,7 +1383,7 @@ def _restore_runtime_config(state: dict) -> None:
     MEMORY_EDIT_CONFIG.clear()
     MEMORY_EDIT_CONFIG.update(state["memory_edit_config"])
     _sync_limit_constants()
-    ALL_ALLOWED_MODELS = set().union(*_provider_allowed_sets().values())
+    ALL_ALLOWED_MODELS = _all_allowed_models()
     rebuild_model_configs()
 
 
@@ -1381,59 +1403,28 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
         if doc.exists:
             data = doc.to_dict()
             
-            # Update OpenAI
-            if "openai" in data:
-                ALLOWED_OPENAI_MODELS.clear()
-                ALLOWED_OPENAI_MODELS.update(data["openai"])
-                ALLOWED_OPENAI_MODELS.difference_update(REMOVED_MODEL_IDS)
-            
-            # Update Mistral
-            if "mistral" in data:
-                ALLOWED_MISTRAL_MODELS.clear()
-                ALLOWED_MISTRAL_MODELS.update(data["mistral"])
-                ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
-                ALLOWED_MISTRAL_MODELS.difference_update(REMOVED_MODEL_IDS)
-            
-            # Update Anthropic
-            if "anthropic" in data:
-                ALLOWED_ANTHROPIC_MODELS.clear()
-                ALLOWED_ANTHROPIC_MODELS.update(data["anthropic"])
-                ALLOWED_ANTHROPIC_MODELS.difference_update(REMOVED_MODEL_IDS)
-            
-            # Update Gemini
-            if "gemini" in data:
-                ALLOWED_GEMINI_MODELS.clear()
-                ALLOWED_GEMINI_MODELS.update(data["gemini"])
-                ALLOWED_GEMINI_MODELS.difference_update(REMOVED_MODEL_IDS)
-            
-            # Update DeepSeek
-            if "deepseek" in data:
-                ALLOWED_DEEPSEEK_MODELS.clear()
-                ALLOWED_DEEPSEEK_MODELS.update(data["deepseek"])
-                ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
-                ALLOWED_DEEPSEEK_MODELS.difference_update(REMOVED_MODEL_IDS)
-            
-            # Update Grok
-            if "grok" in data:
-                ALLOWED_GROK_MODELS.clear()
-                ALLOWED_GROK_MODELS.update(canonical_model_ids(data["grok"], "grok"))
-                ALLOWED_GROK_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-                ALLOWED_GROK_MODELS.difference_update(REMOVED_MODEL_IDS)
+            # Modellliste je Familie: Firestore ist autoritativ, danach
+            # Migration alter IDs und Abzug der stillgelegten.
+            for provider in PROVIDERS.values():
+                incoming = data.get(provider.key)
+                if incoming is None:
+                    continue
+                provider.models.clear()
+                provider.models.update(canonical_model_ids(incoming, provider.key))
+                provider.models.difference_update(
+                    PROVIDER_DEPRECATED_MODELS.get(provider.key, set())
+                )
+                provider.models.difference_update(REMOVED_MODEL_IDS)
 
             # Update Premium
             if "premium" in data:
                 PREMIUM_MODELS.clear()
                 PREMIUM_MODELS.update(data["premium"])
                 PREMIUM_MODELS.difference_update(REMOVED_MODEL_IDS)
-                PREMIUM_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
-                PREMIUM_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
-                PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
-                configured_models = set().union(*_provider_allowed_sets().values())
-                PREMIUM_MODELS.intersection_update(configured_models)
-            ALL_ALLOWED_MODELS = (
-                ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
-                ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
-            )
+                for deprecated in PROVIDER_DEPRECATED_MODELS.values():
+                    PREMIUM_MODELS.difference_update(deprecated)
+                PREMIUM_MODELS.intersection_update(_all_allowed_models())
+            ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
 
             # Preset-Model-Sets brauchen die finalen Provider-/Tier-Listen und
@@ -1495,21 +1486,16 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                     timeout=5.0, retry=None,
                 )
             # Update ALL_ALLOWED_MODELS
-            ALL_ALLOWED_MODELS = (
-                ALLOWED_OPENAI_MODELS | ALLOWED_MISTRAL_MODELS | ALLOWED_ANTHROPIC_MODELS |
-                ALLOWED_GEMINI_MODELS | ALLOWED_DEEPSEEK_MODELS | ALLOWED_GROK_MODELS
-            )
+            ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
             logging.info("Models configuration loaded from Firestore successfully.")
         elif persist_backfill:
             # If document doesn't exist, create it with default values
             doc_ref.set({
-                "openai": list(ALLOWED_OPENAI_MODELS),
-                "mistral": list(ALLOWED_MISTRAL_MODELS),
-                "anthropic": list(ALLOWED_ANTHROPIC_MODELS),
-                "gemini": list(ALLOWED_GEMINI_MODELS),
-                "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
-                "grok": list(ALLOWED_GROK_MODELS),
+                **{
+                    provider.key: sorted(provider.models)
+                    for provider in PROVIDERS.values()
+                },
                 "premium": list(PREMIUM_MODELS),
                 "consensus": list(ALLOWED_CONSENSUS_MODELS),
                 "preset_models": get_consensus_preset_models(),

@@ -37,6 +37,8 @@ class ConsensusAnalysis:
 
 
 def _answer_slots(answers: Mapping[str, ProviderAnswer | str]) -> dict[str, str]:
+    """Antworttexte je Familie in PROVIDER_ORDER-Reihenfolge (leer = fehlt).
+    Genau diese Reihenfolge geht als Mapping in Synthese und Judge."""
     return {
         provider: (
             answer.response if isinstance(answer, ProviderAnswer) else str(answer or "")
@@ -85,12 +87,7 @@ def analyze_provider_answers(
     )
     consensus = synthesize(
         question,
-        slots["openai"],
-        slots["mistral"],
-        slots["anthropic"],
-        slots["gemini"],
-        slots["deepseek"],
-        slots["grok"],
+        slots,
         excluded,
         consensus_model,
         keys,
@@ -107,12 +104,7 @@ def analyze_provider_answers(
             agreement=None,
         )
     differences_text, differences_data = judge(
-        slots["openai"],
-        slots["mistral"],
-        slots["anthropic"],
-        slots["gemini"],
-        slots["deepseek"],
-        slots["grok"],
+        slots,
         consensus,
         keys,
         differences_model=consensus_model,

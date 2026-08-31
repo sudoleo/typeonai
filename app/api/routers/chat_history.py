@@ -214,14 +214,7 @@ def _memory_credentials(
     config = resolve_consensus_engine_model(engine_model)
     if not config or not config.provider:
         return None, "unsupported_memory_engine", "", engine_model
-    provider = {
-        "openai": "OpenAI",
-        "mistral": "Mistral",
-        "anthropic": "Anthropic",
-        "gemini": "Gemini",
-        "deepseek": "DeepSeek",
-        "grok": "Grok",
-    }.get(config.provider, "")
+    provider = cfg.PROVIDER_LABEL_BY_ID.get(config.provider, "")
     if not provider:
         return None, "unsupported_memory_engine", "", engine_model
 

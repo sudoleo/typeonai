@@ -469,7 +469,7 @@ class JudgeMetadataTests(unittest.TestCase):
             side_effect=side_effect,
         ):
             return query_differences(
-                "answer one", "answer two", None, None, None, None,
+                {"openai": "answer one", "mistral": "answer two"},
                 "the consensus", api_keys,
                 differences_model="OpenAI",
                 excluded_models=[],
@@ -541,7 +541,7 @@ class JudgeMetadataTests(unittest.TestCase):
             side_effect=fake_stream,
         ):
             events = list(stream_differences(
-                "answer one", "answer two", None, None, None, None,
+                {"openai": "answer one", "mistral": "answer two"},
                 "the consensus", {"OpenRouter": "sk-or"},
                 differences_model="OpenAI",
                 excluded_models=[],
@@ -650,7 +650,7 @@ class AgreementScoreTests(unittest.TestCase):
 class DifferencesPromptTests(unittest.TestCase):
     def test_prompt_requests_json_and_anonymizes(self):
         built = _build_differences_prompt(
-            "answer one", "answer two", None, None, None, None,
+            {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="This is the consensus answer.",
             excluded_models=[],
         )
@@ -681,13 +681,13 @@ class DifferencesPromptTests(unittest.TestCase):
         # Gleiche Anonymisierungs-Reihenfolge fuer beide Prompts erzwingen.
         random.seed(7)
         base = _build_differences_prompt(
-            "answer one", "answer two", None, None, None, None,
+            {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="This is the consensus answer.",
             excluded_models=[],
         )[0]
         random.seed(7)
         with_question = _build_differences_prompt(
-            "answer one", "answer two", None, None, None, None,
+            {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="This is the consensus answer.",
             excluded_models=[],
             resolved_question="How would you rate consens.io from 1 to 10?",
@@ -704,7 +704,7 @@ class DifferencesPromptTests(unittest.TestCase):
         nicht die Widersprueche. Das gilt fuer die Reihenfolge im Prompt UND
         im Structured-Output-Schema (Gemini generiert in Schema-Reihenfolge)."""
         built = _build_differences_prompt(
-            "answer one", "answer two", None, None, None, None,
+            {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="This is the consensus answer.",
             excluded_models=[],
         )
@@ -726,7 +726,7 @@ class DifferencesPromptTests(unittest.TestCase):
             "- Short.\n"
         )
         built = _build_differences_prompt(
-            "answer one", None, None, None, None, None,
+            {"openai": "answer one"},
             consensus_answer=consensus,
             excluded_models=[],
         )

@@ -653,7 +653,7 @@ def admin_get_benchmark_run(request: Request, run_id: str):
     return {"status": "success", "run": run}
 
 
-PROVIDER_KEYS = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
+PROVIDER_KEYS = tuple(cfg.PROVIDERS)
 
 
 def _ordered_unique(items, drop=None, ensure=None) -> list:
@@ -676,20 +676,13 @@ def _ordered_unique(items, drop=None, ensure=None) -> list:
 
 def normalize_models_document(data: dict) -> dict:
     normalized = dict(data or {})
-    normalized["grok"] = cfg.canonical_model_ids(normalized.get("grok"), "grok")
-    # Provider-Listen behalten ihre (Admin-)Reihenfolge bei. Entfernte interne
-    # Modell-IDs werden bei jedem Admin-Read/-Save aus Legacy-Dokumenten bereinigt.
+    # Provider-Listen behalten ihre (Admin-)Reihenfolge bei. Alte IDs werden
+    # migriert, entfernte/stillgelegte bei jedem Admin-Read/-Save bereinigt.
     for provider in PROVIDER_KEYS:
         normalized[provider] = _ordered_unique(
-            normalized.get(provider), drop=cfg.REMOVED_MODEL_IDS
+            cfg.canonical_model_ids(normalized.get(provider), provider),
+            drop=cfg.REMOVED_MODEL_IDS | cfg.PROVIDER_DEPRECATED_MODELS.get(provider, set()),
         )
-
-    normalized["mistral"] = _ordered_unique(
-        normalized.get("mistral"), drop=cfg.DEPRECATED_MISTRAL_MODELS,
-    )
-    normalized["deepseek"] = _ordered_unique(
-        normalized.get("deepseek"), drop=cfg.DEPRECATED_DEEPSEEK_MODELS,
-    )
 
     configured_models = set().union(
         *(set(normalized.get(provider) or []) for provider in PROVIDER_KEYS)
@@ -699,9 +692,8 @@ def normalize_models_document(data: dict) -> dict:
         for model in (normalized.get("premium") or [])
     }
     premium.difference_update(cfg.REMOVED_MODEL_IDS)
-    premium.difference_update(cfg.DEPRECATED_MISTRAL_MODELS)
-    premium.difference_update(cfg.DEPRECATED_DEEPSEEK_MODELS)
-    premium.difference_update(cfg.DEPRECATED_GROK_MODELS)
+    for deprecated in cfg.PROVIDER_DEPRECATED_MODELS.values():
+        premium.difference_update(deprecated)
     premium.intersection_update(configured_models)
     normalized["premium"] = sorted(premium)
 
@@ -1152,15 +1144,12 @@ def get_models(request: Request):
             # Persistiert wird ausschliesslich ueber POST; die normalisierte
             # GET-Response bleibt weiterhin direkt darstellbar.
         else:
-            from app.core.config import ALLOWED_OPENAI_MODELS, ALLOWED_MISTRAL_MODELS, ALLOWED_ANTHROPIC_MODELS, ALLOWED_GEMINI_MODELS, ALLOWED_DEEPSEEK_MODELS, ALLOWED_GROK_MODELS, PREMIUM_MODELS
             data = {
-                "openai": list(ALLOWED_OPENAI_MODELS),
-                "mistral": list(ALLOWED_MISTRAL_MODELS),
-                "anthropic": list(ALLOWED_ANTHROPIC_MODELS),
-                "gemini": list(ALLOWED_GEMINI_MODELS),
-                "deepseek": list(ALLOWED_DEEPSEEK_MODELS),
-                "grok": list(ALLOWED_GROK_MODELS),
-                "premium": list(PREMIUM_MODELS),
+                **{
+                    provider.key: list(provider.models)
+                    for provider in cfg.PROVIDERS.values()
+                },
+                "premium": list(cfg.PREMIUM_MODELS),
                 "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
                 "preset_models": cfg.get_consensus_preset_models(),
                 "defaults": dict(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER),
@@ -1185,7 +1174,7 @@ def get_models(request: Request):
 @router.post("/api/admin/models")
 def update_models(request: Request, data: dict = Body(...)):
     _require_admin(request, data)
-    required_keys = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok", "premium"]
+    required_keys = [*PROVIDER_KEYS, "premium"]
     for k in required_keys:
         if k not in data or not isinstance(data[k], list):
             raise HTTPException(status_code=400, detail=f"Missing or invalid format for {k}. Must be a list of strings.")
@@ -1284,12 +1273,7 @@ def update_models(request: Request, data: dict = Body(...)):
                     )
         doc_ref = db_firestore.collection("app_config").document("models")
         models_document = {
-            "openai": normalized["openai"],
-            "mistral": normalized["mistral"],
-            "anthropic": normalized["anthropic"],
-            "gemini": normalized["gemini"],
-            "deepseek": normalized["deepseek"],
-            "grok": normalized["grok"],
+            **{provider: normalized[provider] for provider in PROVIDER_KEYS},
             "premium": normalized["premium"],
             "consensus": normalized["consensus"],
             "preset_models": normalized["preset_models"],

@@ -25,22 +25,14 @@ OPENROUTER_CHAT_COMPLETIONS_URL = f"{OPENROUTER_BASE_URL}/chat/completions"
 OPENROUTER_REFERER = "https://consens.io"
 OPENROUTER_TITLE = "consens.io"
 
+# Basis- und Deep-Think-Modell je Familie kommen aus der Provider-Registry:
+# Deep Think faehrt immer das Pro-Modell der Familie.
 _DEFAULT_MODEL_BY_PROVIDER = {
-    "openai": cfg.DEFAULT_OPENAI_MODEL,
-    "mistral": cfg.DEFAULT_MISTRAL_MODEL,
-    "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
-    "gemini": cfg.GEMINI_FLASH_MODEL,
-    "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
-    "grok": cfg.DEFAULT_GROK_MODEL,
+    provider.key: provider.base_model for provider in cfg.PROVIDERS.values()
 }
 
 _DEEP_SEARCH_MODEL_BY_PROVIDER = {
-    "openai": "gpt-5.5",
-    "mistral": cfg.MISTRAL_PRO_MODEL,
-    "anthropic": cfg.ANTHROPIC_PRO_MODEL,
-    "gemini": cfg.GEMINI_PRO_MODEL,
-    "deepseek": cfg.DEEPSEEK_PRO_MODEL,
-    "grok": "grok-4.3",
+    provider.key: provider.pro_model for provider in cfg.PROVIDERS.values()
 }
 
 

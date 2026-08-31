@@ -574,11 +574,11 @@ def test_publisher_pipeline_runs_the_full_plan_including_deepseek(monkeypatch):
     )
 
     def consensus(*args, **kwargs):
-        consensus_keys.append(args[9])
+        consensus_keys.append(args[4])
         return "Consensus"
 
     def differences(*args, **kwargs):
-        differences_keys.append(args[7])
+        differences_keys.append(args[2])
         return "Differences", {"claims": []}
 
     monkeypatch.setattr(api_consensus_runner, "query_consensus", consensus)

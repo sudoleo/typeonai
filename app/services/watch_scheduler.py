@@ -34,7 +34,11 @@ _scheduler_wake_event: asyncio.Event | None = None
 # Preserve the established Watch engine preference. Topic/API use the shared
 # canonical display order, while Watch historically preferred Gemini before
 # Anthropic when both earlier engines failed.
-PROVIDER_ORDER = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
+_WATCH_ENGINE_PREFERENCE = ("openai", "mistral", "gemini", "anthropic", "deepseek", "grok")
+PROVIDER_ORDER = tuple(dict.fromkeys(
+    [provider for provider in _WATCH_ENGINE_PREFERENCE if provider in cfg.PROVIDERS]
+    + list(cfg.PROVIDERS)
+))
 PROVIDER_LABELS = provider_transport.PROVIDER_LABELS
 
 

@@ -592,7 +592,7 @@ def test_correlation_header_metrics_and_log_redaction(caplog, monkeypatch):
     monkeypatch.setattr(consensus_engine, "_fallback_judge_engine", lambda *args: None)
     with caplog.at_level("WARNING"):
         result = consensus_engine.query_consensus(
-            "question", "answer one", "answer two", None, None, None, None,
+            "question", {"openai": "answer one", "mistral": "answer two"},
             excluded_models=[], consensus_model="OpenAI", api_keys={"OpenRouter": "key"},
         )
     assert secret not in caplog.text
@@ -664,11 +664,7 @@ def test_ask_metrics_classify_normalized_openrouter_timeouts(
         "error_code": "provider_timeout",
     }
     recorded = []
-    provider = chat_router.AskProvider(
-        key="openai",
-        label="OpenAI",
-        allowed_models_attr="ALLOWED_OPENAI_MODELS",
-    )
+    provider = chat_router.AskProvider(key="openai", label="OpenAI")
     monkeypatch.setattr(chat_router, "query_model", lambda *_args, **_kwargs: timeout_result)
     monkeypatch.setattr(
         chat_router,
@@ -723,11 +719,7 @@ def test_ask_disconnect_records_cancellation_not_success(monkeypatch):
         finally:
             stopped.set()
 
-    provider = chat_router.AskProvider(
-        key="openai",
-        label="OpenAI",
-        allowed_models_attr="ALLOWED_OPENAI_MODELS",
-    )
+    provider = chat_router.AskProvider(key="openai", label="OpenAI")
     monkeypatch.setattr(chat_router, "stream_model_query", source)
     monkeypatch.setattr(
         chat_router,

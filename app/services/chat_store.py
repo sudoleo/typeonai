@@ -49,12 +49,7 @@ TURN_STATUS_COMPLETED = "completed"
 TURN_STATUS_FAILED = "failed"
 
 PROVIDER_DOCUMENT_IDS = {
-    "OpenAI": "openai",
-    "Mistral": "mistral",
-    "Anthropic": "anthropic",
-    "Gemini": "gemini",
-    "DeepSeek": "deepseek",
-    "Grok": "grok",
+    label: provider for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()
 }
 MAX_MODEL_ANSWERS = len(PROVIDER_DOCUMENT_IDS)
 FAILED_TURN_ERROR_CODES = frozenset({

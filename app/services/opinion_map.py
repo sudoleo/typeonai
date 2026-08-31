@@ -8,21 +8,20 @@ from __future__ import annotations
 
 import re
 
+import app.core.config as cfg
+
 
 SCHEMA_VERSION = 1
 MAX_DIMENSIONS = 4
 MAX_POSITIONS = 3
-PROVIDERS = ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")
+PROVIDERS = tuple(cfg.PROVIDER_LABEL_BY_ID.values())
+# Familien-ID und Anzeigename gelten immer; dazu die gaengigen Zweitnamen.
 _PROVIDER_ALIASES = {
-    "openai": "OpenAI",
+    **{provider: label for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()},
+    **{label.lower(): label for label in PROVIDERS},
     "chatgpt": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
     "claude": "Anthropic",
-    "gemini": "Gemini",
     "google": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
     "xai": "Grok",
 }
 _WORD_RE = re.compile(r"[a-z0-9]+", re.IGNORECASE)

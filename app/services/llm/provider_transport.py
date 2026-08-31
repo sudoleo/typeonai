@@ -22,15 +22,10 @@ from app.services.llm.engines import query_model
 from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
 
 
-PROVIDER_ORDER = ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok")
-PROVIDER_LABELS = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
-}
+# Familien und ihre Labels kommen aus der Provider-Registry; die Reihenfolge
+# ist die Registry-Reihenfolge (Anzeige- und Prompt-Reihenfolge).
+PROVIDER_ORDER = tuple(cfg.PROVIDERS)
+PROVIDER_LABELS = dict(cfg.PROVIDER_LABEL_BY_ID)
 @dataclass(frozen=True)
 class ProviderAnswer:
     provider: str

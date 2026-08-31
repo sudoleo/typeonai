@@ -2635,6 +2635,28 @@ alte Gemini-ADC-JSON ist entfernt.
 - Retention: `RETENTION_MAINTENANCE_INTERVAL_SECONDS` (Default 3600, Clamp
   60–86400) steuert den vom Prozess-Restart unabhängigen Cleanup-Tick.
 
+Provider-Registry (`cfg.PROVIDERS` in `app/core/config.py`): eine Modellfamilie
+ist genau ein `ProviderConfig`-Eintrag (Familien-ID, Label, OpenRouter-Praefix,
+Basis-Modell = Alias `<Label>`, Pro-Modell = Alias `<Label>-Pro`, erlaubte
+Modelle, `required_models`). Daraus abgeleitet und deshalb NICHT einzeln zu
+pflegen: `DEFAULT_MODEL_BY_PROVIDER`, `FREE_DEFAULT_MODEL_BY_PROVIDER`,
+`PROVIDER_LABEL_BY_ID`, `OPENROUTER_MODEL_PREFIXES`, `CONSENSUS_ENGINE_ALIASES`,
+`VALID_LEADERBOARD_MODELS`, `DEFAULT_CONSENSUS_MODELS`, die Judge-/Chat-Memory-
+Basiswerte, `MODEL_ORDER_BY_PROVIDER`, der Firestore-Load samt Backfill sowie
+`provider_transport.PROVIDER_ORDER/PROVIDER_LABELS`, `engines`, `topics`,
+`opinion_map`, `share_snapshots`, `chat_store`, `watch_scheduler`, Admin und
+Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
+Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
+steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
+Varianten als Daten in `MODEL_REQUEST_CONFIG`. Bewusst abweichende
+Reihenfolgen (`_CONSENSUS_ALIAS_ORDER`, `watch_scheduler._WATCH_ENGINE_PREFERENCE`)
+haengen unbekannte Familien hinten an, statt sie zu verlieren;
+`tests/test_provider_registry.py` haelt das fest. Consensus- und
+Differences-Prompt bekommen die Antworten als Mapping Familie->Text
+(`_model_answer_items`, Schluessel duerfen Familien-ID oder Label sein) und sind
+damit unabhaengig von der Anzahl der Familien; `/consensus` nimmt sie als Feld
+`answers` entgegen und liest die alten `answer_<familie>`-Felder weiter.
+
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `MODEL_LABEL_OVERRIDES`). In Produktion sind

@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+import app.core.config as cfg
+
 from app.services.llm.consensus_engine import (
     _call_engine_text,
     _clip,
@@ -29,12 +31,7 @@ from app.services.llm.consensus_engine import (
 from app.services.llm.credentials import openrouter_api_key
 
 PROVIDER_BY_LABEL = {
-    "OpenAI": "openai",
-    "Mistral": "mistral",
-    "Anthropic": "anthropic",
-    "Gemini": "gemini",
-    "DeepSeek": "deepseek",
-    "Grok": "grok",
+    label: provider for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()
 }
 
 MAX_RESOLVE_POSITIONS = 4

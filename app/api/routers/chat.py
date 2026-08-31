@@ -322,6 +322,30 @@ def cap_engine_text(value, limit: int):
     return value[:limit].rstrip()
 
 
+# Historische Feldnamen der /consensus-Antworten. Neue Familien kommen ohne
+# Sonderfall aus: answer_<familie>.
+LEGACY_ANSWER_FIELDS = {"anthropic": "answer_claude"}
+
+
+def _incoming_answers(data: dict, limit: int) -> dict:
+    """Antworten je Familie, gekappt, in Registry-Reihenfolge, Schluessel ist
+    der Anzeigename.
+
+    Bevorzugt wird das Feld `answers` ({"openai": "..."} oder {"OpenAI": ...});
+    ohne dieses greifen die historischen answer_<familie>-Felder, die aeltere
+    Clients senden."""
+    supplied = data.get("answers")
+    supplied = supplied if isinstance(supplied, dict) else None
+    answers = {}
+    for provider, label in cfg.PROVIDER_LABEL_BY_ID.items():
+        if supplied is not None:
+            raw = supplied.get(provider, supplied.get(label))
+        else:
+            raw = data.get(LEGACY_ANSWER_FIELDS.get(provider, f"answer_{provider}"))
+        answers[label] = cap_engine_text(raw, limit)
+    return answers
+
+
 def validate_text_size(
     value,
     *,
@@ -721,40 +745,18 @@ def _attachment_claim_payload(attachments: list[dict]) -> list[dict]:
 class AskProvider:
     key: str
     label: str
-    allowed_models_attr: str
+
+    @property
+    def allowed_models(self) -> set:
+        """Immer die aktuelle Admin-Liste der Familie (in-place mutiertes Set)."""
+        return cfg.PROVIDERS[self.key].models
 
 
+# Eine /ask-Familie je Registry-Eintrag. Die Routen darunter sind der
+# Client-Vertrag und bleiben ausgeschrieben.
 ASK_PROVIDERS = {
-    "openai": AskProvider(
-        key="openai",
-        label="OpenAI",
-        allowed_models_attr="ALLOWED_OPENAI_MODELS",
-    ),
-    "mistral": AskProvider(
-        key="mistral",
-        label="Mistral",
-        allowed_models_attr="ALLOWED_MISTRAL_MODELS",
-    ),
-    "anthropic": AskProvider(
-        key="anthropic",
-        label="Anthropic",
-        allowed_models_attr="ALLOWED_ANTHROPIC_MODELS",
-    ),
-    "gemini": AskProvider(
-        key="gemini",
-        label="Gemini",
-        allowed_models_attr="ALLOWED_GEMINI_MODELS",
-    ),
-    "deepseek": AskProvider(
-        key="deepseek",
-        label="DeepSeek",
-        allowed_models_attr="ALLOWED_DEEPSEEK_MODELS",
-    ),
-    "grok": AskProvider(
-        key="grok",
-        label="Grok",
-        allowed_models_attr="ALLOWED_GROK_MODELS",
-    ),
+    provider.key: AskProvider(key=provider.key, label=provider.label)
+    for provider in cfg.PROVIDERS.values()
 }
 
 
@@ -879,7 +881,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     question = validate_question_word_limit(question, is_pro_user, deep_search)
     validate_model(
         model,
-        getattr(cfg, provider.allowed_models_attr),
+        provider.allowed_models,
         provider.label,
         is_pro=is_pro_user,
     )
@@ -1217,12 +1219,7 @@ def consensus(request: Request, data: dict = Body(...)):
     # Client und werden serverseitig hart begrenzt: der Consensus-Prompt enthaelt
     # sonst unbegrenzte Eingaben gegen den Developer-Key (Kostenleck).
     answer_char_limit = cfg.get_consensus_answer_char_limit()
-    answer_openai   = cap_engine_text(data.get("answer_openai"), answer_char_limit)
-    answer_mistral  = cap_engine_text(data.get("answer_mistral"), answer_char_limit)
-    answer_claude   = cap_engine_text(data.get("answer_claude"), answer_char_limit)
-    answer_gemini   = cap_engine_text(data.get("answer_gemini"), answer_char_limit)
-    answer_deepseek = cap_engine_text(data.get("answer_deepseek"), answer_char_limit)
-    answer_grok     = cap_engine_text(data.get("answer_grok"), answer_char_limit)
+    answers_by_model = _incoming_answers(data, answer_char_limit)
     excluded_models = data.get("excluded_models", [])
     model_sources   = data.get("model_sources", {})
     if not isinstance(excluded_models, list):
@@ -1230,19 +1227,6 @@ def consensus(request: Request, data: dict = Body(...)):
     excluded_models = list({normalize_model_name(model) for model in excluded_models if model})
     if not isinstance(model_sources, dict):
         model_sources = {}
-
-    if "OpenAI" in excluded_models:
-        answer_openai = None
-    if "Mistral" in excluded_models:
-        answer_mistral = None
-    if "Anthropic" in excluded_models:
-        answer_claude = None
-    if "Gemini" in excluded_models:
-        answer_gemini = None
-    if "DeepSeek" in excluded_models:
-        answer_deepseek = None
-    if "Grok" in excluded_models:
-        answer_grok = None
 
     # Validierung der erforderlichen Parameter (nur für Modelle, die nicht ausgeschlossen wurden)
     missing = []
@@ -1253,19 +1237,19 @@ def consensus(request: Request, data: dict = Body(...)):
 
     included_answers = {
         model: answer
-        for model, answer in {
-            "OpenAI": answer_openai,
-            "Mistral": answer_mistral,
-            "Anthropic": answer_claude,
-            "Gemini": answer_gemini,
-            "DeepSeek": answer_deepseek,
-            "Grok": answer_grok,
-        }.items()
+        for model, answer in answers_by_model.items()
         if (
             model not in excluded_models
             and isinstance(answer, str)
             and answer.strip()
         )
+    }
+    # Familien-Sicht derselben Antworten: die Engines und die Domaenen-
+    # Pipeline sprechen Familien-IDs, Persistenz und Anzeige die Labels.
+    included_by_provider = {
+        provider: included_answers[label]
+        for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()
+        if label in included_answers
     }
 
     # Ein einzelner ausgefallener Provider (Timeout, 503, leere Reasoning-
@@ -1590,12 +1574,7 @@ def consensus(request: Request, data: dict = Body(...)):
             try:
                 for item in stream_consensus(
                     question,
-                    answer_openai,
-                    answer_mistral,
-                    answer_claude,
-                    answer_gemini,
-                    answer_deepseek,
-                    answer_grok,
+                    included_by_provider,
                     excluded_models,
                     consensus_model,
                     api_keys,
@@ -1628,12 +1607,7 @@ def consensus(request: Request, data: dict = Body(...)):
                     yield sse_pack("consensus.final", {"text": consensus_text})
                     last_reasoning_at = None
                     for item in stream_differences(
-                        answer_openai,
-                        answer_mistral,
-                        answer_claude,
-                        answer_gemini,
-                        answer_deepseek,
-                        answer_grok,
+                        included_by_provider,
                         consensus_text,
                         api_keys,
                         differences_model=consensus_model,
@@ -1728,14 +1702,7 @@ def consensus(request: Request, data: dict = Body(...)):
     try:
         analysis = analyze_provider_answers(
             question=question,
-            answers={
-                "openai": answer_openai,
-                "mistral": answer_mistral,
-                "anthropic": answer_claude,
-                "gemini": answer_gemini,
-                "deepseek": answer_deepseek,
-                "grok": answer_grok,
-            },
+            answers=included_by_provider,
             consensus_model=consensus_model,
             keys=api_keys,
             model_sources=model_sources,

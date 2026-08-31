@@ -244,12 +244,7 @@ def read_root(request: Request):
     # Reihenfolge je Provider kommt aus der Admin-Konfiguration (get_ordered_models);
     # ohne Override deterministischer Auto-Sort.
     models = {
-        "openai": cfg.get_ordered_models("openai"),
-        "mistral": cfg.get_ordered_models("mistral"),
-        "anthropic": cfg.get_ordered_models("anthropic"),
-        "gemini": cfg.get_ordered_models("gemini"),
-        "deepseek": cfg.get_ordered_models("deepseek"),
-        "grok": cfg.get_ordered_models("grok"),
+        **{provider: cfg.get_ordered_models(provider) for provider in cfg.PROVIDERS},
         "premium": list(PREMIUM_MODELS)
     }
     model_metadata = cfg.get_model_picker_metadata()

@@ -6,6 +6,8 @@ import time
 import difflib
 import logging
 import random
+from typing import Mapping
+
 import requests
 
 import app.core.config as cfg
@@ -34,16 +36,14 @@ from app.services.llm.provider_runtime import (
     raise_if_provider_cancelled,
 )
 
+# Familien-ID und Anzeigename einer jeden Familie plus die gaengigen
+# Zweitnamen, unter denen ein Judge eine Familie benennen kann.
 CANONICAL_MODEL_NAMES = {
-    "openai": "OpenAI",
+    **cfg.PROVIDER_LABEL_BY_ID,
+    **{label.lower(): label for label in cfg.PROVIDER_LABEL_BY_ID.values()},
     "gpt": "OpenAI",
     "chatgpt": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
     "claude": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
 }
 
 MAX_SOURCES_PER_EXPERT = 5
@@ -335,14 +335,26 @@ def _format_expert_opinion(label, model_name, answer, model_sources):
     )
 
 
+def _model_answer_items(answers, excluded_models) -> list[tuple[str, str]]:
+    """Antworten je Modellfamilie als Paare (Anzeigename, Text).
+
+    `answers` ist ein Mapping in der gewuenschten Reihenfolge; die Schluessel
+    duerfen Familien-IDs ("openai") oder Anzeigenamen ("OpenAI") sein. Leere
+    und abgewaehlte Antworten fallen heraus -- die Zahl der Familien ist damit
+    nirgends im Prompt-Bau festgeschrieben."""
+    excluded = normalize_excluded_models(excluded_models or [])
+    items = []
+    for key, answer in (answers or {}).items():
+        name = cfg.PROVIDER_LABEL_BY_ID.get(str(key).lower(), str(key))
+        if not answer or normalize_model_name(name) in excluded:
+            continue
+        items.append((name, answer))
+    return items
+
+
 def _build_consensus_prompt(
     question: str,
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     excluded_models: list,
     model_sources=None,
     shuffle: bool = True,
@@ -351,23 +363,10 @@ def _build_consensus_prompt(
     """Baut den Consensus-Prompt. Die Expertenantworten werden wie im
     Differences-Prompt anonymisiert ("Expert A/B/...") und gemischt, damit
     weder Markenname noch Position die Synthese verzerren. Die [S1]-Source-IDs
-    in den Antworten bleiben unverändert. shuffle=False liefert die feste
-    Reihenfolge OpenAI..Grok (nur für das deterministische
+    in den Antworten bleiben unverändert. shuffle=False liefert die
+    uebergebene Reihenfolge (nur für das deterministische
     Benchmark-Prompt-Template, nicht für Live-Calls)."""
-    excluded = normalize_excluded_models(excluded_models)
-
-    model_answers = [
-        ("OpenAI",    answer_openai),
-        ("Mistral",   answer_mistral),
-        ("Anthropic", answer_claude),
-        ("Gemini",    answer_gemini),
-        ("DeepSeek",  answer_deepseek),
-        ("Grok",      answer_grok),
-    ]
-    model_answers = [
-        (name, answer) for (name, answer) in model_answers
-        if answer and normalize_model_name(name) not in excluded
-    ]
+    model_answers = _model_answer_items(answers, excluded_models)
     if shuffle:
         random.shuffle(model_answers)
 
@@ -465,12 +464,7 @@ def is_consensus_error_text(text) -> bool:
 
 def query_consensus(
     question: str,
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
@@ -478,17 +472,12 @@ def query_consensus(
     resolved_question: str = "",
 ) -> str:
     """
-    Konsolidiert die Antworten der 6 Haupt-LLMs zu einer Konsensantwort.
+    Konsolidiert die Antworten der Modellfamilien zu einer Konsensantwort.
     Engine-Auswahl (inkl. Pro-Aliasse) läuft über _resolve_engine.
     """
     consensus_prompt = _build_consensus_prompt(
         question,
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
+        answers,
         excluded_models,
         model_sources=model_sources,
         resolved_question=resolved_question,
@@ -798,12 +787,7 @@ def _visible_sentence_key(value) -> str:
 
 
 def _build_differences_prompt(
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     consensus_answer: str,
     excluded_models: list = None,
     resolved_question: str = "",
@@ -814,22 +798,8 @@ def _build_differences_prompt(
     für die serverseitige Zitat-Verifikation, sentences die nummerierten Sätze
     der Konsensantwort für die Auflösung der Claim-Anker."""
 
-    excluded = normalize_excluded_models(excluded_models or [])
-
-    model_answers = [
-        ("OpenAI",   answer_openai),
-        ("Mistral",  answer_mistral),
-        ("Anthropic", answer_claude),
-        ("Gemini",   answer_gemini),
-        ("DeepSeek", answer_deepseek),
-        ("Grok",     answer_grok),
-    ]
-
     # Leere und explizit abgewählte Antworten filtern.
-    model_answers = [
-        (n, a) for (n, a) in model_answers
-        if a and normalize_model_name(n) not in excluded
-    ]
+    model_answers = _model_answer_items(answers, excluded_models)
 
     if not model_answers:
         return None
@@ -1655,12 +1625,7 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
 
 
 def query_differences(
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     consensus_answer: str,
     api_keys: dict,
     differences_model: str,
@@ -1668,7 +1633,7 @@ def query_differences(
     resolved_question: str = "",
 ) -> tuple:
     """
-    Extrahiert die Unterschiede zwischen den Antworten der 6 Hauptmodelle,
+    Extrahiert die Unterschiede zwischen den Antworten der Modellfamilien,
     anonymisiert die Modellnamen und ordnet das bestbewertete Modell anschließend wieder zu.
     Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
     der Judge ist immer eine andere Modellfamilie als die Consensus-Engine
@@ -1676,12 +1641,7 @@ def query_differences(
     Gibt (legacy_text, structured_data | None) zurück.
     """
     built = _build_differences_prompt(
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
+        answers,
         consensus_answer,
         excluded_models=excluded_models,
         resolved_question=resolved_question,
@@ -1932,12 +1892,7 @@ def _stream_consensus_engine(consensus_model: str, api_keys: dict, consensus_pro
 
 def stream_consensus(
     question: str,
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     excluded_models: list,
     consensus_model: str,
     api_keys: dict,
@@ -1946,12 +1901,7 @@ def stream_consensus(
 ):
     consensus_prompt = _build_consensus_prompt(
         question,
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
+        answers,
         excluded_models,
         model_sources=model_sources,
         resolved_question=resolved_question,
@@ -2005,12 +1955,7 @@ def stream_consensus(
 
 
 def stream_differences(
-    answer_openai: str,
-    answer_mistral: str,
-    answer_claude: str,
-    answer_gemini: str,
-    answer_deepseek: str,
-    answer_grok: str,
+    answers: Mapping[str, str],
     consensus_answer: str,
     api_keys: dict,
     differences_model: str,
@@ -2018,12 +1963,7 @@ def stream_differences(
     resolved_question: str = "",
 ):
     built = _build_differences_prompt(
-        answer_openai,
-        answer_mistral,
-        answer_claude,
-        answer_gemini,
-        answer_deepseek,
-        answer_grok,
+        answers,
         consensus_answer,
         excluded_models=excluded_models,
         resolved_question=resolved_question,
