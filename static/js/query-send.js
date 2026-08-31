@@ -171,10 +171,14 @@
       window.App.renderUsageDisplay?.(usageView);
       const noSavedViewSelected = !registry.visible()
         && !registry.getSelectedConversationBasis?.();
-      if ((normalized.tier !== undefined || normalized.is_pro_user !== undefined)
+      // Wie in run-view.js: ein blosses "is_pro_user: false" ohne "tier" ist
+      // seit der Plus-Stufe kein Free-Beleg mehr, sondern nur "nicht Pro".
+      // Nur ein ausdrueckliches tier oder ein true darf die Anzeige stellen.
+      const tierSignal = normalized.tier
+        ?? (normalized.is_pro_user === true ? "pro" : null);
+      if (tierSignal !== null
           && (registry.isVisible(context.runId) || noSavedViewSelected)) {
-        window.updateUserTierUI?.(
-          normalized.tier ?? (normalized.is_pro_user === true), true);
+        window.updateUserTierUI?.(tierSignal, true);
       }
     }
   }

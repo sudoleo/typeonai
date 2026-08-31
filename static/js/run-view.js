@@ -284,8 +284,14 @@
     // Only when the run actually disagrees with the tier on screen. Pushing
     // it on every pass rebuilt the whole model picker for each streamed
     // chunk, and the picker's own restore is what closed the cycle above.
+    // "is_pro_user: false" heisst seit der Plus-Stufe nur noch "nicht Pro" --
+    // es unterscheidet Free nicht mehr von Plus. Ein Lauf ohne ausdrueckliches
+    // "tier" (aeltere Antwort, Tab von vor einem Deploy) darf die Stufe auf dem
+    // Schirm deshalb nur noch ANHEBEN, nie senken: sonst schaltet ein
+    // Plus-Konto beim ersten projizierten Lauf zurueck auf Free und verliert
+    // Anhaenge und Resolve.
     const runTier = context.usage?.tier
-      ?? (typeof context.usage?.isProUser === "boolean" ? context.usage.isProUser : null);
+      ?? (context.usage?.isProUser === true ? "pro" : null);
     if (runTier !== null
       && (window.App.normalizeTier?.(runTier) || "free") !== (window.userTier || "free")) {
       window.updateUserTierUI?.(runTier, true);
