@@ -516,6 +516,48 @@ def test_streaming_success_completes_exactly_once(chat_consensus_api):
     assert len(store.completions) == 1
 
 
+def test_analysis_failure_keeps_the_answer_the_user_already_received(
+    chat_consensus_api, caplog
+):
+    """Die Konsensantwort ist beim Nutzer, bevor die Analyse ueberhaupt
+    startet. Ein Fehler dort kostet Marken und Widerspruchskarten - er darf
+    den Lauf nicht als gescheitert markieren und die Antwort nicht aus der
+    Persistenz halten."""
+    client, store, monkeypatch = chat_consensus_api
+    secret = "owner@example.test|judge-response-private"
+
+    def failed_differences(*_args, **_kwargs):
+        raise IndexError(secret)
+        yield  # pragma: no cover - keeps this a generator
+
+    monkeypatch.setattr(
+        chat_router,
+        "stream_consensus",
+        lambda *args, **kwargs: iter([{"type": "final", "text": "Consensus"}]),
+    )
+    monkeypatch.setattr(chat_router, "stream_differences", failed_differences)
+
+    with caplog.at_level("ERROR"):
+        response = client.post(
+            "/consensus", headers=AUTH, json=_base_payload(stream=True)
+        )
+    final = _final_sse_payload(response)
+
+    assert response.status_code == 200
+    assert final["consensus_response"] == "Consensus"
+    assert final["chat_turn_state"] == "completed"
+    assert final["differences_data"] is None
+    assert len(store.completions) == 1
+    assert store.failures == []
+    # Die Kategorie allein machte einen unerwarteten internen Fehler hier
+    # unauffindbar; die Frames sagen wo, ohne zu sagen was.
+    assert "IndexError" in caplog.text
+    assert secret not in caplog.text
+    assert secret not in response.text
+    assert "at=" in caplog.text
+    assert "chat.py:" in caplog.text
+
+
 def test_unexpected_consensus_stream_error_is_redacted_from_sse_and_logs(
     chat_consensus_api, caplog
 ):

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import contextvars
 import logging
+import os
 import re
 import secrets
 import threading
 import time
+import traceback
 from contextlib import contextmanager
 
 
@@ -101,6 +103,32 @@ def safe_exception(exc: BaseException) -> str:
     # may populate them with upstream text or identifiers.
     suffix = f":{status}" if isinstance(status, int) else ""
     return f"{type(exc).__name__}{suffix}"
+
+
+SAFE_TRACEBACK_FRAMES = 12
+
+
+def safe_traceback(exc: BaseException, *, limit: int = SAFE_TRACEBACK_FRAMES) -> str:
+    """Where an exception came from, without ever saying what it said.
+
+    ``safe_exception`` gives the category but not the location, which makes an
+    unexpected internal error (an IndexError somewhere in the consensus
+    pipeline) undiagnosable from production logs. This adds exactly the missing
+    half: the innermost call frames as ``file:line:function``.
+
+    Deliberately NOT the standard traceback: that renders the exception message
+    and the offending source lines, both of which can carry question text,
+    model output, or provider response bodies. Frame coordinates carry none of
+    that -- they are positions in our own code.
+    """
+    frames = traceback.extract_tb(exc.__traceback__)
+    if not frames:
+        return "-"
+    rendered = [
+        f"{os.path.basename(frame.filename)}:{frame.lineno}:{frame.name}"
+        for frame in frames[-limit:]
+    ]
+    return ">".join(rendered)
 
 
 class CorrelationMiddleware:

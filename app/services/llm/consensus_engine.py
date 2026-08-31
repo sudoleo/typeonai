@@ -13,7 +13,7 @@ from typing import Mapping
 import requests
 
 import app.core.config as cfg
-from app.core.observability import safe_exception
+from app.core.observability import safe_exception, safe_traceback
 from app.services.llm.citations import coerce_text
 from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
@@ -1895,19 +1895,31 @@ def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
 def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consensus_answer: str):
     """Legt das Coverage-Ergebnis in die Differences-Payload und rechnet den
     Agreement-Score neu. Gibt den neuen Legacy-Freitext zurueck (der
-    Credibility-Satz haengt am Score) oder None, wenn nichts zu tun war."""
+    Credibility-Satz haengt am Score) oder None, wenn nichts zu tun war.
+
+    Der Zusammenbau ist die letzte Station eines fertigen Laufs: die Antwort
+    steht bereits beim Nutzer, die Widersprueche sind analysiert. Ein Fehler
+    ausgerechnet hier darf davon nichts mehr kaputtmachen -- er kostet die
+    Marken, sonst nichts."""
     if not coverage_result:
         return None
-    claims = _coverage_claims(coverage_result, context)
-    if not claims:
+    try:
+        claims = _coverage_claims(coverage_result, context)
+        if not claims:
+            return None
+        _verify_claims(claims, consensus_answer, context.answers_by_model)
+        data["claims"] = claims
+        data["agreement"] = compute_agreement_score(data)
+        if coverage_meta:
+            judges = data.setdefault("judges", {})
+            judges["coverage"] = coverage_meta
+        return _legacy_differences_text(data)
+    except Exception as exc:
+        logging.error(
+            "Coverage merge failed category=%s at=%s",
+            safe_exception(exc), safe_traceback(exc),
+        )
         return None
-    _verify_claims(claims, consensus_answer, context.answers_by_model)
-    data["claims"] = claims
-    data["agreement"] = compute_agreement_score(data)
-    if coverage_meta:
-        judges = data.setdefault("judges", {})
-        judges["coverage"] = coverage_meta
-    return _legacy_differences_text(data)
 
 
 def _coverage_in_background(context, api_keys, differences_model):
@@ -1939,7 +1951,10 @@ def _collect_coverage(pool, future):
     try:
         return future.result()
     except Exception as exc:
-        logging.warning("Coverage judge thread failed category=%s", safe_exception(exc))
+        logging.warning(
+            "Coverage judge thread failed category=%s at=%s",
+            safe_exception(exc), safe_traceback(exc),
+        )
         return None, None
     finally:
         pool.shutdown(wait=False)

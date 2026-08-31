@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import main
-from app.core.observability import safe_exception
+from app.core.observability import safe_exception, safe_traceback
 from app.services import mailer
 
 
@@ -29,14 +29,23 @@ def _is_logging_call(node: ast.AST) -> bool:
     )
 
 
+# Die einzigen erlaubten Projektionen einer gefangenen Exception in ein Log:
+# die Kategorie (safe_exception/type) und die Herkunftsframes
+# (safe_traceback). Alles andere - str(exc), repr, exc_info, format_exc -
+# transportiert die Message und damit potenziell Frage-, Modell- oder
+# Provider-Text.
+_SAFE_EXCEPTION_PROJECTIONS = {"safe_exception", "safe_traceback", "type"}
+
+
 def _is_safe_exception_projection(node: ast.AST, exception_name: str) -> bool:
     if not isinstance(node, ast.Call) or len(node.args) != 1:
         return False
     if not isinstance(node.args[0], ast.Name) or node.args[0].id != exception_name:
         return False
-    if isinstance(node.func, ast.Name) and node.func.id == "safe_exception":
-        return True
-    return isinstance(node.func, ast.Name) and node.func.id == "type"
+    return (
+        isinstance(node.func, ast.Name)
+        and node.func.id in _SAFE_EXCEPTION_PROJECTIONS
+    )
 
 
 def _contains_unsafe_exception_reference(node: ast.AST, exception_name: str) -> bool:
@@ -119,6 +128,48 @@ def test_global_exception_handler_logs_and_alerts_only_safe_categories(
         "path": "GET /api/private/{item_id}",
     }]
     assert secret not in caplog.text
+
+
+def test_safe_traceback_reports_where_not_what():
+    """Die Kategorie allein macht einen unerwarteten internen Fehler in
+    Produktion unauffindbar. safe_traceback ergaenzt genau die fehlende
+    Haelfte - Frame-Koordinaten im eigenen Code - und niemals die Message,
+    die Argumente oder die Quellzeile."""
+    secret = "private-question-text-and-provider-body"
+
+    def inner():
+        raise IndexError(secret)
+
+    def outer():
+        inner()
+
+    try:
+        outer()
+    except IndexError as exc:
+        rendered = safe_traceback(exc)
+
+    assert secret not in rendered
+    # Der innerste Frame steht am Ende: dort ist der Fehler entstanden.
+    assert rendered.endswith("inner")
+    assert "test_logging_redaction_contract.py:" in rendered
+    # Nur Basenames, nie der ganze Pfad des Hosts.
+    assert "\\" not in rendered and "/" not in rendered
+
+
+def test_safe_traceback_is_bounded_and_survives_a_bare_exception():
+    assert safe_traceback(RuntimeError("never raised")) == "-"
+
+    def recurse(depth):
+        if depth:
+            return recurse(depth - 1)
+        raise ValueError("deep")
+
+    try:
+        recurse(40)
+    except ValueError as exc:
+        rendered = safe_traceback(exc)
+
+    assert len(rendered.split(">")) == 12
 
 
 def test_safe_exception_never_projects_arbitrary_string_error_codes():

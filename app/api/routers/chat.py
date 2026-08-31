@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
-from app.core.observability import record_metric, safe_exception
+from app.core.observability import record_metric, safe_exception, safe_traceback
 from app.core.security import (
     TierStatusUnavailable,
     db_firestore,
@@ -1610,27 +1610,43 @@ def consensus(request: Request, data: dict = Body(...)):
                     # erase an answer the user already received.
                     yield sse_pack("consensus.final", {"text": consensus_text})
                     last_reasoning_at = None
-                    for item in stream_differences(
-                        included_by_provider,
-                        consensus_text,
-                        api_keys,
-                        differences_model=consensus_model,
-                        excluded_models=excluded_models,
-                        resolved_question=resolved_question,
-                    ):
-                        if item.get("type") == "delta":
-                            # Das Frontend rendert diese Deltas nicht mehr (die Engine
-                            # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
-                            text = coerce_text(item.get("text"))
-                            if text:
-                                yield sse_pack("differences.delta", {"text": text})
-                        elif item.get("type") == "reasoning":
-                            event = _reasoning_event("differences.delta")
-                            if event:
-                                yield event
-                        else:
-                            differences_text = coerce_text(item.get("text"))
-                            differences_data = item.get("data")
+                    # Die Analyse hat ihren EIGENEN Fehlerrahmen. Sie laeuft
+                    # erst, nachdem die Antwort den Nutzer erreicht hat -- ein
+                    # Fehler hier darf den Lauf deshalb nicht mehr als
+                    # gescheitert markieren und die Antwort nicht mehr aus der
+                    # Persistenz halten. Der Lauf verliert dann seine Marken
+                    # und Widerspruchskarten, aber nicht die Antwort.
+                    try:
+                        for item in stream_differences(
+                            included_by_provider,
+                            consensus_text,
+                            api_keys,
+                            differences_model=consensus_model,
+                            excluded_models=excluded_models,
+                            resolved_question=resolved_question,
+                        ):
+                            if item.get("type") == "delta":
+                                # Das Frontend rendert diese Deltas nicht mehr (die Engine
+                                # liefert JSON); sie halten nur die SSE-Verbindung aktiv.
+                                text = coerce_text(item.get("text"))
+                                if text:
+                                    yield sse_pack("differences.delta", {"text": text})
+                            elif item.get("type") == "reasoning":
+                                event = _reasoning_event("differences.delta")
+                                if event:
+                                    yield event
+                            else:
+                                differences_text = coerce_text(item.get("text"))
+                                differences_data = item.get("data")
+                    except GeneratorExit:
+                        raise
+                    except Exception as exc:
+                        logging.error(
+                            "Differences analysis failed category=%s at=%s",
+                            safe_exception(exc), safe_traceback(exc),
+                        )
+                        differences_text = ""
+                        differences_data = None
             except GeneratorExit:
                 _fail_chat_turn_best_effort(
                     uid,
@@ -1639,8 +1655,12 @@ def consensus(request: Request, data: dict = Body(...)):
                 )
                 raise
             except Exception as exc:
+                # Frames statt Message: die Kategorie allein liess einen
+                # unerwarteten internen Fehler hier bisher nicht auffindbar
+                # werden (siehe observability.safe_traceback).
                 logging.error(
-                    "Consensus streaming failed category=%s", safe_exception(exc)
+                    "Consensus streaming failed category=%s at=%s",
+                    safe_exception(exc), safe_traceback(exc),
                 )
                 stream_failed = True
                 if not consensus_text:
