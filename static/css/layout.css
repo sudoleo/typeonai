@@ -223,28 +223,53 @@ body:has(.sidebar.active) .brand-float {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
 }
 
+/* "Why limits" in der Fusszeile. Seit der Kontoname daneben weg ist, hat die
+   Zeile Platz fuer eine ruhige, aber eindeutig anfassbare Flaeche: Rahmen nur
+   als Haarlinie, das Fragezeichen als eigenes Glyph, damit die Zeile auch
+   ohne Farbe als Hilfe lesbar ist. Kein Blau — /app ist monochrom. */
 #upgradeLink {
   display: none;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
-  padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--sidebar-border) 85%, transparent);
+  height: 26px;
+  padding: 0 10px 0 7px;
+  border: 1px solid var(--line-soft);
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--glass-bg-strong) 60%, transparent);
+  background: transparent;
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--font-weight-medium);
   letter-spacing: var(--tracking-normal);
   line-height: var(--line-height-solid);
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: inset 0 1px 0 var(--glass-highlight);
   transition: color .15s ease, border-color .15s ease, background-color .15s ease;
 }
 
-#upgradeLink:hover {
+.upgrade-link-glyph {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+  font-size: 9px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1;
+  opacity: .75;
+}
+
+#upgradeLink:hover,
+#upgradeLink:focus-visible {
   color: var(--text-color);
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--sidebar-border));
-  background: color-mix(in srgb, var(--accent) 7%, var(--glass-bg-strong));
+  border-color: var(--line);
+  background: var(--sidebar-hover);
+}
+
+#upgradeLink:hover .upgrade-link-glyph {
+  opacity: 1;
 }
 
 /* Ehemalige Topbar-Link-Optik; lebt weiter in den Links des Account-Popups
@@ -659,22 +684,6 @@ body:has(.sidebar.active) .brand-float {
   justify-content: flex-start;
 }
 
-.sidebar-account-label {
-  display: block;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  color: var(--text-color);
-}
-
-.sidebar-account-label[hidden] {
-  display: none;
-}
-
 .sidebar-footer-meta {
   display: flex;
   align-items: center;
@@ -859,6 +868,34 @@ body:has(.sidebar.active) .brand-float {
   opacity: 1;
   font-size: inherit;
   color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Commit + GitHub-Mark als ein Ziel. Die Mark ist bewusst winzig und traegt
+   currentColor, damit sie sich wie Text verhaelt und nicht wie ein Button. */
+.sidebar-footer-repo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: inherit;
+  text-decoration: none;
+  transition: color .15s ease;
+}
+
+.sidebar-footer-repo-icon {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  opacity: .7;
+  transition: opacity .15s ease;
+}
+
+.sidebar-footer-repo:hover {
+  color: var(--text-color);
+}
+
+.sidebar-footer-repo:hover .sidebar-footer-repo-icon {
+  opacity: 1;
 }
 
 /* Account-Avatar in der Fußzeile: leicht getönter Initial-Kreis (Teal).
@@ -877,11 +914,32 @@ body:has(.sidebar.active) .brand-float {
   font-size: var(--font-size-sm);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color .15s ease, border-color .15s ease;
+  user-select: none;
+  transition: background-color .15s ease, border-color .15s ease,
+    transform .15s ease, box-shadow .15s ease;
 }
 
+/* Der Kreis sah bisher wie ein Etikett aus. Ein kleiner Hub plus ein
+   deutlicherer Rand sagt beim Hovern, dass hier etwas aufgeht. */
 .email-icon:hover {
   background-color: color-mix(in srgb, #1d9e75 30%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #1d9e75 60%, var(--sidebar-border));
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px color-mix(in srgb, #1d9e75 22%, transparent);
+}
+
+.email-icon:active {
+  transform: translateY(0) scale(0.96);
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .email-icon,
+  .email-icon:hover,
+  .email-icon:active {
+    transform: none;
+    transition: background-color .15s ease, border-color .15s ease;
+  }
 }
 
 .email-icon:focus-visible {

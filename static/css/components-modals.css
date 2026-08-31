@@ -1538,7 +1538,10 @@
   overflow-y: auto;
   min-height: 0;
 }
-.pro-beta-panel { margin-top: 20px; padding: 18px; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--input-bg); }
+/* Der Panel-Body ist der scrollende Teil des Modals. Ohne min-height:0
+   schneidet das overflow:hidden der .pro-modal-content auf kleinen
+   Schirmen unten einfach ab — samt "Got it". */
+.pro-beta-panel { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin-top: 20px; padding: 18px; border: 1px solid var(--line-soft); border-radius: var(--radius-md); background: var(--input-bg); }
 .pro-beta-panel > p { margin: 0; color: var(--sidebar-text-muted); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
 .pro-beta-panel > p + p { margin-top: 11px; }
 /* Die Kontaktadresse muss als Link erkennbar sein; der Panel-/FAQ-Text ist
@@ -1552,7 +1555,170 @@
 
 .pro-beta-panel a:hover,
 .faq-item p a:hover { color: var(--accent); }
+/* --------------------------------------------------------------------------
+   Kosten-Flow im "Why limits"-Popup
+
+   Drei Stufen nebeneinander, dazwischen eine Haarlinie mit Pfeilspitze. Der
+   Traeger der Aussage sind die Punkte: sechs, einer, zwei — neun. Deshalb
+   sind sie alle gleich gross und gleich grau; eine Semantikfarbe wuerde
+   behaupten, ein Call sei anders teuer als der andere.
+
+   Unter 620px kippt die Reihe in eine Spalte und der Pfeil dreht sich mit,
+   damit die Richtung nicht verloren geht.
+   -------------------------------------------------------------------------- */
+.cost-flow {
+  margin: 14px 0 0;
+  padding: 13px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.cost-flow-track {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cost-flow-stage {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* Punkte und Beschriftung. Auf dem Desktop untereinander (die Punktreihe
+   bildet dann eine durchgehende Linie ueber alle drei Stufen), auf dem Handy
+   nebeneinander — dort zaehlt jede eingesparte Zeile. */
+.cost-flow-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* Die Punktreihe. box-shadow statt background auf einem eigenen Element
+   waere kuerzer, aber sechs echte Kinder lassen sich sauber umbrechen. */
+.cost-flow-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 8px;
+}
+
+.cost-flow-dots i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-2);
+}
+
+.cost-flow-name {
+  color: var(--text-color);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cost-flow-note {
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
+}
+
+/* Pfeil als Haarlinie mit Spitze, auf der Hoehe der Punktreihe. */
+.cost-flow-arrow {
+  position: relative;
+  flex: 0 0 22px;
+  align-self: flex-start;
+  height: 7px;
+  margin-top: 0;
+  border-top: 1px solid var(--line);
+  transform: translateY(3px);
+}
+
+.cost-flow-arrow::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: 0;
+  width: 5px;
+  height: 5px;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  transform: rotate(45deg);
+}
+
+.cost-flow-foot {
+  margin: 11px 0 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
+}
+
+@media (max-width: 620px) {
+  .cost-flow-track {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .cost-flow-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .cost-flow-arrow {
+    flex: none;
+    width: 7px;
+    height: 14px;
+    margin-left: 3px;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    transform: none;
+  }
+
+  .cost-flow-arrow::after {
+    top: auto;
+    right: auto;
+    bottom: 0;
+    left: -3px;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+}
+
 .pro-beta-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+/* Auf dem Telefon war der Kopf allein fast ein Drittel des Fensters. Weniger
+   Polster, kleinere Ueberschrift — der Inhalt darunter ist die Antwort auf die
+   Frage, nicht die Frage selbst. */
+@media (max-width: 620px) {
+  .pro-modal-content {
+    width: min(94vw, 720px);
+    max-height: min(88vh, 720px);
+  }
+
+  .pro-header {
+    padding: 18px 46px 14px 18px;
+  }
+
+  .pro-header h2 {
+    font-size: var(--font-size-lg);
+  }
+
+  .pro-beta-panel {
+    margin-top: 14px;
+    padding: 14px;
+  }
+
+  .pro-beta-actions {
+    margin-top: 14px;
+  }
+}
+
 .pro-request-status { min-height: 1.4em; margin: 13px 0 0; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); }
 .pro-request-status.is-pending { color: var(--sidebar-text-muted); }
 .pro-request-status.is-success { color: #16803a; }

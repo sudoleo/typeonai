@@ -2616,6 +2616,12 @@ alte Gemini-ADC-JSON ist entfernt.
   `https://www.consens.io`). `app/core/site.py` akzeptiert ausschließlich einen
   absoluten HTTP(S)-Origin ohne Credentials, Pfad, Query oder Fragment; Router
   und Hintergrundservices importieren ihn ohne gegenseitige Abhängigkeit.
+- Build-Kennung in der App-Fußzeile: `app/core/version.py` löst den laufenden
+  Commit auf — zuerst aus den Host-Variablen (`RENDER_GIT_COMMIT`, `GIT_COMMIT`,
+  `SOURCE_VERSION`, `COMMIT_SHA`, `VERCEL_GIT_COMMIT_SHA`), sonst durch Lesen von
+  `.git/HEAD` (kein `git`-Subprozess). `/app` reicht ihn als `app_commit` plus
+  `repo_url` ins Template; ist er leer, blendet das Template die Zeile aus. Die
+  früher handgepflegte Versionsnummer (`v1.11.1`) ist damit ersetzt.
 - Ausschließlich für Tests: `UNIT_TEST_MODE=1` initialisiert Firebase Admin im
   regulären pytest-Lauf ohne Service-Account gegen das nicht produktive
   `demo-consensio-unit` und einen geschlossenen Loopback-Port; ein ungemockter

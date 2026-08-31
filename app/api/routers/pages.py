@@ -13,6 +13,7 @@ import app.core.config as cfg
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.site import SITE_URL
+from app.core.version import REPO_URL, get_commit_short
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
 from app.services import persistence_guard
@@ -278,6 +279,11 @@ def read_root(request: Request):
         "deep_think_consensus_model": cfg.get_deep_think_consensus_model(),
         "model_labels": model_labels,
         "model_badges": model_badges,
+        # Statt einer handgepflegten Versionsnummer steht in der Fusszeile
+        # der Commit, der gerade laeuft. Leer = unbekannt: dann zeigt das
+        # Template gar nichts an.
+        "app_commit": get_commit_short(),
+        "repo_url": REPO_URL,
         **firebase_config
     })
     response.headers["X-Robots-Tag"] = "noindex, follow"

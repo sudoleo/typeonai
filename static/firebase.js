@@ -397,7 +397,7 @@ async function checkUserStatusOnLoad(user, token, generation) {
       } else {
           // === IST FREE ===
           if (badge) badge.style.display = "none";
-          if (upgradeLink) upgradeLink.style.display = "inline-block";
+          if (upgradeLink) upgradeLink.style.display = "inline-flex";
 
           premiumOptions.forEach(option => {
               option.disabled = true;
@@ -548,16 +548,6 @@ onIdTokenChanged(auth, async (user) => {
     if (authTopActions) authTopActions.hidden = true;
     if (loginContainer) loginContainer.hidden = false;
 
-    // Account-Label neben dem Avatar in der Sidebar-Fußzeile
-    const accountLabel = document.getElementById("accountLabel");
-    if (accountLabel) {
-      const accountName = (user.displayName || user.email.split("@")[0]).trim();
-      accountLabel.dataset.accountName = accountName;
-      accountLabel.textContent = `${accountName} · ${window.isUserPro ? "Pro" : "Free"}`;
-      accountLabel.title = user.email;
-      accountLabel.hidden = false;
-    }
-
     // 5) E‑Mail & Logout als Popup (öffnet aus der Sidebar-Fußzeile nach oben)
     const emailInitial = user.email.charAt(0).toUpperCase();
     clearAccountMenuDocumentListener();
@@ -658,14 +648,6 @@ onIdTokenChanged(auth, async (user) => {
         // bleibt sichtbar; Watches bittet beim Klick um Login).
         const authTopActionsOff = document.getElementById("authTopActions");
         if (authTopActionsOff) authTopActionsOff.hidden = false;
-
-        const accountLabelOff = document.getElementById("accountLabel");
-        if (accountLabelOff) {
-          accountLabelOff.textContent = "";
-          delete accountLabelOff.dataset.accountName;
-          accountLabelOff.removeAttribute("title");
-          accountLabelOff.hidden = true;
-        }
 
         const upgradeLinkOff = document.getElementById("upgradeLink");
         if (upgradeLinkOff) upgradeLinkOff.style.display = "none";

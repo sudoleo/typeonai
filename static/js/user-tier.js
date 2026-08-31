@@ -1,6 +1,6 @@
 // =====================================================================
 // user-tier.js
-// Tier-/Pro-UI: Badge, "Why limits?"-Link, Deep-Search-Sperre, Premium-Modell-
+// Tier-/Pro-UI: Badge, "Why limits"-Link, Deep-Search-Sperre, Premium-Modell-
 // Optionen je nach Pro/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
@@ -10,20 +10,6 @@
 // =====================================================================
 
 (function () {
-  function syncSidebarAccountLabel(isPro, isLoggedIn) {
-    const accountLabel = document.getElementById("accountLabel");
-    if (!accountLabel) return;
-
-    const accountName = accountLabel.dataset.accountName;
-    if (!isLoggedIn || !accountName) {
-      accountLabel.textContent = "";
-      accountLabel.hidden = true;
-      return;
-    }
-
-    accountLabel.textContent = `${accountName} · ${isPro ? "Pro" : "Free"}`;
-    accountLabel.hidden = false;
-  }
   function updateUserTierUI(isPro, isLoggedIn = false) {
     // 1. Globalen Status aktualisieren.
     window.App.state.set("isUserPro", isPro, "userTier");
@@ -36,7 +22,6 @@
     const badge = document.getElementById("proBadge");
     const upgradeLink = document.getElementById("upgradeLink");
     const deepSearchLabel = document.querySelector('.switch.deep-switch');
-    syncSidebarAccountLabel(isPro, isLoggedIn);
 
     // === CASE 1: NICHT EINGELOGGT ===
     if (!isLoggedIn) {
@@ -82,7 +67,8 @@
     } else {
       // --- FREE USER (EINGELOGGT) ---
       if (badge) badge.style.display = "none";
-      if (upgradeLink) upgradeLink.style.display = "inline-block"; // "Why limits?" nur fuer Free
+      // Der Link ist ein Flex-Container (Glyph + Text), nicht inline-block.
+      if (upgradeLink) upgradeLink.style.display = "inline-flex"; // "Why limits" nur fuer Free
 
       // Limits
       window.setCurrentUsageLimits?.(false);
@@ -159,5 +145,4 @@
 
   window.updateUserTierUI = updateUserTierUI;
   window.updatePremiumModelsState = updatePremiumModelsState;
-  window.syncSidebarAccountLabel = syncSidebarAccountLabel;
 })();

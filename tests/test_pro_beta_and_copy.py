@@ -143,7 +143,7 @@ def test_locked_feature_modal_explains_the_cost_and_sells_nothing():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     js = (ROOT / "static" / "js" / "app-init.js").read_text(encoding="utf-8")
     modal = html[html.index('id="proFeatureModal"'):html.index('id="popupContainer"')]
-    assert "while I'm testing it, it's free" in modal
+    assert "free while I’m testing it" in modal
     assert "nothing to buy today" in modal
     assert "switched off by default" in modal
     # Kein Zukunftsversprechen in beide Richtungen: Pro-Features gibt es, eine
@@ -162,9 +162,11 @@ def test_sidebar_link_explains_limits_instead_of_offering_an_upgrade():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     layout = (ROOT / "static" / "css" / "layout.css").read_text(encoding="utf-8")
     assert 'aria-label="Why there are limits"' in html
-    assert '>Why limits?</a>' in html
+    assert ">Why limits</span>" in html
     assert "#upgradeLink" in layout
     assert "white-space: nowrap" in layout
+    # Der Kontoname stand daneben und hat die Zeile ueberfuellt; er ist raus.
+    assert 'id="accountLabel"' not in html
 
 
 def test_public_pages_state_the_free_while_testing_position():
@@ -222,3 +224,53 @@ def test_user_visible_plan_copy_has_no_stale_literal_plan_values():
         assert stale not in text
     assert "window.APP_LIMITS" in text
     assert 'id="watchUsageDisplay"' in text
+
+
+def test_cost_flow_matches_the_pipeline_it_claims_to_describe():
+    """Der Flow im "Why limits"-Popup nennt konkrete Zahlen. Sie muessen dem
+    Code entsprechen, sonst erklaert das Popup ein Produkt, das es nicht gibt.
+
+    Geprueft wird die Kette selbst: so viele Antwortmodelle wie ein Lauf
+    zulaesst, EIN Synthese-Call, und ZWEI Judges (Differences + Coverage)."""
+    import app.core.config as cfg
+
+    html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    flow = html[html.index('class="cost-flow"'):html.index('class="pro-beta-actions"')]
+
+    assert f"{cfg.MAX_RUN_FAMILIES} answers" in flow
+    assert "1 synthesis" in flow
+    assert "2 judges" in flow
+    # Ein Punkt = ein bezahlter Call. Die Summe im Titel muss aufgehen.
+    total = cfg.MAX_RUN_FAMILIES + 1 + 2
+    assert flow.count("<i></i>") == total
+    words = ["zero", "one", "two", "three", "four", "five", "six",
+             "seven", "eight", "nine", "ten"]
+    # Der Prosa-Satz ueber dem Flow nennt dieselbe Summe wie die Punkte.
+    assert f"{words[total]} calls to {words[cfg.MAX_RUN_FAMILIES]} providers" in html
+    assert f"{words[total].capitalize()} calls before you see a word" in html
+
+    # Der zweite Judge ist der Coverage-Judge; ohne ihn waere "2 judges" falsch.
+    engine = (ROOT / "app" / "services" / "llm" / "consensus_engine.py").read_text(encoding="utf-8")
+    assert "_coverage_attempts" in engine
+    assert (ROOT / "app" / "services" / "llm" / "coverage_judge.py").is_file()
+
+
+def test_footer_shows_the_running_commit_and_links_to_the_repository():
+    from app.core.version import REPO_URL, get_commit_short
+
+    html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    # Die handgepflegte Versionsnummer ist raus -- sie wurde nie hochgezaehlt.
+    assert "v1.11.1" not in html
+    assert '{{ app_commit }}' in html
+    assert '{{ repo_url }}' in html
+    assert 'class="sidebar-footer-repo-icon"' in html
+
+    pages = (ROOT / "app" / "api" / "routers" / "pages.py").read_text(encoding="utf-8")
+    assert '"app_commit": get_commit_short()' in pages
+    assert '"repo_url": REPO_URL' in pages
+
+    assert REPO_URL.startswith("https://github.com/")
+    # Im Checkout ist der Commit lesbar; ohne .git bleibt der Wert leer und das
+    # Template blendet die Zeile aus, statt etwas Falsches zu behaupten.
+    commit = get_commit_short()
+    assert commit == "" or (len(commit) == 7 and all(c in "0123456789abcdef" for c in commit))
