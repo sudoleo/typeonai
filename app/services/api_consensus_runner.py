@@ -30,7 +30,6 @@ from app.services.llm.consensus_engine import (
     query_differences,
 )
 from app.services.llm.credentials import (
-    enable_gemini_adc,
     missing_credentials,
     resolve_developer_api_keys,
 )
@@ -105,7 +104,7 @@ def validate_server_credentials(model_plan: dict) -> None:
     consensus_provider = _consensus_provider_label(model_plan["consensus_model"])
     if consensus_provider and consensus_provider not in required:
         required.append(consensus_provider)
-    keys = enable_gemini_adc(resolve_developer_api_keys())
+    keys = resolve_developer_api_keys()
     missing = missing_credentials(keys, required)
     if missing:
         raise RuntimeError("Missing server credentials for: " + ", ".join(missing))
@@ -345,7 +344,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
     # Publisher runs use the same six providers as every other API run. The
     # persisted model_plan is the single source of truth for who answers, so a
     # run never drops a provider that its own plan still advertises.
-    keys = enable_gemini_adc(resolve_developer_api_keys())
+    keys = resolve_developer_api_keys()
     if mock_llm_enabled():
         keys = {label: "mock" for label in PROVIDER_LABELS.values()}
 

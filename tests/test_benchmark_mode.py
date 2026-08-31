@@ -3,10 +3,7 @@ Tool-Injektion (Status quo) unveraendert (Regression)."""
 
 import unittest
 
-from app.services.llm.engines import (
-    DEEPSEEK_SEARCH_MAX_USES,
-    build_provider_payload,
-)
+from app.services.llm.engines import build_provider_payload
 from benchmark.audit import assert_no_web_tools, find_web_tool_violations
 
 PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok"]
@@ -45,10 +42,8 @@ class BenchmarkModeTests(unittest.TestCase):
                     f"{provider} should still inject a web tool in normal mode",
                 )
 
-    def test_deepseek_benchmark_mode_keeps_openai_compatible_payload(self):
-        """Closed book bleibt auf /chat/completions: der Benchmark darf weder
-        Endpoint noch Prompt-Format wechseln, sonst sind die V1-Laeufe nicht
-        mehr vergleichbar."""
+    def test_deepseek_benchmark_mode_keeps_openrouter_compatible_payload(self):
+        """Closed book remains on the shared OpenRouter Chat Completions path."""
         request = build_provider_payload(
             "deepseek",
             question="What is 2+2?",
@@ -61,24 +56,19 @@ class BenchmarkModeTests(unittest.TestCase):
         self.assertEqual(request["payload"]["messages"][0]["role"], "system")
         self.assertFalse(find_web_tool_violations(request["payload"]))
 
-    def test_deepseek_normal_mode_uses_anthropic_endpoint_with_search(self):
-        """Die Suche laeuft nur ueber /anthropic/v1/messages – /chat/completions
-        lehnt `web_search` als Tool-Typ ab."""
+    def test_deepseek_normal_mode_uses_shared_openrouter_search(self):
+        """Normal mode may search, but still uses the one OpenRouter endpoint."""
         request = build_provider_payload(
             "deepseek",
             question="What is 2+2?",
             system_prompt="system",
             max_output_tokens=128,
         )
-        self.assertEqual(request["endpoint"], "anthropic.messages")
-        self.assertEqual(request["payload"]["system"], "system")
+        self.assertEqual(request["endpoint"], "chat.completions")
+        self.assertEqual(request["payload"]["messages"][0]["content"], "system")
         self.assertEqual(
             request["payload"]["tools"],
-            [{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": DEEPSEEK_SEARCH_MAX_USES,
-            }],
+            [{"type": "openrouter:web_search", "parameters": {"engine": "auto", "max_uses": 2}}],
         )
 
     def test_default_matches_normal_mode(self):

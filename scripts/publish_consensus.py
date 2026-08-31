@@ -19,6 +19,10 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from app.core.config import get_model_config
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
+from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, openrouter_headers
+
 
 class PublisherError(RuntimeError):
     pass
@@ -158,10 +162,12 @@ def choose_question(api_base: str, consensus_key: str, *, topic_brief="") -> str
     if explicit:
         return validate_question(explicit)
 
-    openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
-    if not openai_key:
-        raise PublisherError("OPENAI_API_KEY is required when CONSENSUS_QUESTION is empty")
-    model = os.environ.get("OPENAI_TOPIC_MODEL", "gpt-5.6-luna").strip()
+    openrouter_key = openrouter_api_key(resolve_developer_api_keys())
+    if not openrouter_key:
+        raise PublisherError("OPENROUTER_API_KEY is required when CONSENSUS_QUESTION is empty")
+    model_id = os.environ.get("OPENAI_TOPIC_MODEL", "gpt-5.6-luna").strip()
+    model_config = get_model_config(model_id, provider="openai")
+    model = model_config.api_model if model_config else model_id
     brief = (
         os.environ.get("CONSENSUS_TOPIC_BRIEF") or topic_brief or DEFAULT_TOPIC_BRIEF
     ).strip()
@@ -197,19 +203,30 @@ Return exactly one neutral English question, with no quotation marks, preface, m
 {feedback}"""
         _status, response = http_json(
             "POST",
-            "https://api.openai.com/v1/responses",
-            headers={"Authorization": f"Bearer {openai_key}"},
+            OPENROUTER_CHAT_COMPLETIONS_URL,
+            headers=openrouter_headers(openrouter_key),
             payload={
                 "model": model,
-                "input": prompt,
-                "tools": [{"type": "web_search"}],
+                "messages": [{"role": "user", "content": prompt}],
+                "tools": [{
+                    "type": "openrouter:web_search",
+                    "parameters": {"engine": "auto", "max_uses": 2},
+                }],
+                "max_tool_calls": 3,
                 "reasoning": {"effort": "low"},
-                "max_output_tokens": 800,
+                "max_tokens": 800,
+                "provider": {"zdr": True},
             },
             timeout=180,
         )
         try:
-            return validate_generated_question(response_output_text(response or {}))
+            message = (((response or {}).get("choices") or [{}])[0].get("message")) or {}
+            content = message.get("content") or ""
+            if isinstance(content, list):
+                content = "".join(
+                    str(item.get("text") or "") for item in content if isinstance(item, dict)
+                )
+            return validate_generated_question(str(content))
         except PublisherError as exc:
             last_error = exc
             feedback = (

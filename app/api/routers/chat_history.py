@@ -47,8 +47,7 @@ from app.services.chat_context import (
 from app.services.llm.attachments import normalize_attachment_meta
 from app.services.llm.consensus_engine import resolve_consensus_engine_model
 from app.services.llm.credentials import (
-    enable_gemini_adc,
-    gemini_engine_credentials_available,
+    openrouter_api_key,
     resolve_developer_api_keys,
 )
 from app.services.usage_repository import (
@@ -139,9 +138,9 @@ class ContextBuildRequest(BaseModel):
 
     useOwnKeys: StrictBool = False
     usage_run_key: str | None = None
-    memory_api_key: str | None = None
+    openrouter_key: str | None = None
 
-    @field_validator("usage_run_key", "memory_api_key")
+    @field_validator("usage_run_key", "openrouter_key")
     @classmethod
     def validate_optional_key(cls, value):
         if value is None:
@@ -227,12 +226,11 @@ def _memory_credentials(
         return None, "unsupported_memory_engine", "", engine_model
 
     if payload.useOwnKeys:
-        if not payload.memory_api_key:
+        if not payload.openrouter_key:
             return None, "own_key_missing", provider, engine_model
-        # This dictionary is intentionally not passed through either developer
-        # resolver or Gemini ADC marking. A missing BYOK can never fall back to
-        # an operator credential.
-        api_keys = {provider: payload.memory_api_key}
+        # BYOK is always an OpenRouter key, regardless of the selected model
+        # family. A missing BYOK can never fall back to an operator credential.
+        api_keys = {"OpenRouter": payload.openrouter_key}
     else:
         if not payload.usage_run_key:
             return None, "usage_run_required", provider, engine_model
@@ -248,18 +246,15 @@ def _memory_credentials(
             )
         except Exception:
             return None, "usage_run_unavailable", provider, engine_model
-        api_keys = enable_gemini_adc(resolve_developer_api_keys())
+        api_keys = resolve_developer_api_keys()
 
-    if provider == "Gemini":
-        if not gemini_engine_credentials_available(api_keys):
-            return None, "memory_credentials_missing", provider, engine_model
-    elif not api_keys.get(provider):
+    if not openrouter_api_key(api_keys):
         return None, "memory_credentials_missing", provider, engine_model
 
-    # Die Familie bleibt die der Consensus-Engine — nur fuer sie liegt bei
-    # Eigenschluesseln ein Key vor. Welches Modell dieser Familie die Memory
-    # fortschreibt, entscheidet der Admin (Firestore "chat_memory_models");
-    # ohne gueltige Wahl bleibt es bei der Engine des Turns.
+    # Die Familie bleibt die der Consensus-Engine. Welches Modell dieser
+    # Familie die Memory fortschreibt, entscheidet der Admin (Firestore
+    # "chat_memory_models"); ohne gueltige Wahl bleibt es bei der Engine des
+    # Turns.
     memory_model = cfg.get_chat_memory_model(config.provider) or engine_model
     return ChatMemoryCompressor(memory_model, api_keys), "", provider, memory_model
 

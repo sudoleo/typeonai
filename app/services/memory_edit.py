@@ -17,11 +17,12 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 from firebase_admin import firestore
-import httpx
-
 from app.core.observability import safe_exception
+from app.core.config import get_model_config
 from app.services import persistence_guard, user_memory
-from app.services.llm.provider_runtime import openai_client
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
+from app.services.llm.engines import OPENROUTER_BASE_URL
+from app.services.llm.provider_runtime import managed_provider_resource, openai_client
 
 
 EDIT_SCHEMA_VERSION = 1
@@ -183,9 +184,11 @@ def request_memory_patch(
     timeout_seconds: int,
     intent: str = "correct",
 ) -> dict[str, str]:
-    api_key = str(os.environ.get("DEVELOPER_OPENAI_API_KEY") or "").strip()
+    api_key = str(openrouter_api_key(resolve_developer_api_keys()) or "").strip()
     if not api_key:
         raise MemoryEditError("provider_unavailable", "Memory editing is temporarily unavailable.")
+    model_config = get_model_config(model, provider="openai")
+    api_model = model_config.api_model if model_config else model
     prompt = json.dumps(
         {
             "current_memory": {
@@ -208,55 +211,29 @@ def request_memory_patch(
     )
     client = openai_client(
         api_key=api_key,
+        base_url=OPENROUTER_BASE_URL,
         timeout_seconds=float(timeout_seconds),
     )
-    request_payload = {
-        "model": model,
-        "instructions": PATCH_SYSTEM_PROMPT,
-        "input": prompt,
-        "max_output_tokens": int(max_output_tokens),
-        "reasoning": {"effort": "none"},
-        "text": {
-            "format": {
+    with managed_provider_resource(client):
+        response = client.chat.completions.create(
+            model=api_model,
+            messages=[
+                {"role": "system", "content": PATCH_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            max_tokens=int(max_output_tokens),
+            reasoning_effort="none",
+            response_format={
                 "type": "json_schema",
-                "name": "memory_patch",
-                "strict": True,
-                "schema": PATCH_JSON_SCHEMA,
-            }
-        },
-    }
-    responses = getattr(client, "responses", None)
-    create_response = getattr(responses, "create", None)
-    if callable(create_response):
-        response = create_response(**request_payload)
-        output_text = getattr(response, "output_text", "")
-    else:
-        # openai==1.63.2 predates the SDK Responses resource. Keep the pinned
-        # SDK compatible by using the same API over the existing no-retry
-        # httpx transport rather than turning this into a 502 before any call.
-        timeout = float(timeout_seconds)
-        with httpx.Client(
-            timeout=httpx.Timeout(timeout, connect=min(timeout, 10.0)),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
+                "json_schema": {
+                    "name": "memory_patch",
+                    "strict": True,
+                    "schema": PATCH_JSON_SCHEMA,
+                },
             },
-        ) as transport:
-            http_response = transport.post(
-                "https://api.openai.com/v1/responses",
-                json=request_payload,
-            )
-            http_response.raise_for_status()
-            response_data = http_response.json()
-        output_text = str(response_data.get("output_text") or "")
-        if not output_text:
-            output_text = "".join(
-                str(content.get("text") or "")
-                for item in response_data.get("output", [])
-                if isinstance(item, dict)
-                for content in item.get("content", [])
-                if isinstance(content, dict) and content.get("type") == "output_text"
-            )
+            extra_body={"provider": {"zdr": True}},
+        )
+    output_text = response.choices[0].message.content or ""
     return parse_and_validate_patch(output_text)
 
 
@@ -692,7 +669,7 @@ class MemoryEditService:
         # duerfen deshalb kein persistentes Kontingent verbrauchen.
         if (
             self.provider is request_memory_patch
-            and not str(os.environ.get("DEVELOPER_OPENAI_API_KEY") or "").strip()
+            and not openrouter_api_key(resolve_developer_api_keys())
         ):
             raise MemoryEditError(
                 "provider_unavailable", "Memory editing is temporarily unavailable."

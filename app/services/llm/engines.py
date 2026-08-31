@@ -1,76 +1,51 @@
+"""Unified OpenRouter transport for all consens.io model families."""
+
 from __future__ import annotations
 
-import os
 import logging
+from typing import Any
+
 import requests
-from typing import Optional
-from urllib.parse import quote
-import google.auth
-from google.auth.transport.requests import Request as GoogleAuthRequest
 
 import app.core.config as cfg
 from app.core.observability import safe_exception
-from app.core.config import (
-    REASONING_EFFORT_FOR_DEEP,
-    DEEP_THINK_PROMPT,
-    GEMINI_FLASH_MODEL,
-    GEMINI_PRO_MODEL,
-    DEFAULT_OPENAI_MODEL,
-    DEFAULT_MISTRAL_MODEL,
-    MISTRAL_PRO_MODEL,
-    DEFAULT_ANTHROPIC_MODEL,
-    ANTHROPIC_PRO_MODEL,
-    DEFAULT_DEEPSEEK_MODEL,
-    DEFAULT_GROK_MODEL,
-)
 from app.services.llm.attachments import (
     IMAGE_MIMES,
     build_attachment_question_suffix,
     native_attachments_for_provider,
 )
 from app.services.llm.base import get_system_prompt
-from app.services.llm.citations import (
-    make_llm_result,
-    parse_anthropic_response,
-    parse_gemini_response,
-    parse_mistral_content,
-    parse_openai_response,
-    result_text,
-)
-from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT
+from app.services.llm.citations import coerce_text, parse_openrouter_response, result_text
+from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_provider_resource
 
 logger = logging.getLogger(__name__)
 
-# Achtung, der Pfad ist irrefuehrend: das ist DeepSeeks EIGENER Server mit
-# DeepSeek-Key, DeepSeek-Modellen und DeepSeek-Preisen. Nur das JSON-Format ist
-# Anthropics Messages-Schema nachgebaut (so wie /chat/completions OpenAIs
-# Schema nachbaut). Es geht kein Request an Anthropic.
-#
-# DeepSeek bietet die serverseitige Web-Suche auf zwei Wegen an:
-#   /responses            -> `{"type": "web_search"}`, laeuft, liefert aber
-#                            weder `action.sources` noch Annotationen: gemessen
-#                            0 Quellen ueber alle Testfragen.
-#   /anthropic/v1/messages -> `web_search_20250305`, liefert die Treffer als
-#                            `web_search_tool_result`-Bloecke (Titel + URL).
-# Fuer eine App, die Herkunft anzeigt, ist nur der zweite Weg brauchbar.
-# /chat/completions kann es gar nicht ("unknown variant `web_search`, expected
-# `function`") und bleibt deshalb der closed-book Benchmark-Pfad.
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-DEEPSEEK_ANTHROPIC_URL = f"{DEEPSEEK_BASE_URL}/anthropic/v1/messages"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENROUTER_CHAT_COMPLETIONS_URL = f"{OPENROUTER_BASE_URL}/chat/completions"
+OPENROUTER_REFERER = "https://consens.io"
+OPENROUTER_TITLE = "consens.io"
 
-# Jede Suche liefert pauschal 10 Treffer – es gibt keinen Parameter fuer
-# "weniger Ergebnisse pro Suche". `max_uses` ist damit der einzige Hebel und
-# steuert Quellenzahl und Kosten zugleich (gemessen, v4-flash):
-#   1 -> ~10 Quellen,  3.8k Input-Tokens
-#   2 -> ~18 Quellen,  9.6k
-#   5 -> ~35 Quellen, 23.6k
-# 2 als Kompromiss: die Liste bleibt lesbar, mehrteilige Fragen duerfen aber
-# noch mehr als einmal suchen.
-DEEPSEEK_SEARCH_MAX_USES = 2
+_DEFAULT_MODEL_BY_PROVIDER = {
+    "openai": cfg.DEFAULT_OPENAI_MODEL,
+    "mistral": cfg.DEFAULT_MISTRAL_MODEL,
+    "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
+    "gemini": cfg.GEMINI_FLASH_MODEL,
+    "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
+    "grok": cfg.DEFAULT_GROK_MODEL,
+}
+
+_DEEP_SEARCH_MODEL_BY_PROVIDER = {
+    "openai": "gpt-5.5",
+    "mistral": cfg.MISTRAL_PRO_MODEL,
+    "anthropic": cfg.ANTHROPIC_PRO_MODEL,
+    "gemini": cfg.GEMINI_PRO_MODEL,
+    "deepseek": cfg.DEEPSEEK_PRO_MODEL,
+    "grok": "grok-4.3",
+}
 
 
 class _ProviderHTTPStatusError(RuntimeError):
-    """Content-free upstream status error that keeps retry/metric semantics."""
+    """Content-free upstream status error for metrics and retry policy."""
 
     def __init__(self, status_code: int):
         super().__init__("upstream provider returned an HTTP error")
@@ -78,7 +53,6 @@ class _ProviderHTTPStatusError(RuntimeError):
 
 
 def _raise_provider_http_status(response) -> None:
-    """Raise without copying an untrusted provider response body into errors."""
     raise _ProviderHTTPStatusError(int(response.status_code))
 
 
@@ -101,34 +75,22 @@ def _error(provider: str, error: Exception | str, *, timeout: bool = False):
     }
 
 
-def _responses_empty_result(data: dict, provider: str) -> dict:
-    """Fehler-Result für eine Responses-API-Antwort ohne Ausgabetext.
-
-    Ohne diese Auswertung landet ein leeres `response` beim Frontend, das dann
-    nur den irreführenden Generik-Text "No response received / timed out"
-    zeigen kann. Der häufigste echte Grund ist `incomplete_details.reason ==
-    "max_output_tokens"`: Reasoning-Tokens zählen bei der Responses API gegen
-    max_output_tokens, das Budget kann komplett im Denken aufgehen."""
-    status = data.get("status")
-    reason = str((data.get("incomplete_details") or {}).get("reason") or "")
-    logger.warning(
-        "%s Responses API returned no output text (status=%s, reason=%s, model=%s)",
-        provider, status, reason, data.get("model"),
-    )
-    if reason == "max_output_tokens":
-        message = ("The model used up its output token budget before writing an answer "
-                   "(often on internal reasoning). Please try again or simplify the question.")
-        code = "max_output_tokens"
-    elif reason == "content_filter":
-        message = "The provider's content filter stopped this response. Please rephrase the question."
-        code = "content_filter"
-    else:
-        message = "The model returned no answer. Please try again."
-        code = "empty_response"
-    return {"text": "", "sources": [], "error": message, "error_code": code}
+def _merge_nested_config(payload: dict, config: dict | None):
+    if not config:
+        return
+    for key, value in config.items():
+        if isinstance(value, dict) and isinstance(payload.get(key), dict):
+            _merge_nested_config(payload[key], value)
+        else:
+            payload[key] = value
 
 
-def _log_model_selection(provider: str, api_model: str, deep_search: bool, model_override: str | None):
+def _log_model_selection(
+    provider: str,
+    api_model: str,
+    deep_search: bool,
+    model_override: str | None,
+) -> None:
     logger.info(
         "Provider model selected: %s -> %s | deep_search=%s | override=%s",
         provider,
@@ -138,115 +100,33 @@ def _log_model_selection(provider: str, api_model: str, deep_search: bool, model
     )
 
 
-def _responses_input_with_attachments(question: str, native_attachments: list[dict]):
-    """Baut den `input` für die Responses API (OpenAI/Grok) mit Datei-Content-Blöcken."""
-    content = []
-    for att in native_attachments:
-        if att["mime"] in IMAGE_MIMES:
-            content.append({
-                "type": "input_image",
-                "image_url": f"data:{att['mime']};base64,{att['data']}",
-            })
-        else:
-            content.append({
-                "type": "input_file",
-                "filename": att["name"],
-                "file_data": f"data:application/pdf;base64,{att['data']}",
-            })
-    content.append({"type": "input_text", "text": question})
-    return [{"role": "user", "content": content}]
-
-
-def _anthropic_content_with_attachments(question: str, native_attachments: list[dict]):
-    content = []
-    for att in native_attachments:
-        if att["mime"] in IMAGE_MIMES:
-            content.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": att["mime"], "data": att["data"]},
-            })
-        else:
-            content.append({
-                "type": "document",
-                "source": {"type": "base64", "media_type": "application/pdf", "data": att["data"]},
-            })
-    content.append({"type": "text", "text": question})
-    return content
-
-
-def _gemini_parts_with_attachments(question_text: str, native_attachments: list[dict]):
-    parts = [
-        {"inline_data": {"mime_type": att["mime"], "data": att["data"]}}
-        for att in native_attachments
-    ]
-    parts.append({"text": question_text})
-    return parts
-
-
-def _openai_responses_payload(
-    *,
-    model: str,
-    system_prompt: str,
-    question: str,
-    max_tokens: int,
-    request_config: dict | None = None,
-    native_attachments: list[dict] | None = None,
-    benchmark_mode: bool = False,
-) -> dict:
-    payload = {
-        "model": model,
-        "instructions": system_prompt,
-        "input": (
-            _responses_input_with_attachments(question, native_attachments)
-            if native_attachments else question
-        ),
-        "max_output_tokens": max_tokens,
+def openrouter_headers(api_key: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": OPENROUTER_REFERER,
+        "X-Title": OPENROUTER_TITLE,
     }
-    if not benchmark_mode:
-        # Closed-book Benchmark-Läufe (benchmark_mode) lassen das Web-Such-Tool weg;
-        # die normale App injiziert es weiterhin.
-        payload["tools"] = [{"type": "web_search"}]
-        payload["tool_choice"] = "auto"
-        payload["include"] = ["web_search_call.action.sources"]
-    if request_config:
-        payload.update(request_config)
-    return payload
 
 
-def _openai_responses_call(
-    *,
-    api_key: str,
-    base_url: str,
-    payload: dict,
-    provider: str,
-):
-
-    resp = requests.post(
-        f"{base_url.rstrip('/')}/responses",
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        timeout=PROVIDER_HTTP_TIMEOUT,
-    )
-    if resp.status_code >= 400:
-        _raise_provider_http_status(resp)
-    data = resp.json()
-    result = parse_openai_response(data, provider=provider)
-    if not result_text(result):
-        return _responses_empty_result(data, provider)
-    return result
-
-
-def _merge_nested_config(payload: dict, config: dict | None):
-    if not config:
-        return
-    for key, value in config.items():
-        if isinstance(value, dict) and isinstance(payload.get(key), dict):
-            _merge_nested_config(payload[key], value)
+def _openrouter_user_content(question: str, attachments: list[dict]) -> str | list[dict]:
+    if not attachments:
+        return question
+    content: list[dict[str, Any]] = [{"type": "text", "text": question}]
+    for attachment in attachments:
+        mime = attachment["mime"]
+        data_url = f"data:{mime};base64,{attachment['data']}"
+        if mime in IMAGE_MIMES:
+            content.append({"type": "image_url", "image_url": {"url": data_url}})
         else:
-            payload[key] = value
+            content.append({
+                "type": "file",
+                "file": {
+                    "filename": attachment["name"],
+                    "file_data": data_url,
+                },
+            })
+    return content
 
 
 def build_provider_payload(
@@ -260,589 +140,120 @@ def build_provider_payload(
     attachments: list[dict] | None = None,
     benchmark_mode: bool = False,
 ) -> dict:
-    if system_prompt is None:
-        system_prompt = get_system_prompt()
+    """Build the one OpenRouter Chat Completions payload used by every family."""
+    provider_key = str(provider or "").lower()
+    if provider_key not in _DEFAULT_MODEL_BY_PROVIDER:
+        raise ValueError(f"Unsupported model family: {provider}")
+
+    system = system_prompt if system_prompt is not None else get_system_prompt()
     if deep_search:
-        system_prompt += "\n" + DEEP_THINK_PROMPT
+        system += "\n" + cfg.DEEP_THINK_PROMPT
 
+    default_model = _DEFAULT_MODEL_BY_PROVIDER[provider_key]
+    internal_model = (
+        _DEEP_SEARCH_MODEL_BY_PROVIDER[provider_key]
+        if deep_search
+        else (model_override or default_model)
+    )
+    api_model, model_config = cfg.resolve_api_model(
+        internal_model,
+        default_model,
+        provider_key,
+    )
     max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-    provider_key = provider.lower()
 
-    # Anhänge: nativ unterstützte Dateien gehen als Content-Block mit,
-    # alles andere wird als Text-Fallback an die Frage angehängt.
-    native_attachments = native_attachments_for_provider(attachments or [], provider_key)
+    provider_attachments = native_attachments_for_provider(attachments or [], provider_key)
     fallback_suffix = build_attachment_question_suffix(attachments or [], provider_key)
     if fallback_suffix:
         question = (question or "") + fallback_suffix
 
-    if provider_key == "openai":
-        if deep_search:
-            api_model = "gpt-5.5"
-            model_config = None
-            request_config = {"reasoning": {"effort": REASONING_EFFORT_FOR_DEEP}}
-            internal_model = "deep_search:gpt-5.5"
-        else:
-            internal_model = model_override or DEFAULT_OPENAI_MODEL
-            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_OPENAI_MODEL, "openai")
-            request_config = model_config.request_config
-        payload = _openai_responses_payload(
-            model=api_model,
-            system_prompt=system_prompt,
-            question=question,
-            max_tokens=max_tokens,
-            request_config=request_config,
-            native_attachments=native_attachments,
-            benchmark_mode=benchmark_mode,
-        )
-        return {
-            "provider": "openai",
-            "endpoint": "responses",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning) if not deep_search else True,
-            "payload": payload,
-        }
-
-    if provider_key == "mistral":
-        if deep_search:
-            api_model = MISTRAL_PRO_MODEL
-            internal_model = f"deep_search:{MISTRAL_PRO_MODEL}"
-        else:
-            internal_model = model_override or DEFAULT_MISTRAL_MODEL
-            api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_MISTRAL_MODEL, "mistral")
-        completion_args = {
-            "max_tokens": max_tokens,
-            "temperature": 0.2,
-        }
-        if api_model in cfg.MISTRAL_REASONING_MODELS:
-            completion_args["reasoning_effort"] = "high"
-        mistral_payload = {
-            "model": api_model,
-            "instructions": system_prompt,
-            "inputs": question,
-            "completion_args": completion_args,
-            "store": False,
-        }
-        if not benchmark_mode:
-            mistral_payload["tools"] = [{"type": "web_search"}]
-        return {
-            "provider": "mistral",
-            "endpoint": "conversations",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": False,
-            "payload": mistral_payload,
-        }
-
-    if provider_key == "anthropic":
-        if deep_search:
-            api_model = ANTHROPIC_PRO_MODEL
-            model_config = None
-            internal_model = f"deep_search:{ANTHROPIC_PRO_MODEL}"
-        else:
-            internal_model = model_override or DEFAULT_ANTHROPIC_MODEL
-            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_ANTHROPIC_MODEL, "anthropic")
-        payload = {
-            "model": api_model,
-            "max_tokens": max_tokens,
-            "system": system_prompt,
-            "messages": [{
+    payload = {
+        "model": api_model,
+        "messages": [
+            {"role": "system", "content": system or " "},
+            {
                 "role": "user",
-                "content": (
-                    _anthropic_content_with_attachments(question, native_attachments)
-                    if native_attachments else question
-                ),
-            }],
-        }
-        if not benchmark_mode:
-            payload["tools"] = [{
-                "type": "web_search_20250305",
-                "name": "web_search",
-                "max_uses": 5,
-            }]
-        if model_config and model_config.request_config:
-            _merge_nested_config(payload, model_config.request_config)
-        return {
-            "provider": "anthropic",
-            "endpoint": "messages",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning),
-            "payload": payload,
-        }
-
-    if provider_key == "gemini":
-        if deep_search:
-            api_model = GEMINI_PRO_MODEL
-            model_config = None
-            internal_model = f"deep_search:{GEMINI_PRO_MODEL}"
-        else:
-            internal_model = model_override or GEMINI_FLASH_MODEL
-            api_model, model_config = cfg.resolve_api_model(model_override, GEMINI_FLASH_MODEL, "gemini")
-        if question and len(question) > 12000:
-            question = question[:12000] + " ... [truncated]"
-        gemini_question_text = "Do not ask any questions.\n---\n" + question
-        payload = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{
-                "role": "user",
-                "parts": _gemini_parts_with_attachments(gemini_question_text, native_attachments),
-            }],
-            "generationConfig": {"maxOutputTokens": max_tokens},
-            "safetySettings": [{
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_ONLY_HIGH",
-            }],
-        }
-        if not benchmark_mode:
-            payload["tools"] = [{"google_search": {}}]
-        # Admin-konfigurierte Gemini-IDs koennen neuere Generationen sein,
-        # deren Sampling-Schema sich geaendert hat. Temperature ist optional;
-        # deshalb bleibt der gemeinsame Payload modellunabhaengig.
-        if model_config and model_config.request_config:
-            _merge_nested_config(payload, model_config.request_config)
-        return {
-            "provider": "gemini",
-            "endpoint": "generateContent",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning),
-            "payload": payload,
-        }
-
-    if provider_key == "deepseek":
-        if deep_search:
-            api_model = "deepseek-v4-pro"
-            internal_model = "deep_search:deepseek-v4-pro"
-        else:
-            internal_model = model_override or DEFAULT_DEEPSEEK_MODEL
-            api_model, _ = cfg.resolve_api_model(model_override, DEFAULT_DEEPSEEK_MODEL, "deepseek")
-        if benchmark_mode:
-            # Closed book: unveraenderter OpenAI-kompatibler Payload, damit die
-            # Benchmark-Laeufe mit den bestehenden V1-Ergebnissen vergleichbar
-            # bleiben (kein Endpoint- und kein Prompt-Format-Wechsel).
-            return {
-                "provider": "deepseek",
-                "endpoint": "chat.completions",
-                "internal_model": internal_model,
-                "api_model": api_model,
-                "is_low_reasoning": False,
-                "payload": {
-                    "model": api_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": question},
-                    ],
-                    "stream": False,
-                    "max_tokens": max_tokens,
-                },
-            }
-        # Anhaenge gehen hier nie als Content-Block mit: DeepSeek listet image
-        # und document als "Not Supported"; `native_attachments_for_provider`
-        # liefert fuer deepseek daher immer [] (der Text-Fallback haengt bereits
-        # an `question`).
-        return {
-            "provider": "deepseek",
-            "endpoint": "anthropic.messages",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": False,
-            "payload": {
-                "model": api_model,
-                "max_tokens": max_tokens,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": question}],
-                "tools": [{
-                    "type": "web_search_20250305",
-                    "name": "web_search",
-                    "max_uses": DEEPSEEK_SEARCH_MAX_USES,
-                }],
+                "content": _openrouter_user_content(question, provider_attachments),
             },
-        }
+        ],
+        "max_tokens": max_tokens,
+        # Privacy policy, not provider pinning: only zero-retention endpoints may run.
+        "provider": {"zdr": True},
+    }
+    if not benchmark_mode:
+        max_uses = 5 if deep_search else 2
+        payload["tools"] = [{
+            "type": "openrouter:web_search",
+            "parameters": {"engine": "auto", "max_uses": max_uses},
+        }]
+        payload["max_tool_calls"] = max_uses + 1
 
-    if provider_key == "grok":
-        if deep_search:
-            api_model = "grok-4.3"
-            model_config = None
-            request_config = {"reasoning": {"effort": REASONING_EFFORT_FOR_DEEP}}
-            internal_model = "deep_search:grok-4.3"
-        else:
-            internal_model = model_override or DEFAULT_GROK_MODEL
-            api_model, model_config = cfg.resolve_api_model(model_override, DEFAULT_GROK_MODEL, "grok")
-            request_config = model_config.request_config
-        payload = _openai_responses_payload(
-            model=api_model,
-            system_prompt=system_prompt,
+    request_config = dict(model_config.request_config or {})
+    if provider_key == "mistral" and internal_model in cfg.MISTRAL_REASONING_MODELS:
+        request_config.setdefault("reasoning", {"effort": "high"})
+    if deep_search:
+        request_config.setdefault("reasoning", {"effort": cfg.REASONING_EFFORT_FOR_DEEP})
+    _merge_nested_config(payload, request_config)
+
+    return {
+        "provider": provider_key,
+        "endpoint": "chat.completions",
+        "internal_model": f"deep_search:{internal_model}" if deep_search else internal_model,
+        "api_model": api_model,
+        "is_low_reasoning": bool(model_config.is_low_reasoning) if model_config else False,
+        "payload": payload,
+    }
+
+
+def query_model(
+    provider: str,
+    question: str,
+    api_key: str,
+    system_prompt: str | None = None,
+    deep_search: bool = False,
+    model_override: str | None = None,
+    max_output_tokens: int | None = None,
+    attachments: list[dict] | None = None,
+    benchmark_mode: bool = False,
+):
+    """Run one non-streaming model request through OpenRouter."""
+    provider_key = str(provider or "").lower()
+    label = cfg.provider_label(provider)
+    try:
+        request_data = build_provider_payload(
+            provider,
             question=question,
-            max_tokens=max_tokens,
-            request_config=request_config,
-            native_attachments=native_attachments,
+            system_prompt=system_prompt,
+            model_override=model_override,
+            deep_search=deep_search,
+            max_output_tokens=max_output_tokens,
+            attachments=attachments,
             benchmark_mode=benchmark_mode,
         )
-        # Non-Reasoning-Varianten: xAI streamt trotzdem Reasoning-Items
-        # (leere Platzhalter). Das Flag lässt den Stream-Wrapper die Marker
-        # unterdrücken, damit das Frontend nicht "Reasoning" anzeigt.
-        reasoning_config = request_config.get("reasoning") if isinstance(request_config, dict) else None
-        is_non_reasoning = (
-            (isinstance(reasoning_config, dict) and reasoning_config.get("effort") == "none")
-            or "non-reasoning" in str(internal_model)
-            or "no-reasoning" in str(internal_model)
-        )
-        return {
-            "provider": "grok",
-            "endpoint": "responses",
-            "internal_model": internal_model,
-            "api_model": api_model,
-            "is_low_reasoning": bool(model_config and model_config.is_low_reasoning) if not deep_search else True,
-            "is_non_reasoning": is_non_reasoning and not deep_search,
-            "payload": payload,
-        }
-
-    raise ValueError(f"Unsupported provider for payload dry-run: {provider}")
-
-
-def _mistral_headers(api_key: str):
-    return {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-
-def _mistral_builtin_tools_unsupported(response: requests.Response) -> bool:
-    if response.status_code != 400:
-        return False
-    try:
-        data = response.json()
-    except ValueError:
-        return "builtin connectors" in response.text.lower()
-
-    message = str(data.get("message") or "").lower()
-    code = data.get("code")
-    return code == 3004 or "builtin connectors" in message
-
-
-def _google_adc_headers() -> dict:
-    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/generative-language"])
-    credentials.refresh(GoogleAuthRequest())
-    return {
-        "Authorization": f"Bearer {credentials.token}",
-        "Content-Type": "application/json",
-    }
-
-
-def _gemini_search_tool_unsupported(error_text: str) -> bool:
-    text = (error_text or "").lower()
-    return (
-        "google_search_retrieval is not supported" in text
-        or "google_search is not supported" in text
-        or "search grounding" in text
-        or "google_search tool" in text and "not supported" in text
-    )
-
-
-def query_openai(
-    question: str,
-    api_key: str,
-    deep_search: bool = False,
-    system_prompt: str = None,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-    request_data = build_provider_payload(
-        "openai",
-        question=question,
-        system_prompt=system_prompt,
-        model_override=model_override,
-        deep_search=deep_search,
-        max_output_tokens=max_tokens,
-        attachments=attachments,
-    )
-
-    _log_model_selection("OpenAI", request_data["api_model"], deep_search, model_override)
-
-    try:
-        return _openai_responses_call(
-            api_key=api_key,
-            base_url="https://api.openai.com/v1",
-            payload=request_data["payload"],
-            provider="openai",
-        )
-    except Exception as e:
-        return _error("OpenAI", e)
-
-
-def query_mistral(
-    question: str,
-    api_key: str,
-    system_prompt: str = None,
-    deep_search: bool = False,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    """Fragt die Mistral API zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit."""
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-
-    try:
-        request_data = build_provider_payload(
-            "mistral",
-            question=question,
-            system_prompt=system_prompt,
-            model_override=model_override,
-            deep_search=deep_search,
-            max_output_tokens=max_tokens,
-            attachments=attachments,
-        )
-
-        _log_model_selection("Mistral", request_data["api_model"], deep_search, model_override)
-
-        payload = request_data["payload"]
+        _log_model_selection(label, request_data["api_model"], deep_search, model_override)
         response = requests.post(
-            "https://api.mistral.ai/v1/conversations",
-            json=payload,
-            headers=_mistral_headers(api_key),
-            timeout=PROVIDER_HTTP_TIMEOUT,
-        )
-        if _mistral_builtin_tools_unsupported(response):
-            payload.pop("tools", None)
-            response = requests.post(
-                "https://api.mistral.ai/v1/conversations",
-                json=payload,
-                headers=_mistral_headers(api_key),
-                timeout=PROVIDER_HTTP_TIMEOUT,
-            )
-        if response.status_code >= 400:
-            _raise_provider_http_status(response)
-        data = response.json()
-        content = []
-        for output in data.get("outputs", []) or []:
-            if output.get("type") == "message.output":
-                output_content = output.get("content", "")
-                if isinstance(output_content, list):
-                    content.extend(output_content)
-                elif output_content:
-                    content.append({"type": "text", "text": str(output_content)})
-        if not content:
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return parse_mistral_content(content)
-    except Exception as e:
-        return _error("Mistral", e)
-
-
-def query_claude(
-    question: str,
-    api_key: str,
-    system_prompt: str = None,
-    deep_search: bool = False,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    """Fragt die Anthropic API (Claude) zu der gegebenen Frage unter Verwendung des übergebenen API Keys ohne Limit.
-       Da die Anthropic API ein Token-Limit erwartet, setzen wir einen sehr hohen Wert ein."""
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-
-    try:
-        url = "https://api.anthropic.com/v1/messages"
-        headers = {
-            "x-api-key": api_key,
-            "Content-Type": "application/json",
-            "anthropic-version": "2023-06-01"
-        }
-        request_data = build_provider_payload(
-            "anthropic",
-            question=question,
-            system_prompt=system_prompt,
-            model_override=model_override,
-            deep_search=deep_search,
-            max_output_tokens=max_tokens,
-            attachments=attachments,
-        )
-        payload = request_data["payload"]
-
-        _log_model_selection("Claude", payload["model"], deep_search, model_override)
-
-        response = requests.post(
-            url, json=payload, headers=headers, timeout=PROVIDER_HTTP_TIMEOUT
-        )
-        if response.status_code == 200:
-            data = response.json()
-            parsed = parse_anthropic_response(data)
-            if result_text(parsed):
-                return parsed
-            else:
-                return make_llm_result("Error: No response found in the API response.", [])
-        else:
-            return _error(
-                "Anthropic",
-                "upstream_status",
-                timeout=response.status_code in {408, 504},
-            )
-    except Exception as e:
-        return _error("Anthropic", e)
-
-def query_gemini(
-    question: str,
-    user_api_key: Optional[str] = None,
-    deep_search: bool = False,
-    system_prompt: str = None,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-    request_data = build_provider_payload(
-        "gemini",
-        question=question,
-        system_prompt=system_prompt,
-        model_override=model_override,
-        deep_search=deep_search,
-        max_output_tokens=max_tokens,
-        attachments=attachments,
-    )
-    model_name = request_data["api_model"]
-    _log_model_selection("Gemini", model_name, deep_search, model_override)
-
-    api_key = (user_api_key or os.environ.get("DEVELOPER_GEMINI_API_KEY") or "").strip()
-
-    try:
-        payload = request_data["payload"]
-        request_kwargs = {
-            "json": payload,
-            "timeout": PROVIDER_HTTP_TIMEOUT,
-        }
-        if api_key:
-            request_kwargs["params"] = {"key": api_key}
-        else:
-            request_kwargs["headers"] = _google_adc_headers()
-
-        response = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model_name, safe='')}:generateContent",
-            **request_kwargs,
-        )
-        if response.status_code >= 400 and _gemini_search_tool_unsupported(response.text):
-            payload.pop("tools", None)
-            response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{quote(model_name, safe='')}:generateContent",
-                **request_kwargs,
-            )
-        if response.status_code >= 400:
-            _raise_provider_http_status(response)
-        data = response.json()
-        parsed = parse_gemini_response(data)
-        if result_text(parsed):
-            return parsed
-        cand = (data.get("candidates") or [{}])[0]
-        fr = cand.get("finishReason")
-
-        frs = str(fr)
-        if frs in ("2", "MAX_TOKENS", "FinishReason.MAX_TOKENS"):
-            return make_llm_result("Error with Gemini: hit max tokens before producing text. Raise max_output_tokens or trim input.", [])
-        if frs in ("3", "SAFETY", "FinishReason.SAFETY"):
-            return make_llm_result("Error with Gemini: response was blocked by safety filters.", [])
-        if frs in ("4", "RECITATION", "FinishReason.RECITATION"):
-            return make_llm_result("Error with Gemini: response suppressed by recitation policy.", [])
-        return make_llm_result(f"Error with Gemini: empty response payload (finish_reason={frs}).", [])
-    except Exception as e:
-        return _error("Gemini", e)
-
-def query_deepseek(
-    question: str,
-    api_key: str,
-    system_prompt: str = None,
-    deep_search: bool = False,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    """Fragt DeepSeek zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-
-    try:
-        request_data = build_provider_payload(
-            "deepseek",
-            question=question,
-            system_prompt=system_prompt,
-            model_override=model_override,
-            deep_search=deep_search,
-            max_output_tokens=max_tokens,
-            attachments=attachments,
-        )
-        _log_model_selection("DeepSeek", request_data["api_model"], deep_search, model_override)
-
-        response = requests.post(
-            DEEPSEEK_ANTHROPIC_URL,
+            OPENROUTER_CHAT_COMPLETIONS_URL,
+            headers=openrouter_headers(api_key),
             json=request_data["payload"],
-            headers={
-                "x-api-key": api_key,
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01",
-            },
             timeout=PROVIDER_HTTP_TIMEOUT,
         )
-        if response.status_code >= 400:
-            _raise_provider_http_status(response)
-        data = response.json()
-        parsed = parse_anthropic_response(data, "deepseek")
-        if result_text(parsed):
-            return parsed
-
-        # Reasoning-Modelle können das Token-Budget komplett im Denken
-        # verbrauchen; ohne diese Auswertung zeigt das Frontend nur den
-        # irreführenden Generik-Text "No response received".
-        stop_reason = data.get("stop_reason")
-        logger.warning(
-            "DeepSeek returned no content (stop_reason=%s, model=%s)",
-            stop_reason, request_data["api_model"],
+        with managed_provider_resource(response):
+            if response.status_code >= 400:
+                _raise_provider_http_status(response)
+            data = response.json()
+        message = (((data.get("choices") or [{}])[0].get("message")) or {})
+        result = parse_openrouter_response(
+            coerce_text(message.get("content")),
+            message.get("annotations") or data.get("citations") or [],
+            provider_key,
         )
-        if stop_reason == "max_tokens":
-            message = ("The model ran out of output tokens while reasoning and never "
-                       "produced an answer. Please try again or simplify the question.")
-            code = "empty_reasoning_response"
-        else:
-            message = "The model returned no answer. Please try again."
-            code = "empty_response"
-        return {"text": "", "sources": [], "error": message, "error_code": code}
-    except Exception as e:
-        return _error("DeepSeek", e)
-    
-def query_grok(
-    question: str,
-    api_key: str,
-    system_prompt: str = None,
-    deep_search: bool = False,
-    model_override: str = None,
-    max_output_tokens: Optional[int] = None,
-    attachments: Optional[list] = None,
-) -> str:
-    """Fragt die Grok API zu der gegebenen Frage unter Verwendung des übergebenen API Keys."""
-    # Setze max_tokens basierend auf dem deep_search Flag
-    max_tokens = int(max_output_tokens) if max_output_tokens is not None else cfg.get_output_token_limit(True, deep_search)
-
-    try:
-        request_data = build_provider_payload(
-            "grok",
-            question=question,
-            system_prompt=system_prompt,
-            model_override=model_override,
-            deep_search=deep_search,
-            max_output_tokens=max_tokens,
-            attachments=attachments,
-        )
-
-        _log_model_selection("Grok", request_data["api_model"], deep_search, model_override)
-
-        return _openai_responses_call(
-            api_key=api_key,
-            base_url="https://api.x.ai/v1",
-            payload=request_data["payload"],
-            provider="grok",
-        )
-    except Exception as e:
-        return _error("Grok", e)
-
+        if not result_text(result):
+            return {
+                "text": "",
+                "sources": [],
+                "error": "The model returned no answer. Please try again.",
+                "error_code": "empty_response",
+            }
+        return result
+    except Exception as exc:
+        return _error(label, exc)

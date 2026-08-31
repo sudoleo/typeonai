@@ -201,7 +201,7 @@ def main(argv=None) -> int:
     if missing:
         print(
             f"ERROR: missing credentials for: {', '.join(missing)}. "
-            "Set the corresponding DEVELOPER_*_API_KEY (or Gemini ADC) before a live run.",
+            "Set OPENROUTER_API_KEY before a live run.",
             file=sys.stderr,
         )
         return 2

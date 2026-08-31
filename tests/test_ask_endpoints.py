@@ -1,8 +1,7 @@
 """Endpoint-Tests fuer die deduplizierten /ask_*-Handler (handle_ask).
 
-Nagelt die Provider-Eigenheiten fest, die beim Refactoring erhalten bleiben
-mussten: Gemini-Sonderpfade (useOwnKeys, Service Account, 401 statt 400),
-Own-Key-Bypass der Usage-Zaehlung und die Usage-Limit-Antworten.
+Nagelt die gemeinsamen OpenRouter-Vertraege fest: Own-Key-Bypass der
+Usage-Zaehlung, Auth-Verhalten und die Usage-Limit-Antworten.
 """
 
 from unittest.mock import patch
@@ -54,7 +53,7 @@ def auth_patches(uid="uid-ask-tests", is_pro=False):
 AUTH_HEADER = {"Authorization": "Bearer test-token"}
 
 
-def test_no_auth_error_is_provider_specific():
+def test_no_auth_error_is_uniform_across_model_families():
     client = make_client()
 
     response = client.post(
@@ -68,11 +67,11 @@ def test_no_auth_error_is_provider_specific():
         "/ask_gemini",
         json={"question": "hello", "model": free_model("gemini")},
     )
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Authentication required"
+    assert response.status_code == 400
+    assert response.json()["detail"] == "No auth provided."
 
 
-def test_gemini_own_keys_flag_without_key_is_rejected():
+def test_own_keys_flag_without_openrouter_key_is_rejected():
     client = make_client()
     p1, p2 = auth_patches()
     with p1, p2:
@@ -86,7 +85,7 @@ def test_gemini_own_keys_flag_without_key_is_rejected():
             },
         )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Missing user API key for Gemini."
+    assert response.json()["detail"] == "Missing user OpenRouter API key."
 
 
 def test_deep_search_is_pro_only():
@@ -116,7 +115,7 @@ def test_megabyte_style_one_word_question_is_rejected_before_provider_work():
             json={
                 "question": "x" * (chat_router.MAX_QUESTION_CHARS + 1),
                 "model": free_model("openai"),
-                "api_key": "own-key",
+                "openrouter_key": "own-key",
             },
         )
 
@@ -134,7 +133,7 @@ def test_multibyte_question_and_system_prompt_obey_utf8_byte_caps():
             json={
                 "question": "🙂" * 4_001,
                 "model": free_model("openai"),
-                "api_key": "own-key",
+                "openrouter_key": "own-key",
             },
         )
         prompt_response = client.post(
@@ -144,7 +143,7 @@ def test_multibyte_question_and_system_prompt_obey_utf8_byte_caps():
                 "question": "small",
                 "system_prompt": "🙂" * 8_001,
                 "model": free_model("openai"),
-                "api_key": "own-key",
+                "openrouter_key": "own-key",
             },
         )
 
@@ -174,7 +173,7 @@ def test_usage_limit_blocks_developer_key_path(reset_rate_limiter):
     assert body["free_usage_remaining"] == 0
 
 
-def test_gemini_developer_path_uses_service_account_and_counts_usage(reset_rate_limiter):
+def test_gemini_developer_path_uses_openrouter_and_counts_usage(reset_rate_limiter):
     client = make_client()
     uid = "uid-gemini-dev"
     captured = {}
@@ -186,7 +185,9 @@ def test_gemini_developer_path_uses_service_account_and_counts_usage(reset_rate_
 
     try:
         p1, p2 = auth_patches(uid=uid)
-        with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
+        with p1, p2, \
+             patch.object(chat_router, "resolve_developer_api_keys", return_value={"OpenRouter": "server-key"}), \
+             patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
                 headers=AUTH_HEADER,
@@ -194,10 +195,8 @@ def test_gemini_developer_path_uses_service_account_and_counts_usage(reset_rate_
             )
         assert response.status_code == 200
         assert captured["provider"].label == "Gemini"
-        # Gemini hat keinen Pflicht-Dev-Key: der Engine-Layer entscheidet
-        # zwischen DEVELOPER_GEMINI_API_KEY und Service Account/ADC.
-        assert captured["key"] is None
-        assert captured["extras"]["key_used"] == "Service Account"
+        assert captured["key"] == "server-key"
+        assert captured["extras"]["key_used"] == "Developer API Key"
         snapshot = reset_rate_limiter.snapshot(
             uid,
             UsageLimits(
@@ -229,7 +228,8 @@ def test_own_key_path_bypasses_usage_counting(reset_rate_limiter):
                 json={
                     "question": "hello",
                     "model": free_model("anthropic"),
-                    "api_key": "sk-user-key",
+                    "useOwnKeys": True,
+                    "openrouter_key": "sk-user-key",
                 },
             )
         assert response.status_code == 200
@@ -260,7 +260,8 @@ def test_own_key_without_login_is_rejected_for_every_provider():
             json={
                 "question": "hello",
                 "model": free_model(provider),
-                "api_key": "sk-user-key",
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
             },
         )
         assert response.status_code == 401, route

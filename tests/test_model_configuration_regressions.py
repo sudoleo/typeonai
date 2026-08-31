@@ -37,9 +37,9 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_normal_pro_models_keep_api_names_without_low_payloads(self):
         cases = [
-            ("openai", "gpt-5.5", "gpt-5.5"),
-            ("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL),
-            ("gemini", cfg.GEMINI_PRO_MODEL, cfg.GEMINI_PRO_MODEL),
+            ("openai", "gpt-5.5", "openai/gpt-5.5"),
+            ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-4.8"),
+            ("gemini", cfg.GEMINI_PRO_MODEL, "google/gemini-3.1-pro-preview"),
         ]
 
         for provider, model_id, api_model in cases:
@@ -62,6 +62,32 @@ class ExistingModelFlowTests(unittest.TestCase):
                 self.assertNotIn("reasoning", request["payload"])
                 self.assertNotIn("reasoning_effort", request["payload"])
 
+    def test_all_allowed_model_configs_use_openrouter_ids_without_changing_keys(self):
+        expected_prefixes = {
+            "openai": "openai/",
+            "mistral": "mistralai/",
+            "anthropic": "anthropic/",
+            "gemini": "google/",
+            "deepseek": "deepseek/",
+            "grok": "x-ai/",
+        }
+        for provider, model_ids in cfg._provider_allowed_sets().items():
+            for model_id in model_ids:
+                with self.subTest(provider=provider, model=model_id):
+                    config = cfg.get_model_config(model_id, provider)
+                    self.assertEqual(config.internal_id, model_id)
+                    self.assertEqual(config.provider, provider)
+                    self.assertTrue(config.api_model.startswith(expected_prefixes[provider]))
+                    self.assertEqual(config.label, cfg.get_model_label(model_id))
+        self.assertEqual(
+            cfg.virtual_model_ids()[cfg.DEFAULT_MISTRAL_MODEL],
+            "mistralai/mistral-small-2603",
+        )
+        self.assertEqual(
+            cfg.virtual_model_ids()[cfg.ANTHROPIC_PRO_MODEL],
+            "anthropic/claude-opus-4.8",
+        )
+
     def test_grok_43_no_reasoning_uses_canonical_api_model_and_none_effort(self):
         request = build_provider_payload(
             "grok",
@@ -71,7 +97,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             max_output_tokens=123,
         )
         self.assertEqual(request["internal_model"], cfg.GROK_NO_REASONING_MODEL)
-        self.assertEqual(request["api_model"], "grok-4.3")
+        self.assertEqual(request["api_model"], "x-ai/grok-4.3")
         self.assertEqual(request["payload"]["reasoning"], {"effort": "none"})
         self.assertFalse(request["is_low_reasoning"])
         self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, cfg.PREMIUM_MODELS)
@@ -83,7 +109,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             model_override="grok-4.3",
             max_output_tokens=123,
         )
-        self.assertEqual(high_request["api_model"], "grok-4.3")
+        self.assertEqual(high_request["api_model"], "x-ai/grok-4.3")
         self.assertEqual(high_request["payload"]["reasoning"], {"effort": "high"})
         self.assertIn("grok-4.3", cfg.PREMIUM_MODELS)
 
@@ -94,10 +120,9 @@ class ExistingModelFlowTests(unittest.TestCase):
             system_prompt="system",
             max_output_tokens=123,
         )
-        self.assertEqual(default_request["api_model"], cfg.DEFAULT_MISTRAL_MODEL)
+        self.assertEqual(default_request["api_model"], "mistralai/mistral-small-2603")
         self.assertEqual(
-            default_request["payload"]["completion_args"]["reasoning_effort"],
-            "high",
+            default_request["payload"]["reasoning"], {"effort": "high"},
         )
 
         deep_request = build_provider_payload(
@@ -107,10 +132,9 @@ class ExistingModelFlowTests(unittest.TestCase):
             deep_search=True,
             max_output_tokens=123,
         )
-        self.assertEqual(deep_request["api_model"], cfg.MISTRAL_PRO_MODEL)
+        self.assertEqual(deep_request["api_model"], "mistralai/mistral-medium-3-5")
         self.assertEqual(
-            deep_request["payload"]["completion_args"]["reasoning_effort"],
-            "high",
+            deep_request["payload"]["reasoning"], {"effort": "high"},
         )
         self.assertNotIn("pixtral-large-latest", cfg.ALLOWED_MISTRAL_MODELS)
 
@@ -221,8 +245,7 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_apply_judge_families_and_family_preference(self):
         from app.services.llm import consensus_engine
         snapshot = cfg.get_judge_families()
-        all_keys = {name: "key" for name in
-                    ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")}
+        all_keys = {"OpenRouter": "key"}
         try:
             # Ohne Mapping: Prioritaetsliste (gemini zuerst, eigene Familie nie).
             cfg.apply_judge_families({})
@@ -236,13 +259,7 @@ class ExistingModelFlowTests(unittest.TestCase):
                 consensus_engine._judge_families("openai", all_keys, count=2),
                 ["anthropic", "gemini"],
             )
-            # Kein Key fuer die bevorzugte Familie -> Auto-Fallback.
-            keys_without_anthropic = dict(all_keys)
-            keys_without_anthropic.pop("Anthropic")
-            self.assertEqual(
-                consensus_engine._judge_families("openai", keys_without_anthropic, count=1),
-                ["gemini"],
-            )
+            # The one OpenRouter key makes every configured model family available.
             # Self-Judging und unbekannte Provider werden verworfen.
             cfg.apply_judge_families({"openai": "openai", "gemini": "nope"})
             self.assertEqual(cfg.get_judge_families(), {})
@@ -323,24 +340,17 @@ class ExistingModelFlowTests(unittest.TestCase):
 
         snapshot = cfg.get_judge_models()
         pro_snapshot = cfg.get_pro_judge_models()
-        all_keys = {name: "key" for name in
-                    ("OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok")}
+        all_keys = {"OpenRouter": "key"}
         try:
             cfg.apply_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
             cfg.apply_pro_judge_models({"grok": cfg.GROK_NO_REASONING_MODEL})
-            expected = ("grok", "grok-4.3", cfg.GROK_NO_REASONING_MODEL)
+            expected = ("grok", "x-ai/grok-4.3", cfg.GROK_NO_REASONING_MODEL)
 
             self.assertEqual(consensus_engine._standard_judge_engine("grok"), expected)
             self.assertEqual(consensus_engine._judge_engine("grok", "standard"), expected)
             self.assertEqual(consensus_engine._judge_engine("grok", "pro"), expected)
 
-            # Auch der Fallback-Judge (dritter Consensus-Versuch) muss aufloesen.
-            # Gemini ist ueber Dev-Key/ADC immer verfuegbar und deshalb hier
-            # als Engine-Familie ausgeschlossen; damit bleibt nur Grok uebrig.
-            self.assertEqual(
-                consensus_engine._fallback_judge_engine("gemini", {"Grok": "key"}),
-                expected,
-            )
+            # Direct Grok judge resolution still uses the virtual API model.
 
             # Jeder Attempt im Differences-Plan traegt ein echtes API-Modell.
             for (provider, api_model, _ref), _retry, _tier in (
@@ -371,10 +381,9 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
         meta = _admin_meta({})
-        self.assertEqual(meta["api_models"].get(cfg.GROK_NO_REASONING_MODEL), "grok-4.3")
-        # Modelle, deren ID bereits das API-Modell ist, tauchen nicht auf.
-        self.assertNotIn("grok-4.3", meta["api_models"])
-        self.assertNotIn(cfg.DEFAULT_GROK_MODEL, meta["api_models"])
+        self.assertEqual(meta["api_models"].get(cfg.GROK_NO_REASONING_MODEL), "x-ai/grok-4.3")
+        self.assertEqual(meta["api_models"]["grok-4.3"], "x-ai/grok-4.3")
+        self.assertEqual(meta["api_models"][cfg.DEFAULT_GROK_MODEL], "x-ai/grok-4.20")
 
     def test_admin_meta_reports_provider_credentials_as_booleans_only(self):
         """Ein Provider ohne Server-Key faellt sonst still aus dem Lauf."""

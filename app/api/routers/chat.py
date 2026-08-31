@@ -6,7 +6,7 @@ import hashlib
 import hmac
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import StreamingResponse
@@ -29,11 +29,9 @@ from app.services.llm.base import (
     get_system_prompt,
     validate_model,
 )
-from app.services.llm.engines import (
-    query_openai, query_mistral, query_claude, query_gemini, query_deepseek, query_grok
-)
+from app.services.llm.engines import query_model
 from app.services.llm.citations import coerce_text, source_response
-from app.services.llm.credentials import enable_gemini_adc, resolve_developer_api_keys
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.mock_llm import mock_ask_result, mock_ask_stream, mock_llm_enabled
 from app.services.llm.provider_runtime import ProviderCancelled
 from app.services.llm.streaming import (
@@ -41,12 +39,7 @@ from app.services.llm.streaming import (
     keepalive_streaming_response,
     sse_pack,
     streaming_model_response,
-    stream_claude_query,
-    stream_deepseek_query,
-    stream_gemini_query,
-    stream_grok_query,
-    stream_mistral_query,
-    stream_openai_query,
+    stream_model_query,
 )
 from app.services.llm.consensus_engine import (
     DIFFERENCES_SKIPPED_TEXT,
@@ -54,7 +47,6 @@ from app.services.llm.consensus_engine import (
     normalize_model_name,
     query_consensus,
     query_differences,
-    resolve_consensus_engine_model,
     stream_consensus,
     stream_differences,
 )
@@ -300,14 +292,7 @@ def parse_boolean_flag(value) -> bool:
     return str(value).strip().lower() == "true"
 
 
-ENGINE_KEY_FIELDS = {
-    "OpenAI": "openai_key",
-    "Mistral": "mistral_key",
-    "Anthropic": "anthropic_key",
-    "Gemini": "gemini_key",
-    "DeepSeek": "deepseek_key",
-    "Grok": "grok_key",
-}
+ENGINE_KEY_FIELDS = {"OpenRouter": "openrouter_key"}
 
 
 def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
@@ -318,7 +303,7 @@ def build_engine_api_keys(data: dict, use_own_keys: bool) -> dict:
         # Eine gemeinsame Quelle fuer App, API und Benchmark verhindert, dass
         # ein Provider im Answer-Fan-out verfuegbar ist, im Judge-Plan aber
         # wegen abweichender Env-Namen oder Leerwert-Behandlung fehlt.
-        return enable_gemini_adc(resolve_developer_api_keys())
+        return resolve_developer_api_keys()
 
     # Im Own-Key-Modus Developer-Keys strikt ignorieren. Sonst koennte der
     # Differences-Fallback unbemerkt einen Server-Key verwenden.
@@ -728,78 +713,47 @@ def _attachment_claim_payload(attachments: list[dict]) -> list[dict]:
     ]
 
 # ---------------------------------------------------------------------------
-# /ask_*-Endpoints: ein gemeinsamer Ablauf (handle_ask) fuer alle sechs
-# Provider. Alles, was sich zwischen den Provider-APIs unterscheidet, steht
-# deklarativ in AskProvider bzw. ASK_PROVIDERS:
-#   - Rate-Limits haengen als Literal am jeweiligen Endpoint (slowapi).
-#   - Gemini hat keinen Pflicht-Dev-Key (Service-Account/ADC-Fallback im
-#     Engine-Layer), nimmt den Key als user_api_key-Kwarg entgegen, kennt
-#     das Legacy-Feld "gemini_key" und respektiert das useOwnKeys-Flag.
-#   - Die uebrigen Provider erwarten den Key als zweites Positionsargument
-#     und brauchen einen DEVELOPER_*_API_KEY aus der Umgebung.
+# /ask_*-Endpoints: ein gemeinsamer Ablauf für sechs Produktfamilien; alle
+# Requests verwenden denselben OpenRouter-Transport und dasselbe Credential.
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class AskProvider:
-    label: str                      # kanonisches Provider-Label (Claude -> "Anthropic")
-    allowed_models_attr: str        # Set-Name in app.core.config (wird in-place gepflegt)
-    query_fn: Callable
-    stream_fn: Callable
-    developer_key_env: Optional[str]        # None: kein Pflicht-Dev-Key (Gemini)
-    developer_key_label: str = "Developer API Key"
-    key_kwarg: Optional[str] = None         # Key als Kwarg statt 2. Positionsarg (Gemini)
-    alt_key_field: Optional[str] = None     # zusaetzliches Request-Feld fuer den Key
-    honors_own_keys_flag: bool = False      # useOwnKeys erzwingt den Own-Key-Pfad
-    no_auth_error: tuple = (400, "No auth provided.")
+    key: str
+    label: str
+    allowed_models_attr: str
 
 
 ASK_PROVIDERS = {
     "openai": AskProvider(
+        key="openai",
         label="OpenAI",
         allowed_models_attr="ALLOWED_OPENAI_MODELS",
-        query_fn=query_openai,
-        stream_fn=stream_openai_query,
-        developer_key_env="DEVELOPER_OPENAI_API_KEY",
     ),
     "mistral": AskProvider(
+        key="mistral",
         label="Mistral",
         allowed_models_attr="ALLOWED_MISTRAL_MODELS",
-        query_fn=query_mistral,
-        stream_fn=stream_mistral_query,
-        developer_key_env="DEVELOPER_MISTRAL_API_KEY",
     ),
     "anthropic": AskProvider(
+        key="anthropic",
         label="Anthropic",
         allowed_models_attr="ALLOWED_ANTHROPIC_MODELS",
-        query_fn=query_claude,
-        stream_fn=stream_claude_query,
-        developer_key_env="DEVELOPER_ANTHROPIC_API_KEY",
     ),
     "gemini": AskProvider(
+        key="gemini",
         label="Gemini",
         allowed_models_attr="ALLOWED_GEMINI_MODELS",
-        query_fn=query_gemini,
-        stream_fn=stream_gemini_query,
-        developer_key_env=None,
-        developer_key_label="Service Account",
-        key_kwarg="user_api_key",
-        alt_key_field="gemini_key",
-        honors_own_keys_flag=True,
-        no_auth_error=(401, "Authentication required"),
     ),
     "deepseek": AskProvider(
+        key="deepseek",
         label="DeepSeek",
         allowed_models_attr="ALLOWED_DEEPSEEK_MODELS",
-        query_fn=query_deepseek,
-        stream_fn=stream_deepseek_query,
-        developer_key_env="DEVELOPER_DEEPSEEK_API_KEY",
     ),
     "grok": AskProvider(
+        key="grok",
         label="Grok",
         allowed_models_attr="ALLOWED_GROK_MODELS",
-        query_fn=query_grok,
-        stream_fn=stream_grok_query,
-        developer_key_env="DEVELOPER_GROK_API_KEY",
     ),
 }
 
@@ -824,14 +778,8 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
         "max_output_tokens": max_tokens,
         "attachments": attachments,
     }
-    if provider.key_kwarg:
-        args = (question,)
-        kwargs[provider.key_kwarg] = key
-    else:
-        args = (question, key)
-
     if stream_requested:
-        source = provider.stream_fn(*args, **kwargs)
+        source = stream_model_query(provider.key, question, key, **kwargs)
 
         def observed_stream():
             started = time.monotonic()
@@ -876,7 +824,7 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
     started = time.monotonic()
     outcome = "success"
     try:
-        result = provider.query_fn(*args, **kwargs)
+        result = query_model(provider.key, question, key, **kwargs)
         if isinstance(result, dict) and result.get("error"):
             outcome = (
                 "timeout"
@@ -905,8 +853,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     stream_requested = parse_boolean_flag(data.get("stream", False))
     system_prompt = validate_client_system_prompt(data.get("system_prompt"))
     id_token = extract_id_token(request, data)
-    alt_key = data.get(provider.alt_key_field) if provider.alt_key_field else None
-    api_key = str(data.get("api_key") or alt_key or "").strip()
+    api_key = str(data.get("openrouter_key") or "").strip()
     model = data.get("model")
 
     is_pro_user = False
@@ -1005,15 +952,12 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             followup_context["previous_consensus"],
         )
 
-    own_keys_requested = bool(api_key) or (
-        provider.honors_own_keys_flag and parse_boolean_flag(data.get("useOwnKeys", False))
-    )
+    own_keys_requested = parse_boolean_flag(data.get("useOwnKeys", False))
 
     # --- Eigener API-Key: eingeloggtes Feature, umgeht die Usage-Zaehlung ---
     if own_keys_requested and uid:
         if not api_key:
-            # Nur ueber das useOwnKeys-Flag ohne Key erreichbar (Gemini).
-            raise HTTPException(status_code=400, detail=f"Missing user API key for {provider.label}.")
+            raise HTTPException(status_code=400, detail="Missing user OpenRouter API key.")
         return _run_ask(
             provider,
             stream_requested=stream_requested,
@@ -1032,10 +976,10 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             },
         )
 
-    # --- Developer-Key/Service-Account: genau ein persistenter Slot pro Run ---
+    # --- Developer-Key: genau ein persistenter Slot pro Run ---
     if uid:
-        developer_key = os.environ.get(provider.developer_key_env) if provider.developer_key_env else None
-        if provider.developer_key_env and not developer_key:
+        developer_key = openrouter_api_key(resolve_developer_api_keys())
+        if not developer_key:
             raise HTTPException(status_code=500, detail="Server error: API key missing")
 
         usage_key, _ = reserve_usage_run(
@@ -1074,15 +1018,14 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             extras={
                 **usage_response_fields(usage_result.snapshot, is_pro_user),
                 "usage_run_status": usage_result.status.value,
-                "key_used": provider.developer_key_label,
+                "key_used": "Developer API Key",
             },
         )
 
     # --- Kein Login: eigener Key erfordert Login, sonst Provider-No-Auth-Fehler ---
-    if api_key:
+    if own_keys_requested:
         raise HTTPException(status_code=401, detail=OWN_KEYS_LOGIN_REQUIRED)
-    status_code, detail = provider.no_auth_error
-    raise HTTPException(status_code=status_code, detail=detail)
+    raise HTTPException(status_code=400, detail="No auth provided.")
 
 
 @router.post("/ask_openai")
@@ -1171,8 +1114,8 @@ def prepare(request: Request, data: dict = Body(...)):
     else:
         base_system_prompt = str(raw_system_prompt).strip()
 
-    # Echtzeitdaten holen sich die Modelle selbst ueber die native Web-Suche,
-    # die in jedem Provider-Call aktiv ist (siehe engines.py). Ein vorgeschalteter
+    # Echtzeitdaten holen sich die Modelle ueber das gemeinsame OpenRouter-Web-Tool,
+    # das in jedem Modell-Call aktiv ist (siehe engines.py). Ein vorgeschalteter
     # Intent-Router mit Realtime-Injektion waere nur redundante, serielle Latenz.
     response = {
         "system_prompt": base_system_prompt,
@@ -1382,50 +1325,8 @@ def consensus(request: Request, data: dict = Body(...)):
     # autoritativ disponiert, bevor diese aktuelle Konfiguration relevant wird.
     api_keys = build_engine_api_keys(data, use_own_keys)
     
-    # Engine-Key-Check (wichtig, um 401 der Engine zu vermeiden)
-    engine = consensus_model
-    engine_key_map = {
-        "OpenAI": "OpenAI",       "OpenAI-Pro": "OpenAI",
-        "Mistral": "Mistral",     "Mistral-Pro": "Mistral",
-        "Anthropic": "Anthropic", "Anthropic-Pro": "Anthropic",
-        "Gemini": "Gemini",       "Gemini-Pro": "Gemini",
-        "DeepSeek": "DeepSeek",   "DeepSeek-Pro": "DeepSeek",
-        "Grok": "Grok",           "Grok-Pro": "Grok",
-    }
-    
-    need_key_for = engine_key_map.get(engine)
-    if not need_key_for:
-        engine_config = resolve_consensus_engine_model(engine)
-        provider_key_map = {
-            "openai": "OpenAI",
-            "mistral": "Mistral",
-            "anthropic": "Anthropic",
-            "gemini": "Gemini",
-            "deepseek": "DeepSeek",
-            "grok": "Grok",
-        }
-        need_key_for = provider_key_map.get(engine_config.provider if engine_config else "")
-    if need_key_for:
-        # ÄNDERUNG: Prüfe auf "Gemini" ODER "Gemini-Pro"
-        if need_key_for == "Gemini":
-            # Erlaube zwei Varianten:
-            # 1) expliziter Key aus dem autoritativen api_keys-Dict,
-            # 2) Service Account, aber NUR ausserhalb des Own-Key-Modus.
-            has_explicit_key = bool(api_keys.get("Gemini"))
-            using_service_acct = (not use_own_keys) and bool(os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"))
-
-            if not (has_explicit_key or using_service_acct):
-                raise HTTPException(
-                    status_code=400,
-                    detail=("Missing credentials for selected consensus engine: Gemini. "
-                            "Provide a Gemini API key or configure a Service Account on the server.")
-                )
-        else:
-            if not api_keys.get(need_key_for):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Missing API key for selected consensus engine: {engine}."
-                )
+    if not openrouter_api_key(api_keys):
+        raise HTTPException(status_code=400, detail="Missing OpenRouter API key.")
 
     usage_result = None
     if not use_own_keys:

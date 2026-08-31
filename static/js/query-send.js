@@ -11,27 +11,27 @@
   const PROVIDERS = [
     {
       provider: "OpenAI", endpoint: "/ask_openai", boxId: "openaiResponse",
-      checkboxId: "selectOpenAI", selectId: "openaiModelSelect", keyName: "openaiKey"
+      checkboxId: "selectOpenAI", selectId: "openaiModelSelect", keyName: "openrouterKey"
     },
     {
       provider: "Mistral", endpoint: "/ask_mistral", boxId: "mistralResponse",
-      checkboxId: "selectMistral", selectId: "mistralModelSelect", keyName: "mistralKey"
+      checkboxId: "selectMistral", selectId: "mistralModelSelect", keyName: "openrouterKey"
     },
     {
       provider: "Anthropic", endpoint: "/ask_claude", boxId: "claudeResponse",
-      checkboxId: "selectClaude", selectId: "claudeModelSelect", keyName: "anthropicKey"
+      checkboxId: "selectClaude", selectId: "claudeModelSelect", keyName: "openrouterKey"
     },
     {
       provider: "Gemini", endpoint: "/ask_gemini", boxId: "geminiResponse",
-      checkboxId: "selectGemini", selectId: "geminiModelSelect", keyName: "geminiKey"
+      checkboxId: "selectGemini", selectId: "geminiModelSelect", keyName: "openrouterKey"
     },
     {
       provider: "DeepSeek", endpoint: "/ask_deepseek", boxId: "deepseekResponse",
-      checkboxId: "selectDeepSeek", selectId: "deepseekModelSelect", keyName: "deepseekKey"
+      checkboxId: "selectDeepSeek", selectId: "deepseekModelSelect", keyName: "openrouterKey"
     },
     {
       provider: "Grok", endpoint: "/ask_grok", boxId: "grokResponse",
-      checkboxId: "selectGrok", selectId: "grokModelSelect", keyName: "grokKey"
+      checkboxId: "selectGrok", selectId: "grokModelSelect", keyName: "openrouterKey"
     }
   ];
 
@@ -280,7 +280,7 @@
       usage_run_key: context.usage.key
     });
     if (context.attachments.length) payload.attachments = context.attachments;
-    if (context.config.useOwnKeys) payload.api_key = context.credentials[providerConfig.keyName] || "";
+    if (context.config.useOwnKeys) payload.openrouter_key = context.credentials.openrouterKey || "";
 
     try {
       const response = await window.streamSSERequest(
@@ -593,15 +593,11 @@
     const consensusModel = String(consensusSelect?.value || "").trim();
     const consensusModelLabel = optionLabel(consensusSelect);
     const memoryProvider = String(consensusSelect?.selectedOptions?.[0]?.dataset?.engineProvider || "").trim().toLowerCase();
-    const keyByProvider = {
-      openai: "openaiKey", mistral: "mistralKey", anthropic: "anthropicKey",
-      gemini: "geminiKey", deepseek: "deepseekKey", grok: "grokKey"
-    };
-    const memoryKeyName = keyByProvider[memoryProvider] || "";
+    const memoryKeyName = "openrouterKey";
     if (useOwnKeys) {
       const missing = validateOwnKeys(providers, memoryKeyName);
       if (missing.length) {
-        window.App.showPopup?.(`Add API keys for the selected providers before sending: ${missing.map(key => key.replace(/Key$/, "")).join(", ")}.`);
+        window.App.showPopup?.("Add your OpenRouter API key before sending.");
         return null;
       }
     }
@@ -657,8 +653,7 @@
 
     context.bookmark.id = context.bookmark.id || bookmarkIdForRun(context.runId);
     context.credentials = Object.fromEntries(
-      ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]
-        .map(key => [key, String(localStorage.getItem(key) || "")])
+      ["openrouterKey"].map(key => [key, String(localStorage.getItem(key) || "")])
     );
     config.providers.forEach(provider => {
       context.modelResults[provider.provider] = {

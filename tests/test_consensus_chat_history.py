@@ -85,7 +85,7 @@ def _base_payload(**updates):
         "chat_id": CHAT_ID,
         "turn_id": TURN_ID,
         "useOwnKeys": True,
-        "gemini_key": "own-key-secret",
+        "openrouter_key": "own-key-secret",
     }
     payload.update(updates)
     return payload
@@ -622,7 +622,7 @@ def test_insufficient_answers_fail_before_own_key_or_engine_checks(
     response = client.post(
         "/consensus",
         headers=AUTH,
-        json=_base_payload(answer_mistral="", gemini_key=""),
+        json=_base_payload(answer_mistral="", openrouter_key=""),
     )
 
     assert response.status_code == 400
@@ -651,7 +651,7 @@ def test_insufficient_answers_disposition_precedes_current_model_and_tier_checks
             consensus_model="Retired-Pro",
             deep_search=True,
             answer_mistral="",
-            gemini_key="",
+            openrouter_key="",
         ),
     )
 
@@ -734,7 +734,7 @@ def test_completed_turn_replays_without_engine_writes_or_usage(
     response = client.post(
         "/consensus",
         headers=AUTH,
-        json=_base_payload(stream=stream, useOwnKeys=True, gemini_key=""),
+        json=_base_payload(stream=stream, useOwnKeys=True, openrouter_key=""),
     )
     body = _final_sse_payload(response) if stream else response.json()
 
@@ -798,7 +798,7 @@ def test_completed_replay_precedes_current_model_tier_and_credentials(
             consensus_model="historical-model-no-longer-allowed",
             deep_search=True,
             useOwnKeys=True,
-            gemini_key="",
+            openrouter_key="",
         ),
     )
 
@@ -840,7 +840,7 @@ def test_correctable_missing_own_key_keeps_turn_retryable(chat_consensus_api):
     response = client.post(
         "/consensus",
         headers=AUTH,
-        json=_base_payload(gemini_key=""),
+        json=_base_payload(openrouter_key=""),
     )
 
     assert response.status_code == 400

@@ -18,7 +18,7 @@ def make_client(router):
 def test_check_keys_requires_verified_login():
     client = make_client(pages_router.router)
 
-    response = client.post("/check_keys", json={"openai_key": "sk-test-value"})
+    response = client.post("/check_keys", json={"openrouter_key": "sk-test-value"})
 
     assert response.status_code == 401
 
@@ -34,7 +34,7 @@ def test_check_keys_requires_at_least_one_key_after_auth():
         )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Enter at least one API key to test."
+    assert response.json()["detail"] == "Enter an OpenRouter API key to test."
 
 
 def test_user_api_key_requests_require_login():
@@ -44,7 +44,8 @@ def test_user_api_key_requests_require_login():
         "/ask_openai",
         json={
             "question": "hello",
-            "api_key": "sk-user-key",
+            "useOwnKeys": True,
+            "openrouter_key": "sk-user-key",
             "model": "gpt-5.4-mini",
         },
     )

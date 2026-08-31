@@ -1,9 +1,7 @@
-"""§9.5 – Usage + Text-Extraktion aus kanonischen Provider-JSONs (gemockt),
-je Provider (E1-Drift-Absicherung). Keine echten Calls."""
-
-import unittest
+"""Unified OpenRouter benchmark transport (mocked; no live calls)."""
 
 from benchmark import transport
+from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL
 
 
 class FakeResponse:
@@ -18,166 +16,101 @@ class FakeResponse:
 
 def make_post(captured, response):
     def _post(url, json=None, headers=None, params=None, timeout=None):
-        captured["url"] = url
-        captured["json"] = json
-        captured["headers"] = headers
-        captured["params"] = params
+        captured.update(url=url, json=json, headers=headers, params=params, timeout=timeout)
         return response
 
     return _post
 
 
-# Kanonische, minimale Roh-JSONs je Provider.
-CANONICAL = {
-    "openai": (
-        {
-            "output": [
-                {"type": "message", "content": [{"type": "output_text", "text": "The answer is (C).", "annotations": []}]}
-            ],
-            "usage": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120},
+OPENROUTER_RESPONSE = {
+    "choices": [{
+        "message": {
+            "content": "The answer is (C).",
+            "annotations": [{
+                "type": "url_citation",
+                "url_citation": {
+                    "url": "https://example.test/source",
+                    "title": "Source",
+                    "content": "Evidence",
+                    "start_index": 0,
+                    "end_index": 3,
+                },
+            }],
         },
-        "The answer is (C).",
-        {"prompt": 100, "completion": 20, "total": 120},
-    ),
-    "grok": (
-        {
-            "output": [
-                {"type": "message", "content": [{"type": "output_text", "text": "The answer is (F).", "annotations": []}]}
-            ],
-            "usage": {"input_tokens": 70, "output_tokens": 11, "total_tokens": 81},
-        },
-        "The answer is (F).",
-        {"prompt": 70, "completion": 11, "total": 81},
-    ),
-    "anthropic": (
-        {
-            "content": [{"type": "text", "text": "The answer is (B)."}],
-            "usage": {"input_tokens": 50, "output_tokens": 10},
-        },
-        "The answer is (B).",
-        {"prompt": 50, "completion": 10, "total": 60},  # total fehlt -> summiert
-    ),
-    "gemini": (
-        {
-            "candidates": [{"content": {"parts": [{"text": "The answer is (A)."}]}}],
-            "usageMetadata": {"promptTokenCount": 30, "candidatesTokenCount": 5, "totalTokenCount": 35},
-        },
-        "The answer is (A).",
-        {"prompt": 30, "completion": 5, "total": 35},
-    ),
-    "mistral": (
-        {
-            "outputs": [
-                {"type": "message.output", "content": [{"type": "text", "text": "The answer is (D)."}]}
-            ],
-            "usage": {"prompt_tokens": 40, "completion_tokens": 8, "total_tokens": 48},
-        },
-        "The answer is (D).",
-        {"prompt": 40, "completion": 8, "total": 48},
-    ),
-    "deepseek": (
-        {
-            "choices": [{"message": {"content": "The answer is (E)."}}],
-            "usage": {"prompt_tokens": 25, "completion_tokens": 6, "total_tokens": 31},
-        },
-        "The answer is (E).",
-        {"prompt": 25, "completion": 6, "total": 31},
-    ),
+    }],
+    "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
 }
 
 
-class TransportTests(unittest.TestCase):
-    def _request_data(self, provider):
-        return {"provider": provider, "api_model": "test-model", "payload": {"x": 1}}
+def request_data(provider="openai"):
+    return {
+        "provider": provider,
+        "api_model": f"{provider}/test-model",
+        "payload": {"model": "stale-model", "messages": []},
+    }
 
-    def test_text_and_usage_per_provider(self):
-        for provider, (raw, expected_text, expected_usage) in CANONICAL.items():
-            with self.subTest(provider=provider):
-                captured = {}
-                post = make_post(captured, FakeResponse(raw))
-                result = transport.execute(
-                    self._request_data(provider), "fake-key", http_post=post
-                )
-                self.assertIsNone(result["error"])
-                self.assertEqual(result["text"], expected_text)
-                self.assertEqual(result["usage"], expected_usage)
-                self.assertEqual(result["status"], 200)
-                self.assertIs(result["raw"], raw)
 
-    def test_gemini_thinking_tokens_count_as_completion(self):
-        """Reasoning-Modelle (Gemini 3.x) liefern ``thoughtsTokenCount`` separat;
-        Thinking wird zum Output-Tarif abgerechnet, muss also in ``completion``
-        landen (sonst werden die Kosten zu niedrig geschaetzt)."""
-        raw = {
-            "candidates": [{"content": {"parts": [{"text": "FINAL_ANSWER: B"}]}}],
-            "usageMetadata": {
-                "promptTokenCount": 30,
-                "candidatesTokenCount": 5,
-                "thoughtsTokenCount": 800,
-                "totalTokenCount": 835,
-            },
+def test_all_model_families_use_one_openrouter_transport():
+    for provider in ("openai", "mistral", "anthropic", "gemini", "deepseek", "grok"):
+        captured = {}
+        post = make_post(captured, FakeResponse(OPENROUTER_RESPONSE))
+        result = transport.execute(request_data(provider), "fake-key", http_post=post)
+
+        assert result["error"] is None
+        assert result["text"] == "The [S1] answer is (C)."
+        assert result["usage"] == {"prompt": 100, "completion": 20, "total": 120}
+        assert result["raw"] is OPENROUTER_RESPONSE
+        assert captured["url"] == OPENROUTER_CHAT_COMPLETIONS_URL
+        assert captured["params"] is None
+        assert captured["json"]["model"] == f"{provider}/test-model"
+        assert captured["headers"] == {
+            "Authorization": "Bearer fake-key",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://consens.io",
+            "X-Title": "consens.io",
         }
-        post = make_post({}, FakeResponse(raw))
-        result = transport.execute(self._request_data("gemini"), "k", http_post=post)
-        # 5 sichtbare + 800 Thinking = 805 billable Output-Tokens.
-        self.assertEqual(result["usage"], {"prompt": 30, "completion": 805, "total": 835})
-
-    def test_gemini_key_goes_into_params_not_headers(self):
-        captured = {}
-        raw = CANONICAL["gemini"][0]
-        post = make_post(captured, FakeResponse(raw))
-        transport.execute(self._request_data("gemini"), "secret", http_post=post)
-        self.assertEqual(captured["params"], {"key": "secret"})
-        self.assertNotIn("Authorization", captured["headers"])
-
-    def test_anthropic_uses_x_api_key_header(self):
-        captured = {}
-        raw = CANONICAL["anthropic"][0]
-        post = make_post(captured, FakeResponse(raw))
-        transport.execute(self._request_data("anthropic"), "secret", http_post=post)
-        self.assertEqual(captured["headers"]["x-api-key"], "secret")
-
-    def test_gemini_key_path_does_not_use_adc(self):
-        captured = {}
-        raw = CANONICAL["gemini"][0]
-        post = make_post(captured, FakeResponse(raw))
-        transport.execute(self._request_data("gemini"), "secret", http_post=post)
-        self.assertEqual(captured["params"], {"key": "secret"})
-        self.assertNotIn("Authorization", captured["headers"])
-
-    def test_http_error_is_structured(self):
-        post = make_post({}, FakeResponse({}, status_code=500))
-        result = transport.execute(self._request_data("openai"), "k", http_post=post)
-        self.assertEqual(result["error_code"], "provider_http_error")
-        self.assertEqual(result["text"], "")
-        self.assertEqual(result["status"], 500)
-
-    def test_transport_exception_is_structured(self):
-        def boom(*args, **kwargs):
-            raise RuntimeError("network down")
-
-        result = transport.execute(self._request_data("openai"), "k", http_post=boom)
-        self.assertEqual(result["error_code"], "transport_request_failed")
-        self.assertIn("network down", result["error"])
 
 
-def test_gemini_adc_fallback_when_no_key(monkeypatch):
-    """Ohne Gemini-Key: ADC-Bearer-Header statt ?key= – wie in Produktion.
-    Die ADC-Funktion wird gemockt (kein echter Token-Refresh, kein HTTP)."""
-    monkeypatch.setattr(
-        transport, "_gemini_adc_headers",
-        lambda: {"Authorization": "Bearer adc-token", "Content-Type": "application/json"},
-    )
+def test_shared_credential_mapping_is_accepted(monkeypatch):
     captured = {}
-    raw = CANONICAL["gemini"][0]
-    post = make_post(captured, FakeResponse(raw))
+    post = make_post(captured, FakeResponse(OPENROUTER_RESPONSE))
     result = transport.execute(
-        {"provider": "gemini", "api_model": "m", "payload": {}}, None, http_post=post
+        request_data(), {"OpenRouter": "secret"}, http_post=post
     )
     assert result["error"] is None
+    assert captured["headers"]["Authorization"] == "Bearer secret"
+
+
+def test_no_provider_specific_adc_or_auth_parameters_exist():
+    captured = {}
+    post = make_post(captured, FakeResponse(OPENROUTER_RESPONSE))
+    transport.execute(request_data("gemini"), "secret", http_post=post)
     assert captured["params"] is None
-    assert captured["headers"]["Authorization"] == "Bearer adc-token"
+    assert not hasattr(transport, "_gemini_adc_headers")
+    assert not hasattr(transport, "parse_gemini_response")
+    assert not hasattr(transport, "parse_anthropic_response")
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_http_error_is_structured():
+    post = make_post({}, FakeResponse({}, status_code=500))
+    result = transport.execute(request_data(), "k", http_post=post)
+    assert result["error_code"] == "provider_http_error"
+    assert result["text"] == ""
+    assert result["status"] == 500
+
+
+def test_transport_exception_is_structured():
+    def boom(*args, **kwargs):
+        raise RuntimeError("network down")
+
+    result = transport.call_provider(request_data(), "k", http_post=boom)
+    assert result["error_code"] == "transport_request_failed"
+    assert "network down" in result["error"]
+
+
+def test_malformed_response_is_structured():
+    post = make_post({}, FakeResponse({"choices": []}))
+    result = transport.execute(request_data(), "k", http_post=post)
+    assert result["error"] is None
+    assert result["text"] == ""
+    assert result["usage"] == {"prompt": 0, "completion": 0, "total": 0}

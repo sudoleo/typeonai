@@ -47,8 +47,7 @@ def _send_question(page, question=QUESTION):
     page.evaluate(
         """() => {
           const keys = [
-            'openaiKey', 'mistralKey', 'anthropicKey',
-            'geminiKey', 'deepseekKey', 'grokKey',
+            'openrouterKey',
           ];
           for (const key of keys) localStorage.setItem(key, 'e2e-dummy-key');
           const ownKeys = document.getElementById('useOwnKeysSwitch');
@@ -2364,12 +2363,7 @@ def test_attachment_send_hard_blocks_stale_deepseek_selection(app_page):
               animate: false,
             });
           }
-          for (const key of [
-            "openaiKey", "mistralKey", "anthropicKey",
-            "geminiKey", "deepseekKey", "grokKey",
-          ]) {
-            localStorage.setItem(key, "e2e-dummy-key");
-          }
+          localStorage.setItem("openrouterKey", "e2e-dummy-key");
           document.getElementById("useOwnKeysSwitch").checked = true;
           window.pendingAttachments = [{
             name: "brief.pdf",

@@ -249,7 +249,7 @@ def test_chat_session_script_order_consensus_payload_and_legacy_bookmarks_remain
     assert "function conversationPayload(context, payload)" in query
     assert "context.previousExchange && !context.basis?.chatId" in query
     assert "Object.assign(payload, binding)" in query
-    assert "memory_api_key" not in query
+    assert "payload.openrouter_key = context.credentials.openrouterKey" in query
     offer_block = consensus.split("offer(question, consensusText", 1)[1].split(
         "arm()", 1
     )[0]
@@ -423,7 +423,7 @@ session.beginRun({{
   }});
   assert.strictEqual(degraded.contextState, "degraded");
   const ownBody = JSON.parse(calls.filter(call => call.url.endsWith("/context")).at(-1).options.body);
-  assert.deepStrictEqual(ownBody, {{ useOwnKeys: true, memory_api_key: "only-memory-key" }});
+  assert.deepStrictEqual(ownBody, {{ useOwnKeys: true, openrouter_key: "only-memory-key" }});
   assert.ok(!JSON.stringify(ownBody).includes("usage-stable"));
 
   session.handleConsensusResult({{

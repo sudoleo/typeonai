@@ -163,7 +163,7 @@ class AttachmentPayloadTests(unittest.TestCase):
     def parsed(self, raw, name):
         return parse_attachments({"attachments": [make_attachment(name, raw)]}, is_pro=True)
 
-    def test_openai_image_becomes_input_image_block(self):
+    def test_openai_image_becomes_openrouter_image_url_block(self):
         request = build_provider_payload(
             "openai",
             question="what is in this image?",
@@ -171,10 +171,9 @@ class AttachmentPayloadTests(unittest.TestCase):
             max_output_tokens=128,
             attachments=self.parsed(PNG_BYTES, "img.png"),
         )
-        message = request["payload"]["input"][0]
-        types = [block["type"] for block in message["content"]]
-        self.assertIn("input_image", types)
-        self.assertIn("input_text", types)
+        content = request["payload"]["messages"][1]["content"]
+        self.assertEqual([block["type"] for block in content], ["text", "image_url"])
+        self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
 
     def test_openai_pdf_becomes_input_file_block(self):
         request = build_provider_payload(
@@ -184,9 +183,9 @@ class AttachmentPayloadTests(unittest.TestCase):
             max_output_tokens=128,
             attachments=self.parsed(PDF_BYTES, "doc.pdf"),
         )
-        blocks = request["payload"]["input"][0]["content"]
-        self.assertEqual(blocks[0]["type"], "input_file")
-        self.assertEqual(blocks[0]["filename"], "doc.pdf")
+        blocks = request["payload"]["messages"][1]["content"]
+        self.assertEqual([block["type"] for block in blocks], ["text", "file"])
+        self.assertEqual(blocks[1]["file"]["filename"], "doc.pdf")
 
     def test_anthropic_gets_image_and_document_blocks(self):
         request = build_provider_payload(
@@ -196,11 +195,11 @@ class AttachmentPayloadTests(unittest.TestCase):
             max_output_tokens=128,
             attachments=self.parsed(PDF_BYTES, "doc.pdf") + self.parsed(PNG_BYTES, "img.png"),
         )
-        content = request["payload"]["messages"][0]["content"]
+        content = request["payload"]["messages"][1]["content"]
         types = [block["type"] for block in content]
-        self.assertEqual(types, ["document", "image", "text"])
+        self.assertEqual(types, ["text", "file", "image_url"])
 
-    def test_gemini_gets_inline_data_parts(self):
+    def test_gemini_gets_openrouter_file_block(self):
         request = build_provider_payload(
             "gemini",
             question="summarize",
@@ -208,10 +207,9 @@ class AttachmentPayloadTests(unittest.TestCase):
             max_output_tokens=128,
             attachments=self.parsed(PDF_BYTES, "doc.pdf"),
         )
-        parts = request["payload"]["contents"][0]["parts"]
-        self.assertIn("inline_data", parts[0])
-        self.assertEqual(parts[0]["inline_data"]["mime_type"], "application/pdf")
-        self.assertIn("text", parts[-1])
+        content = request["payload"]["messages"][1]["content"]
+        self.assertEqual(content[1]["type"], "file")
+        self.assertTrue(content[1]["file"]["file_data"].startswith("data:application/pdf;base64,"))
 
     def test_grok_image_native_but_pdf_falls_back_to_text(self):
         request = build_provider_payload(
@@ -221,11 +219,11 @@ class AttachmentPayloadTests(unittest.TestCase):
             max_output_tokens=128,
             attachments=self.parsed(PNG_BYTES, "img.png") + self.parsed(PDF_BYTES, "doc.pdf"),
         )
-        message = request["payload"]["input"][0]
-        types = [block["type"] for block in message["content"]]
-        self.assertIn("input_image", types)
-        self.assertNotIn("input_file", types)
-        text_block = next(b for b in message["content"] if b["type"] == "input_text")
+        content = request["payload"]["messages"][1]["content"]
+        types = [block["type"] for block in content]
+        self.assertIn("image_url", types)
+        self.assertNotIn("file", types)
+        text_block = next(b for b in content if b["type"] == "text")
         self.assertIn("doc.pdf", text_block["text"])
 
     def test_text_only_providers_get_fallback_notes(self):
@@ -251,7 +249,7 @@ class AttachmentPayloadTests(unittest.TestCase):
             attachments=self.parsed(DOCX_BYTES, "doc.docx") + self.parsed(TXT_BYTES, "notes.txt"),
         )
         # Kein nativer Content-Block: alles landet als Text-Suffix in der Frage.
-        payload_input = request["payload"]["input"]
+        payload_input = request["payload"]["messages"][1]["content"]
         self.assertIsInstance(payload_input, str)
         self.assertIn("First paragraph.", payload_input)
         self.assertIn("Second line", payload_input)
@@ -263,7 +261,7 @@ class AttachmentPayloadTests(unittest.TestCase):
             system_prompt="system",
             max_output_tokens=128,
         )
-        self.assertEqual(request["payload"]["input"], "plain question")
+        self.assertEqual(request["payload"]["messages"][1]["content"], "plain question")
 
 
 class BookmarkAttachmentMetaTests(unittest.TestCase):

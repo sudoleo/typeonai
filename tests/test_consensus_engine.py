@@ -1,5 +1,4 @@
-"""Unit-Tests fuer die Consensus-Engine: anonymisierter Prompt-Builder,
-OpenAI-Reasoning-Erkennung (Token-Param/Temperatur) und Fallback-Provider."""
+"""Unit tests for prompt building and the unified OpenRouter engine path."""
 
 import re
 import unittest
@@ -10,7 +9,6 @@ from app.services.llm.consensus_engine import (
     CONSENSUS_TEMPERATURE,
     _build_consensus_prompt,
     _effective_temperature,
-    _openai_token_param,
     query_consensus,
     stream_consensus,
 )
@@ -144,28 +142,17 @@ class ConsensusPromptAnonymizationTests(unittest.TestCase):
         self.assertNotIn("Gemini", prompt)
 
 
-class OpenAITokenParamTests(unittest.TestCase):
-    def test_reasoning_models_use_max_completion_tokens(self):
-        for model in ("gpt-5", "gpt-5.5", "gpt-5.4-mini", "gpt-5-nano", "o1", "o3-mini", "o4-mini"):
-            self.assertEqual(_openai_token_param(model), "max_completion_tokens", model)
-
-    def test_non_reasoning_models_use_max_tokens(self):
-        # Regression: '"o" in model' matchte frueher fast jedes Modell.
-        for model in ("gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-3.5-turbo"):
-            self.assertEqual(_openai_token_param(model), "max_tokens", model)
-
+class OpenRouterTemperatureTests(unittest.TestCase):
     def test_temperature_is_only_suppressed_for_reasoning_models(self):
-        self.assertIsNone(_effective_temperature("openai", "gpt-5.5", 0.3))
-        self.assertIsNone(_effective_temperature("openai", "o3-mini", 0.3))
-        self.assertEqual(_effective_temperature("openai", "gpt-4o", 0.3), 0.3)
-        self.assertIsNone(_effective_temperature("gemini", "gemini-3.1-pro-preview", 0.3))
+        self.assertIsNone(_effective_temperature("openai", "openai/gpt-5.5", 0.3))
+        self.assertIsNone(_effective_temperature("openai", "openai/o3-mini", 0.3))
+        self.assertEqual(_effective_temperature("openai", "openai/gpt-4o", 0.3), 0.3)
+        self.assertIsNone(_effective_temperature("gemini", "google/gemini-3.1-pro-preview", 0.3))
 
 
 class QueryConsensusFallbackTests(unittest.TestCase):
     def _query(self, engine, api_keys):
-        # DEVELOPER_GEMINI_API_KEY leeren, damit nur die explizit uebergebenen
-        # Keys den Fallback-Provider bestimmen.
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}), mock.patch(
+        with mock.patch(
             "app.services.llm.consensus_engine._call_engine_text",
             side_effect=engine,
         ) as patched:
@@ -186,10 +173,10 @@ class QueryConsensusFallbackTests(unittest.TestCase):
                 raise RuntimeError("503 - UNAVAILABLE")
             return "rescued answer"
 
-        result, patched = self._query(engine, {"OpenAI": "sk-1", "Mistral": "sk-2"})
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
         self.assertEqual(result, "rescued answer")
         self.assertEqual(patched.call_count, 3)
-        self.assertEqual([provider for provider, _ in calls], ["openai", "openai", "mistral"])
+        self.assertEqual([provider for provider, _ in calls], ["openai", "openai", "gemini"])
         self.assertTrue(all(t == CONSENSUS_TEMPERATURE for _, t in calls))
 
     def test_empty_results_also_trigger_fallback(self):
@@ -198,15 +185,15 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         def engine(*args, **kwargs):
             return next(outputs)
 
-        result, patched = self._query(engine, {"OpenAI": "sk-1", "Mistral": "sk-2"})
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
         self.assertEqual(result, "rescued answer")
         self.assertEqual(patched.call_count, 3)
 
-    def test_without_other_keys_there_is_no_fallback(self):
+    def test_without_the_common_key_there_is_no_fallback(self):
         def engine(*args, **kwargs):
             raise RuntimeError("503 - UNAVAILABLE")
 
-        result, patched = self._query(engine, {"OpenAI": "sk-1"})
+        result, patched = self._query(engine, {})
         self.assertEqual(patched.call_count, 2)
         self.assertEqual(result, "Consensus error: provider request failed.")
 
@@ -214,7 +201,7 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         def engine(*args, **kwargs):
             raise RuntimeError("503 - UNAVAILABLE")
 
-        result, patched = self._query(engine, {"OpenAI": "sk-1", "Mistral": "sk-2"})
+        result, patched = self._query(engine, {"OpenRouter": "sk-or"})
         self.assertEqual(patched.call_count, 3)
         self.assertEqual(result, "Consensus error: provider request failed.")
 
@@ -230,7 +217,7 @@ class StreamConsensusFallbackTests(unittest.TestCase):
             yield {"type": "delta", "text": "rescued "}
             yield {"type": "delta", "text": "answer."}
 
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}), mock.patch(
+        with mock.patch(
             "app.services.llm.consensus_engine._stream_consensus_engine",
             side_effect=fake_engine,
         ):
@@ -238,13 +225,12 @@ class StreamConsensusFallbackTests(unittest.TestCase):
                 "Q?", "a", "b", None, None, None, None,
                 excluded_models=[],
                 consensus_model="OpenAI",
-                api_keys={"OpenAI": "sk-1", "Mistral": "sk-2"},
+                api_keys={"OpenRouter": "sk-or"},
             ))
 
         self.assertEqual(events[-1], {"type": "final", "text": "rescued answer."})
-        # Der dritte Versuch laeuft auf dem Fallback-Judge des naechsten
-        # Providers mit Key (Mistral), adressiert als interne Modell-ID.
-        self.assertEqual(calls, ["OpenAI", "OpenAI", cfg.DEFAULT_MISTRAL_MODEL])
+        # The common key can route the fallback to an independent model family.
+        self.assertEqual(calls, ["OpenAI", "OpenAI", cfg.DEFAULT_GEMINI_MODEL])
 
 
 if __name__ == "__main__":

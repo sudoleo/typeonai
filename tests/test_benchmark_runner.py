@@ -92,13 +92,13 @@ class ManifestModelConfigTests(unittest.TestCase):
         models = {row["provider"]: row for row in manifest["models"]}
 
         self.assertEqual(models["openai"]["internal_id"], "gpt-5.5")
-        self.assertEqual(models["openai"]["resolved_api_model"], "gpt-5.5")
+        self.assertEqual(models["openai"]["resolved_api_model"], "openai/gpt-5.5")
         self.assertIsNone(models["openai"]["reasoning_settings"])
-        self.assertFalse(models["openai"]["alias_status"]["internal_alias"])
+        self.assertTrue(models["openai"]["alias_status"]["internal_alias"])
 
         self.assertEqual(models["mistral"]["internal_id"], config.cfg.MISTRAL_PRO_MODEL)
-        self.assertEqual(models["mistral"]["resolved_api_model"], config.cfg.MISTRAL_PRO_MODEL)
-        self.assertEqual(models["mistral"]["reasoning_settings"], {"reasoning_effort": "high"})
+        self.assertEqual(models["mistral"]["resolved_api_model"], "mistralai/mistral-medium-3-5")
+        self.assertEqual(models["mistral"]["reasoning_settings"], {"effort": "high"})
         self.assertFalse(models["mistral"]["alias_status"]["latest_alias"])
 
         self.assertEqual(models["anthropic"]["internal_id"], config.cfg.ANTHROPIC_PRO_MODEL)
@@ -112,8 +112,8 @@ class ManifestModelConfigTests(unittest.TestCase):
         self.assertEqual(manifest["sample_role"], "smoke")
         self.assertEqual(manifest["consensus"]["internal_id"], config.BENCHMARK_GEMINI_MODEL)
         self.assertEqual(manifest["consensus"]["output_token_limit"], manifest["consensus_output_token_limit"])
-        # Synth-alone spiegelt die Consensus-Temperatur (CONSENSUS_TEMPERATURE).
-        self.assertEqual(manifest["consensus"]["temperature"], 0.3)
+        # Der OpenRouter-Payload laesst die Temperatur beim Modell-Default.
+        self.assertIsNone(manifest["consensus"]["temperature"])
         self.assertEqual(manifest["synth_alone"]["internal_id"], manifest["consensus"]["internal_id"])
         self.assertEqual(manifest["synth_alone"]["reasoning_settings"], manifest["consensus"]["reasoning_settings"])
         self.assertEqual(manifest["synth_alone"]["temperature"], manifest["consensus"]["temperature"])

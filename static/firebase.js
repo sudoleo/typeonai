@@ -287,7 +287,7 @@ function setBookmarksAccess(isLoggedIn) {
 }
 
 function clearLocalProviderKeys() {
-  ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]
+  ["openrouterKey"]
     .forEach(key => {
       localStorage.removeItem(key);
       const input = document.getElementById(key);

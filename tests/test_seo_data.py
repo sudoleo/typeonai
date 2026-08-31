@@ -566,7 +566,7 @@ def test_admin_seo_collect_action_is_hidden_until_admin_request_succeeds():
     assert 'id="seoReviewTimezone"' in template
     assert "Completed in this review" in template
     assert "This only records that you reviewed these pages" in module
-    assert 'os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")' in main_source
+    assert "GOOGLE_APPLICATION_CREDENTIALS" not in main_source
     assert "GSC_SERVICE_ACCOUNT_JSON" not in main_source
 
 

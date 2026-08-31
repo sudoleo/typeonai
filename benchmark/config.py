@@ -62,8 +62,7 @@ SYSTEM_PROMPT = (
 
 # --- Run-Einstellungen (E6: nach dem Pilot final einfrieren) ---------------
 
-TEMPERATURE = 0.2  # nur Mistral/Gemini-Payloads tragen Temperatur (build_provider_payload);
-# OpenAI/Anthropic/DeepSeek/Grok nutzen Provider-Defaults (im Manifest dokumentiert).
+TEMPERATURE = 0.2  # OpenRouter-compatible payload setting when explicitly used.
 OUTPUT_TOKEN_LIMIT = 24576  # Reasoning-Modelle (DeepSeek/Mistral/Gemini) duerfen
 # nicht vor der FINAL_ANSWER-Zeile abbrechen. Pilot-Befund: bei 4096 brachen
 # Rechenwege ab; bei 12288 verbrannte DeepSeek auf q11800 das ganze Budget intern
@@ -99,39 +98,29 @@ class BenchmarkModel:
 # Die sechs Modelle = regulaere hochwertige Modellpfade fuer Smoke/Pilot/Final,
 # ohne frontier-low Aliase. api_model ist hart eingefroren.
 MODELS: tuple[BenchmarkModel, ...] = (
-    BenchmarkModel("openai", "gpt-5.5", "gpt-5.5", "provider_default"),
-    BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, cfg.MISTRAL_PRO_MODEL, "provider_default"),
-    BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL, "provider_default"),
-    BenchmarkModel("gemini", BENCHMARK_GEMINI_MODEL, BENCHMARK_GEMINI_MODEL, "provider_default"),
-    BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, cfg.DEEPSEEK_PRO_MODEL, "provider_default"),
-    BenchmarkModel("grok", "grok-4.3", "grok-4.3", "provider_default"),
+    BenchmarkModel("openai", "gpt-5.5", "openai/gpt-5.5", "provider_default"),
+    BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, "mistralai/mistral-medium-3-5", "provider_default"),
+    BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-4.8", "provider_default"),
+    BenchmarkModel("gemini", BENCHMARK_GEMINI_MODEL, "google/gemini-3.5-flash", "provider_default"),
+    BenchmarkModel("deepseek", cfg.DEEPSEEK_PRO_MODEL, "deepseek/deepseek-v4-pro", "provider_default"),
+    BenchmarkModel("grok", "grok-4.3", "x-ai/grok-4.3", "provider_default"),
 )
 
 # Consensus-Synthese-Modell (Pin): regulaerer Gemini-3.5-Flash-Pfad.
 # Synthesizer-alone nutzt exakt denselben Pin.
 CONSENSUS_MODEL = BENCHMARK_GEMINI_MODEL
 
-# Provider-Name -> API-Key-Schluessel, wie query_consensus ihn erwartet.
-PROVIDER_API_KEY_NAME = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
-}
-
 # --- Pricing-Tabelle (Plan §10) --------------------------------------------
 # USD pro 1M Tokens je api_model. **Manuell gepflegte Schaetzungen** – im Repo
 # existiert keine Pricing-Quelle; Kosten sind daher Naeherungen.
 
 PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
-    "gpt-5.5": {"input": 5.0, "output": 30.0},
-    cfg.MISTRAL_PRO_MODEL: {"input": 0.40, "output": 2.0},
-    cfg.ANTHROPIC_PRO_MODEL: {"input": 5.0, "output": 25.0},
-    BENCHMARK_GEMINI_MODEL: {"input": 1.50, "output": 9.0},
-    cfg.DEEPSEEK_PRO_MODEL: {"input": 0.435, "output": 0.87},
-    "grok-4.3": {"input": 1.25, "output": 2.5},
+    "openai/gpt-5.5": {"input": 5.0, "output": 30.0},
+    "mistralai/mistral-medium-3-5": {"input": 0.40, "output": 2.0},
+    "anthropic/claude-opus-4.8": {"input": 5.0, "output": 25.0},
+    "google/gemini-3.5-flash": {"input": 1.50, "output": 9.0},
+    "deepseek/deepseek-v4-pro": {"input": 0.435, "output": 0.87},
+    "x-ai/grok-4.3": {"input": 1.25, "output": 2.5},
 }
 
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 import json
 import time
@@ -8,16 +7,15 @@ import difflib
 import logging
 import random
 import requests
-import openai
-import google.auth
-from google.auth.transport.requests import Request as GoogleAuthRequest
-from urllib.parse import quote
 
 import app.core.config as cfg
 from app.core.observability import safe_exception
-from app.core.config import GEMINI_FLASH_MODEL
-from app.services.llm.credentials import gemini_engine_credentials_available
-from app.services.llm.engines import _merge_nested_config
+from app.services.llm.citations import coerce_text
+from app.services.llm.credentials import openrouter_api_key
+from app.services.llm.engines import (
+    OPENROUTER_CHAT_COMPLETIONS_URL,
+    openrouter_headers,
+)
 from app.services.llm.consensus_scoring import (
     AGREEMENT_LEVEL_THRESHOLDS,
     compute_agreement_score,
@@ -32,7 +30,6 @@ from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock
 from app.services.llm.provider_runtime import (
     PROVIDER_HTTP_TIMEOUT,
     managed_provider_resource,
-    openai_client,
     raise_if_provider_cancelled,
 )
 
@@ -50,171 +47,6 @@ CANONICAL_MODEL_NAMES = {
 
 MAX_SOURCES_PER_EXPERT = 5
 MAX_SOURCE_FIELD_CHARS = 180
-
-
-def _google_adc_headers() -> dict:
-    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/generative-language"])
-    credentials.refresh(GoogleAuthRequest())
-    return {
-        "Authorization": f"Bearer {credentials.token}",
-        "Content-Type": "application/json",
-    }
-
-
-ANTHROPIC_MESSAGES_URL = "https://api.anthropic.com/v1/messages"
-
-_PROVIDER_KEY_NAMES = {
-    "openai": "OpenAI",
-    "mistral": "Mistral",
-    "anthropic": "Anthropic",
-    "gemini": "Gemini",
-    "deepseek": "DeepSeek",
-    "grok": "Grok",
-}
-
-_OPENAI_COMPAT_BASE_URLS = {
-    "deepseek": "https://api.deepseek.com",
-    "grok": "https://api.x.ai/v1",
-}
-
-
-def _gemini_engine_key(api_keys: dict) -> str | None:
-    # Das vom Aufrufer gebaute Dict ist autoritativ. Insbesondere im
-    # Own-Key-Modus darf ein fehlender Nutzer-Key nicht heimlich auf den
-    # Developer-Key zurueckfallen. Serverpfade loesen Developer-Keys vorab
-    # ueber credentials.resolve_developer_api_keys auf.
-    return str(api_keys.get("Gemini") or "").strip() or None
-
-
-def _gemini_engine_payload(
-    model_ref: str,
-    system: str,
-    prompt: str,
-    max_tokens: int,
-    temperature: float | None = None,
-    json_mode: bool = False,
-    effort: str | None = None,
-    json_schema: dict | None = None,
-) -> tuple[str, dict]:
-    """Baut den generateContent-Payload für Consensus-/Differences-Calls.
-
-    Bewusst NICHT über build_provider_payload: dessen Gemini-Pfad kappt die
-    Frage bei 12k Zeichen und hängt Chat-Instruktionen an — beides falsch für
-    die langen Engine-Prompts. Modellauflösung und optionale Request-Konfiguration
-    laufen über resolve_api_model. effort ("low") kappt das
-    Thinking-Budget (thinkingLevel) — genutzt für Judge-Calls, deren Task
-    kein tiefes Denken braucht."""
-    api_model, model_config = cfg.resolve_api_model(model_ref, GEMINI_FLASH_MODEL, "gemini")
-    payload: dict = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": int(max_tokens)},
-        "safetySettings": [{
-            "category": "HARM_CATEGORY_HARASSMENT",
-            "threshold": "BLOCK_ONLY_HIGH",
-        }],
-    }
-    if system:
-        payload["systemInstruction"] = {"parts": [{"text": system}]}
-    if temperature is not None:
-        payload["generationConfig"]["temperature"] = temperature
-    if json_mode:
-        payload["generationConfig"]["responseMimeType"] = "application/json"
-    if json_schema:
-        # responseMimeType allein garantiert nur syntaktisches JSON. Der
-        # Differences-Parser braucht jedoch die drei Pflichtfelder; ohne
-        # Schema konnte Gemini promptabhaengig z. B. "differences" weglassen
-        # und derselbe Call wurde danach unnoetig wiederholt.
-        payload["generationConfig"]["responseJsonSchema"] = json_schema
-    if model_config and model_config.request_config:
-        _merge_nested_config(payload, model_config.request_config)
-    if effort:
-        _merge_nested_config(payload, {"generationConfig": {"thinkingConfig": {"thinkingLevel": effort}}})
-    return api_model, payload
-
-
-def _gemini_generate_content(api_model: str, payload: dict, api_key: str | None) -> str:
-    request_kwargs = {"json": payload, "timeout": PROVIDER_HTTP_TIMEOUT}
-    if api_key and api_key.strip():
-        request_kwargs["params"] = {"key": api_key.strip()}
-    else:
-        request_kwargs["headers"] = _google_adc_headers()
-
-    response = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{quote(api_model, safe='')}:generateContent",
-        **request_kwargs,
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"Gemini: {response.status_code} - {response.text}")
-    data = response.json()
-    text_parts = []
-    finish_reason = None
-    for candidate in data.get("candidates", []) or []:
-        if candidate.get("finishReason"):
-            finish_reason = candidate["finishReason"]
-        content = candidate.get("content") or {}
-        for part in content.get("parts", []) or []:
-            if part.get("text"):
-                text_parts.append(part["text"])
-    text = "\n".join(text_parts).strip()
-    if not text:
-        raise RuntimeError(f"Gemini: empty response payload (finish_reason={finish_reason}).")
-    return text
-
-
-def _coerce_message_text(content) -> str:
-    """Mistral liefert message.content je nach Modell als String oder als
-    Liste von Chunks (z.B. thinking- und text-Chunks bei Magistral bzw.
-    json_mode). Beides zu reinem Text zusammenfuehren."""
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts = []
-        for chunk in content:
-            if isinstance(chunk, str):
-                parts.append(chunk)
-            elif isinstance(chunk, dict):
-                text = chunk.get("text")
-                if isinstance(text, str) and chunk.get("type") in (None, "text"):
-                    parts.append(text)
-        return "".join(parts).strip()
-    return str(content or "").strip()
-
-
-def _mistral_chat_complete(
-    api_key: str,
-    model: str,
-    messages: list[dict],
-    max_tokens: int,
-    temperature: float | None = None,
-    json_mode: bool = False,
-    reasoning_effort: str | None = None,
-) -> str:
-    payload = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-    }
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-    if model in cfg.MISTRAL_REASONING_MODELS:
-        payload["reasoning_effort"] = reasoning_effort or "high"
-
-    response = requests.post(
-        "https://api.mistral.ai/v1/chat/completions",
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        timeout=PROVIDER_HTTP_TIMEOUT,
-    )
-    if response.status_code >= 400:
-        raise RuntimeError(f"{response.status_code} - {response.text}")
-    data = response.json()
-    message = (data.get("choices") or [{}])[0].get("message") or {}
-    return _coerce_message_text(message.get("content"))
 
 
 def normalize_model_name(model_name: str) -> str:
@@ -236,22 +68,8 @@ def resolve_consensus_engine_model(consensus_model: str):
     return config
 
 
-# OpenAI-Reasoning-Modelle: gpt-5-Familie und o-Serie (o1/o3/o4) als Wortanfang.
-# Bewusst kein Substring-Match - das frühere '"o" in model' traf fast jedes
-# Modell (z. B. "gpt-4o") und unterdrückte darüber die Temperatur für alle
-# OpenAI-Engines (siehe _effective_temperature).
-_OPENAI_REASONING_MODEL_RE = re.compile(r"^(gpt-5|o[134])([.\-]|$)")
-
-
-def _openai_token_param(model_to_use: str) -> str:
-    if _OPENAI_REASONING_MODEL_RE.match(str(model_to_use or "")):
-        return "max_completion_tokens"
-    return "max_tokens"
-
-
 # ---------------------------------------------------------------------------
-# Einheitlicher Engine-Dispatch: eine Stelle, die für alle sechs Provider den
-# Consensus-/Differences-Call ausführt (nicht-streamend und streamend).
+# Einheitlicher OpenRouter-Dispatch für alle Consensus-/Differences-Modelle.
 # Fehler schlagen als Exception nach außen; die Aufrufer entscheiden über
 # Fehlertexte bzw. Retries.
 # ---------------------------------------------------------------------------
@@ -263,10 +81,13 @@ class _InvalidEngineError(Exception):
 def _effective_temperature(provider: str, api_model: str, temperature: float | None) -> float | None:
     if temperature is None:
         return None
-    # Reasoning-Modelle akzeptieren keine (oder ignorieren die) Temperatur.
-    if provider == "openai" and _openai_token_param(api_model) == "max_completion_tokens":
+    model_id = str(api_model or "").split("/", 1)[-1]
+    if provider == "openai" and re.match(r"^(?:o[134](?:-|$)|gpt-5(?:[.\-]|$))", model_id):
         return None
-    if provider == "mistral" and api_model in cfg.MISTRAL_REASONING_MODELS:
+    if provider == "mistral" and (
+        model_id in cfg.MISTRAL_REASONING_MODELS
+        or api_model in cfg.MISTRAL_REASONING_MODELS
+    ):
         return None
     if provider == "gemini":
         return None
@@ -275,10 +96,10 @@ def _effective_temperature(provider: str, api_model: str, temperature: float | N
 
 def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
     """Löst einen Engine-Wert (Alias wie "OpenAI-Pro" oder interne Modell-ID)
-    zu (provider, api_model, gemini_model_ref) auf.
+    zu (provider, api_model, model_ref) auf.
 
-    gemini_model_ref ist der Wert für resolve_api_model: bei direkten IDs die
-    ID selbst, bei Aliassen direkt das API-Modell."""
+    model_ref bewahrt für Telemetrie/Policy die interne ID beziehungsweise bei
+    historischen Engine-Aliassen direkt das aufgelöste API-Modell."""
     config = resolve_consensus_engine_model(engine_model)
     if not config or not config.provider:
         return None
@@ -309,88 +130,40 @@ def _call_engine_text(
         # Verifikation und Agreement-Score laufen weiterhin echt.
         return mock_engine_text(prompt=prompt, json_mode=json_mode)
 
-    max_tokens = int(max_tokens)
+    api_key = openrouter_api_key(api_keys)
+    if not api_key:
+        raise _InvalidEngineError("OpenRouter credential is missing")
     temperature = _effective_temperature(provider, api_model, temperature)
-
-    if provider in ("openai", "deepseek", "grok"):
-        base_url = _OPENAI_COMPAT_BASE_URLS.get(provider)
-        api_key = api_keys.get(_PROVIDER_KEY_NAMES[provider])
-        client = openai_client(api_key=api_key, base_url=base_url)
-        token_param = _openai_token_param(api_model) if provider == "openai" else "max_tokens"
-        kwargs = {
-            "model": api_model,
-            "messages": [
-                {"role": "system", "content": system or " "},
-                {"role": "user", "content": prompt},
-            ],
-            token_param: max_tokens,
-        }
-        if temperature is not None:
-            kwargs["temperature"] = temperature
-        if json_mode:
-            kwargs["response_format"] = {"type": "json_object"}
-        if effort and provider == "openai" and token_param == "max_completion_tokens":
-            # Nur echte OpenAI-Reasoning-Modelle kennen reasoning_effort;
-            # DeepSeek/Grok (OpenAI-kompatibel) lehnen den Parameter ab.
-            kwargs["reasoning_effort"] = effort
-        with managed_provider_resource(client):
-            response = client.chat.completions.create(**kwargs)
-        return (response.choices[0].message.content or "").strip()
-
-    if provider == "mistral":
-        return _mistral_chat_complete(
-            api_keys.get("Mistral"),
-            api_model,
-            messages=[
-                {"role": "system", "content": system or ""},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            json_mode=json_mode,
-            reasoning_effort=effort,
-        )
-
-    if provider == "anthropic":
-        payload = {
-            "model": api_model,
-            "max_tokens": max_tokens,
-            "system": system or "",
-            "messages": [{"role": "user", "content": prompt}],
-        }
-        if temperature is not None:
-            payload["temperature"] = temperature
-        prefix = ""
-        if json_mode:
-            # Prefill erzwingt den JSON-Anfang; das "{" gehört zum Ergebnis.
-            payload["messages"].append({"role": "assistant", "content": "{"})
-            prefix = "{"
-        response = requests.post(
-            ANTHROPIC_MESSAGES_URL,
-            json=payload,
-            headers={
-                "x-api-key": api_keys.get("Anthropic"),
-                "Content-Type": "application/json",
-                "anthropic-version": "2023-06-01",
-            },
-            timeout=PROVIDER_HTTP_TIMEOUT,
-        )
+    payload = {
+        "model": api_model,
+        "messages": [
+            {"role": "system", "content": system or " "},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": int(max_tokens),
+        "provider": {"zdr": True},
+    }
+    if temperature is not None:
+        payload["temperature"] = temperature
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    if effort:
+        payload["reasoning"] = {"effort": effort}
+    response = requests.post(
+        OPENROUTER_CHAT_COMPLETIONS_URL,
+        json=payload,
+        headers=openrouter_headers(api_key),
+        timeout=PROVIDER_HTTP_TIMEOUT,
+    )
+    with managed_provider_resource(response):
         if response.status_code >= 400:
-            raise RuntimeError(f"Anthropic: {response.status_code} - {response.text}")
+            raise RuntimeError(f"OpenRouter: {response.status_code}")
         data = response.json()
-        if not (data.get("content") and isinstance(data["content"], list)):
-            raise RuntimeError("Anthropic: empty response payload.")
-        return (prefix + (data["content"][0].get("text") or "")).strip()
-
-    if provider == "gemini":
-        gemini_model, payload = _gemini_engine_payload(
-            model_ref, system, prompt, max_tokens,
-            temperature=temperature, json_mode=json_mode, effort=effort,
-            json_schema=json_schema,
-        )
-        return _gemini_generate_content(gemini_model, payload, _gemini_engine_key(api_keys))
-
-    raise _InvalidEngineError(f"Unsupported engine provider: {provider}")
+    message = ((data.get("choices") or [{}])[0].get("message") or {})
+    text = coerce_text(message.get("content")).strip()
+    if not text:
+        raise RuntimeError("OpenRouter: empty response payload")
+    return text
 
 
 def query_engine_json(
@@ -452,70 +225,25 @@ def _stream_engine_text(
             yield {"type": "delta", "text": text}
         return
 
-    from app.services.llm.streaming import (
-        stream_anthropic_text,
-        stream_chat_completion_text,
-        stream_gemini_payload_text,
-        stream_mistral_chat_text,
-    )
+    from app.services.llm.streaming import stream_chat_completion_text
 
-    max_tokens = int(max_tokens)
+    api_key = openrouter_api_key(api_keys)
+    if not api_key:
+        raise _InvalidEngineError("OpenRouter credential is missing")
     temperature = _effective_temperature(provider, api_model, temperature)
     response_format = {"type": "json_object"} if json_mode else None
-
-    if provider in ("openai", "deepseek", "grok"):
-        token_param = _openai_token_param(api_model) if provider == "openai" else "max_tokens"
-        yield from stream_chat_completion_text(
-            api_key=api_keys.get(_PROVIDER_KEY_NAMES[provider]),
-            base_url=_OPENAI_COMPAT_BASE_URLS.get(provider),
-            model=api_model,
-            messages=[
-                {"role": "system", "content": system or " "},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            token_param=token_param,
-            temperature=temperature,
-            response_format=response_format,
-            # Nur echte OpenAI-Reasoning-Modelle kennen reasoning_effort.
-            reasoning_effort=effort if (provider == "openai" and token_param == "max_completion_tokens") else None,
-        )
-    elif provider == "mistral":
-        yield from stream_mistral_chat_text(
-            api_key=api_keys.get("Mistral"),
-            model=api_model,
-            messages=[
-                {"role": "system", "content": system or ""},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            response_format=response_format,
-            reasoning_effort=effort,
-        )
-    elif provider == "anthropic":
-        yield from stream_anthropic_text(
-            api_key=api_keys.get("Anthropic"),
-            model=api_model,
-            system=system or "",
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            assistant_prefill="{" if json_mode else None,
-        )
-    elif provider == "gemini":
-        gemini_model, payload = _gemini_engine_payload(
-            model_ref, system, prompt, max_tokens,
-            temperature=temperature, json_mode=json_mode, effort=effort,
-            json_schema=json_schema,
-        )
-        yield from stream_gemini_payload_text(
-            api_model=gemini_model,
-            payload=payload,
-            api_key=_gemini_engine_key(api_keys),
-        )
-    else:
-        raise _InvalidEngineError(f"Unsupported engine provider: {provider}")
+    yield from stream_chat_completion_text(
+        api_key=api_key,
+        model=api_model,
+        messages=[
+            {"role": "system", "content": system or " "},
+            {"role": "user", "content": prompt},
+        ],
+        max_tokens=int(max_tokens),
+        temperature=temperature,
+        response_format=response_format,
+        reasoning_effort=effort,
+    )
 
 
 def normalize_excluded_models(excluded_models) -> set:
@@ -1653,17 +1381,10 @@ DIFFERENCES_RETRY_SUFFIX = (
     "matching the schema above. No prose, no markdown fences, no trailing text."
 )
 
-# Gemini Structured Output: responseMimeType allein erzwingt ein JSON-Dokument,
-# aber nicht die fuer den Parser erforderlichen Felder. Das REST-Feld
-# responseJsonSchema ist fuer generateContent/streamGenerateContent vorgesehen
-# und haelt auch gestreamte Antworten am gleichen Vertrag.
-#
-# Feldreihenfolge ist Absicht: "differences" steht vor "claims", weil Gemini
-# Structured Output in Schema-Reihenfolge generiert (und die uebrigen Provider
-# der Reihenfolge im Prompt folgen). Reisst das Token-Budget, faellt damit die
-# redundantere Claim-Liste weg statt der Widersprueche. propertyOrdering
-# zusaetzlich zu setzen ist nicht noetig, solange beide Reihenfolgen gleich
-# sind - wer eine aendert, muss die andere mitziehen.
+# Feldreihenfolge ist Absicht: "differences" steht vor "claims", damit bei
+# einem gerissenen Token-Budget eher die redundantere Claim-Liste als die
+# Widersprueche fehlt. Alle Modellfamilien erhalten denselben OpenRouter-
+# JSON-Object-Vertrag; dieses Schema wird danach serverseitig validiert.
 DIFFERENCES_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -1736,10 +1457,7 @@ def _provider_error_is_retryable(error: Exception) -> bool:
 
 
 def _provider_key_available(provider: str, api_keys: dict) -> bool:
-    if provider == "gemini":
-        return gemini_engine_credentials_available(api_keys)
-    value = api_keys.get(_PROVIDER_KEY_NAMES[provider])
-    return bool(str(value or "").strip())
+    return bool(openrouter_api_key(api_keys))
 
 
 def _judge_tier(differences_model: str) -> str:
@@ -1879,7 +1597,7 @@ def _judge_metadata(provider: str, api_model: str, tier: str, attempts: int = 0,
     attempts = Nummer des erfolgreichen Versuchs (1 = kein Retry nötig),
     duration_ms = Dauer nur dieses Versuchs."""
     return {
-        "provider": _PROVIDER_KEY_NAMES.get(provider, provider),
+        "provider": cfg.provider_label(provider),
         "model": api_model,
         "tier": tier,
         "attempts": int(attempts),

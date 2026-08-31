@@ -147,8 +147,7 @@ def test_smoke_rejects_limit(patched, capsys):
 
 def test_live_aborts_on_missing_credentials(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: None for p in cli.REQUIRED_PROVIDERS})
-    monkeypatch.setattr(credentials, "gemini_adc_available", lambda: False)
+                        lambda providers=None: {"OpenRouter": None})
     rc = cli.main(["--pilot", "--live", "--budget", "5"])
     assert rc == 2
     assert "missing credentials" in capsys.readouterr().err
@@ -157,7 +156,7 @@ def test_live_aborts_on_missing_credentials(patched, monkeypatch, capsys):
 
 def test_final_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+                        lambda providers=None: {"OpenRouter": "k"})
     rc = cli.main(["--final", "--live", "--budget", "5"])
     assert rc == 0
     out = capsys.readouterr().out
@@ -171,7 +170,7 @@ def test_final_live_preflight_passes_but_is_gated_no_http(patched, monkeypatch, 
 
 def test_pilot_live_executes_when_pilot_gate_enabled(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+                        lambda providers=None: {"OpenRouter": "k"})
     called = {"pilot": False}
 
     def fake_run_pilot(self, records, **kwargs):
@@ -196,7 +195,7 @@ def test_pilot_live_executes_when_pilot_gate_enabled(patched, monkeypatch, capsy
 
 def test_smoke_live_executes_when_smoke_gate_enabled(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+                        lambda providers=None: {"OpenRouter": "k"})
     called = {"smoke": False}
 
     def fake_run_smoke(self, records, **kwargs):
@@ -236,7 +235,7 @@ def test_final_limit_over_preview_cap_is_rejected(patched, capsys):
 def test_full_final_without_limit_stays_gated(patched, monkeypatch, capsys):
     # Der volle Final-Run (ohne --limit) bleibt durch LIVE_EXECUTION_ENABLED gesperrt.
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+                        lambda providers=None: {"OpenRouter": "k"})
     rc = cli.main(["--final", "--live", "--budget", "8"])
     assert rc == 0
     assert "GATED" in capsys.readouterr().out
@@ -245,7 +244,7 @@ def test_full_final_without_limit_stays_gated(patched, monkeypatch, capsys):
 
 def test_final_preview_executes_when_preview_gate_enabled(patched, monkeypatch, capsys):
     monkeypatch.setattr(credentials, "resolve_developer_api_keys",
-                        lambda providers=None: {p: "k" for p in cli.REQUIRED_PROVIDERS})
+                        lambda providers=None: {"OpenRouter": "k"})
     called = {"run": False}
 
     def fake_run_pilot(self, records, **kwargs):

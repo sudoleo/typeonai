@@ -1747,7 +1747,7 @@
               credentials: boundContext?.credentials
                 ? Object.assign({}, boundContext.credentials)
                 : Object.fromEntries(
-                    ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"]
+                    ["openrouterKey"]
                       .map(function (key) { return [key, localStorage.getItem(key) || ""]; })
                   ),
               boundAt: Date.now(),
@@ -1857,12 +1857,7 @@
                   positions: diff.positions,
                   bookmarkId: expectedBookmarkVersion ? binding.bookmarkId : null,
                   expectedBookmarkVersion: expectedBookmarkVersion || null,
-                  openai_key: binding.credentials.openaiKey || "",
-                  mistral_key: binding.credentials.mistralKey || "",
-                  anthropic_key: binding.credentials.anthropicKey || "",
-                  gemini_key: binding.credentials.geminiKey || "",
-                  deepseek_key: binding.credentials.deepseekKey || "",
-                  grok_key: binding.credentials.grokKey || ""
+                  openrouter_key: binding.credentials.openrouterKey || ""
                 }),
                 signal: actionController.signal
               });

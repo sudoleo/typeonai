@@ -30,15 +30,7 @@ def run_api(monkeypatch):
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kwargs: UID)
     monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: False)
     monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
-    for env_name in (
-        "DEVELOPER_OPENAI_API_KEY",
-        "DEVELOPER_MISTRAL_API_KEY",
-        "DEVELOPER_ANTHROPIC_API_KEY",
-        "DEVELOPER_GEMINI_API_KEY",
-        "DEVELOPER_DEEPSEEK_API_KEY",
-        "DEVELOPER_GROK_API_KEY",
-    ):
-        monkeypatch.setenv(env_name, "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def fake_run_ask(provider, **kwargs):
         return {

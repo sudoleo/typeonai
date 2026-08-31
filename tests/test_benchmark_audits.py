@@ -67,12 +67,12 @@ class ConsensusOrderAuditTests(unittest.TestCase):
         # Consensus, dessen Buchstabe von der Reihenfolge abhaengt -> instabil.
         def order_sensitive(question, answers, model_sources=None):
             first = next(iter(answers))
-            letter = LETTERS[hash(first) % 4]
+            letter = "A" if first == "openai" else "B"
             return f"The first provider drives this synthetic answer.\nFINAL_ANSWER: {letter}"
 
         with tempfile.TemporaryDirectory() as tmp:
             run_dir = Path(tmp) / "run"
-            runner = self._seed_run(run_dir, fake_consensus_fixed)
+            runner = self._seed_run(run_dir, order_sensitive)
             audit_res = runner.audit_consensus_order(
                 QUESTIONS, run_dir, consensus_fn=order_sensitive, rng=random.Random(1)
             )

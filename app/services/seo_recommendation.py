@@ -10,10 +10,12 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal
 
-import openai
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from app.core.config import get_model_config
 from app.services import seo_data, seo_dossier
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
+from app.services.llm.engines import OPENROUTER_BASE_URL
 from app.services.llm.provider_runtime import managed_provider_resource, openai_client
 from app.services.seo_repository import FirestoreSeoRepository
 
@@ -280,7 +282,7 @@ def deterministic_recommendation(
 
 class SeoContentJudge:
     def __init__(self, *, api_key=None, model=None, caller=None):
-        self.api_key = api_key if api_key is not None else os.environ.get("DEVELOPER_OPENAI_API_KEY")
+        self.api_key = api_key if api_key is not None else openrouter_api_key(resolve_developer_api_keys())
         self.model = model if model is not None else os.environ.get("SEO_CONTENT_JUDGE_MODEL")
         self.caller = caller
 
@@ -293,7 +295,7 @@ class SeoContentJudge:
             "configured": self.configured,
             "status": "configured" if self.configured else "not_configured",
             "message": "Optional content judge is configured."
-            if self.configured else "Set SEO_CONTENT_JUDGE_MODEL and the server OpenAI key to enable it.",
+            if self.configured else "Set SEO_CONTENT_JUDGE_MODEL and the server OpenRouter key to enable it.",
         }
 
     @staticmethod
@@ -374,10 +376,16 @@ class SeoContentJudge:
         if self.caller:
             raw = self.caller(prompt, CONTENT_JUDGE_SCHEMA)
         else:
-            client = openai_client(api_key=self.api_key, timeout_seconds=45)
+            model_config = get_model_config(self.model, provider="openai")
+            api_model = model_config.api_model if model_config else self.model
+            client = openai_client(
+                api_key=self.api_key,
+                base_url=OPENROUTER_BASE_URL,
+                timeout_seconds=45,
+            )
             with managed_provider_resource(client):
                 response = client.chat.completions.create(
-                    model=self.model,
+                    model=api_model,
                     messages=[
                         {"role": "system", "content": "You are a conservative SEO content reviewer."},
                         {"role": "user", "content": prompt},
@@ -390,6 +398,7 @@ class SeoContentJudge:
                             "schema": CONTENT_JUDGE_SCHEMA,
                         },
                     },
+                    extra_body={"provider": {"zdr": True}},
                 )
             raw = response.choices[0].message.content or ""
         return self.validate_response(

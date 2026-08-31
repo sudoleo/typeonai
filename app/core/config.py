@@ -160,6 +160,20 @@ WATCH_MODELS_BY_TIER = {
     tier: dict(models) for tier, models in _BASE_WATCH_MODELS_BY_TIER.items()
 }
 
+PROVIDER_LABEL_BY_ID = {
+    "openai": "OpenAI",
+    "mistral": "Mistral",
+    "anthropic": "Anthropic",
+    "gemini": "Gemini",
+    "deepseek": "DeepSeek",
+    "grok": "Grok",
+}
+
+
+def provider_label(provider: str | None) -> str:
+    value = str(provider or "").lower()
+    return PROVIDER_LABEL_BY_ID.get(value, value or "Provider")
+
 # Separate Synthese-Engine fuer Consensus-Watches. Sie ist bewusst nicht an
 # eines der Antwortmodelle gebunden: der konfigurierte Provider kann den
 # Consensus aus den unabhaengigen Antworten erzeugen, ohne selbst eine
@@ -324,8 +338,8 @@ PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
 # Modell, das die Chat-Memory laengerer Unterhaltungen fortschreibt
 # (app/services/chat_context.py). Die FAMILIE bleibt die der Consensus-Engine
-# des Turns — bei Eigenschluesseln liegt nur fuer diesen Provider ein Key vor —,
-# das Modell INNERHALB der Familie ist vom Admin ueber Firestore (Feld
+# des Turns; der eine OpenRouter-Key gilt fuer alle Familien. Das Modell
+# INNERHALB der Familie ist vom Admin ueber Firestore (Feld
 # "chat_memory_models") umstellbar. Basis sind bewusst die guenstigen
 # Standardmodelle: die Aufgabe ist strukturierte Extraktion nach JSON-Schema,
 # kein Denken. Wie die Judge-Dicts in-place mutiert.
@@ -333,14 +347,14 @@ _BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
-# erste Familie mit verfuegbarem Key, die nicht die der Consensus-Engine ist.
+# erste andere Familie; die gemeinsame OpenRouter-Verfügbarkeit wird davor geprüft.
 # Gemini/OpenAI remain the preferred independent judges. Mistral is a working
 # emergency fallback, but intentionally comes after every other family.
 JUDGE_FAMILY_PRIORITY = ["gemini", "openai", "deepseek", "grok", "anthropic", "mistral"]
 
 # Optionales Admin-Mapping Engine-Familie -> bevorzugte Judge-Familie
-# (Firestore-Feld "judge_families"). Fehlt ein Eintrag oder ist der Key der
-# bevorzugten Familie nicht verfuegbar, greift JUDGE_FAMILY_PRIORITY (Auto).
+# (Firestore-Feld "judge_families"). Fehlt ein Eintrag, greift
+# JUDGE_FAMILY_PRIORITY (Auto).
 JUDGE_FAMILY_BY_ENGINE: dict[str, str] = {}
 LEADERBOARD_MODEL_ALIASES = {
     "Claude": "Anthropic",
@@ -356,7 +370,12 @@ ALLOWED_MISTRAL_MODELS = {
     "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", MISTRAL_PRO_MODEL,
     "ministral-3b-latest", "ministral-8b-latest",
 }
-MISTRAL_REASONING_MODELS = {DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL}
+MISTRAL_REASONING_MODELS = {
+    DEFAULT_MISTRAL_MODEL,
+    MISTRAL_PRO_MODEL,
+    "mistralai/mistral-small-2603",
+    "mistralai/mistral-medium-3-5",
+}
 DEPRECATED_MISTRAL_MODELS = {
     "devstral-small-2507", "devstral-small-latest", "devstral-medium-2507",
     "mistral-large-2411", "pixtral-large-2411", "pixtral-large-latest",
@@ -516,6 +535,37 @@ MODEL_LABEL_OVERRIDES = {
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
 
+# Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
+# Provider-Requests laufen dagegen über OpenRouter und benötigen dessen
+# kanonische Publisher-Präfixe. Diese Auflösung bleibt absichtlich an einer
+# Stelle, damit neue erlaubte IDs nicht in einzelnen Flows Sonderbehandlung
+# brauchen.
+OPENROUTER_MODEL_PREFIXES = {
+    "openai": "openai/",
+    "mistral": "mistralai/",
+    "anthropic": "anthropic/",
+    "gemini": "google/",
+    "deepseek": "deepseek/",
+    "grok": "x-ai/",
+}
+OPENROUTER_MODEL_ALIASES = {
+    ("mistral", "mistral-small-latest"): "mistral-small-2603",
+    ("anthropic", "claude-haiku-4-5"): "claude-haiku-4.5",
+    ("anthropic", "claude-opus-4-8"): "claude-opus-4.8",
+    ("grok", GROK_NO_REASONING_MODEL): "grok-4.3",
+    ("grok", DEFAULT_GROK_MODEL): "grok-4.20",
+}
+
+
+def openrouter_model_id(model_id: str | None, provider: str | None) -> str:
+    """Resolve an internal provider model ID to its OpenRouter model ID."""
+    value = str(model_id or "").strip()
+    prefix = OPENROUTER_MODEL_PREFIXES.get(str(provider or "").lower())
+    if not value or not prefix or value.startswith(prefix):
+        return value
+    value = OPENROUTER_MODEL_ALIASES.get((str(provider or "").lower(), value), value)
+    return f"{prefix}{value}"
+
 
 def _fallback_label(model_id: str) -> str:
     override = MODEL_LABEL_OVERRIDES.get(model_id)
@@ -596,7 +646,7 @@ def rebuild_model_configs():
             MODEL_CONFIGS[model_id] = ModelConfig(
                 internal_id=model_id,
                 provider=provider,
-                api_model=model_id,
+                api_model=openrouter_model_id(model_id, provider),
                 label=_fallback_label(model_id),
                 is_free=model_id not in PREMIUM_MODELS,
                 is_pro=model_id in PREMIUM_MODELS,
@@ -606,7 +656,7 @@ def rebuild_model_configs():
         GROK_NO_REASONING_MODEL: ModelConfig(
             internal_id=GROK_NO_REASONING_MODEL,
             provider="grok",
-            api_model="grok-4.3",
+            api_model=openrouter_model_id(GROK_NO_REASONING_MODEL, "grok"),
             label=_fallback_label(GROK_NO_REASONING_MODEL),
             is_free=GROK_NO_REASONING_MODEL not in PREMIUM_MODELS,
             is_pro=GROK_NO_REASONING_MODEL in PREMIUM_MODELS,
@@ -615,7 +665,7 @@ def rebuild_model_configs():
         "grok-4.3": ModelConfig(
             internal_id="grok-4.3",
             provider="grok",
-            api_model="grok-4.3",
+            api_model=openrouter_model_id("grok-4.3", "grok"),
             label=_fallback_label("grok-4.3"),
             is_free="grok-4.3" not in PREMIUM_MODELS,
             is_pro="grok-4.3" in PREMIUM_MODELS,
@@ -648,7 +698,7 @@ def get_model_config(model_id: str | None, provider: str | None = None) -> Model
     return ModelConfig(
         internal_id=model_id,
         provider=provider or "",
-        api_model=model_id,
+        api_model=openrouter_model_id(model_id, provider),
         label=_fallback_label(model_id),
         is_free=model_id not in PREMIUM_MODELS,
         is_pro=model_id in PREMIUM_MODELS,
@@ -680,7 +730,7 @@ def get_consensus_model_config(model_id: str | None) -> ModelConfig | None:
         return ModelConfig(
             internal_id=model_id,
             provider=provider,
-            api_model=api_model,
+            api_model=openrouter_model_id(api_model, provider),
             label=_fallback_label(api_model),
             is_free=not str(model_id).endswith("-Pro"),
             is_pro=str(model_id).endswith("-Pro"),

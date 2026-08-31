@@ -26,6 +26,7 @@ from app.services.llm.consensus_engine import (
     _standard_judge_engine,
     normalize_model_name,
 )
+from app.services.llm.credentials import openrouter_api_key
 
 PROVIDER_BY_LABEL = {
     "OpenAI": "openai",
@@ -133,9 +134,7 @@ def _query_resolve_model(model_label: str, question: str, claim: str,
     _judge_provider, judge_api_model, judge_model = _standard_judge_engine(provider)
     result = {"model": model_label, "decision": "error", "position": "", "reason": ""}
 
-    # Gemini kann ohne expliziten Key ueber Dev-Key/ADC laufen (siehe
-    # _call_engine_text); alle anderen Provider brauchen einen Key.
-    if provider != "gemini" and not api_keys.get(model_label):
+    if not openrouter_api_key(api_keys):
         result["reason"] = "missing API key"
         return result
 

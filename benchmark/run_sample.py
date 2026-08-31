@@ -87,7 +87,7 @@ def main(argv=None) -> int:
     if missing:
         print(
             f"ERROR: fehlende Credentials fuer: {', '.join(missing)}. "
-            "DEVELOPER_*_API_KEY (bzw. Gemini ADC) setzen.",
+            "OPENROUTER_API_KEY setzen.",
             file=sys.stderr,
         )
         return 2

@@ -223,213 +223,33 @@ def convert_markdown_citations(text: str, provider: str) -> LLMResult:
     return make_llm_result(converted, sources)
 
 
-def merge_results(primary: LLMResult, secondary: LLMResult) -> LLMResult:
-    if result_sources(primary):
-        return primary
-    if result_sources(secondary):
-        return make_llm_result(result_text(primary), result_sources(secondary))
-    return primary
-
-
-def parse_openai_response(data: Dict[str, Any], provider: str = "openai") -> LLMResult:
-    text_parts: List[str] = []
-    citations: List[Dict[str, Any]] = []
-    fallback_citations: List[Dict[str, Any]] = []
-    offset = 0
-
-    for item in data.get("output", []) or []:
-        if item.get("type") == "web_search_call":
-            action = item.get("action") or {}
-            for source in action.get("sources") or []:
-                url = source.get("url") if isinstance(source, dict) else None
-                if url:
-                    fallback_citations.append({
-                        "url": url,
-                        "title": source.get("title") if isinstance(source, dict) else None,
-                        "end_index": len("".join(text_parts)) or None,
-                    })
-            continue
-        if item.get("type") != "message":
-            continue
-        for content in item.get("content", []) or []:
-            if content.get("type") not in {"output_text", "text"}:
-                continue
-            part_text = content.get("text") or ""
-            for annotation in content.get("annotations", []) or []:
-                if annotation.get("type") in {"url_citation", "citation"}:
-                    start = annotation.get("start_index")
-                    end = annotation.get("end_index")
-                    citations.append({
-                        "url": annotation.get("url"),
-                        "title": annotation.get("title"),
-                        "start_index": (offset + int(start)) if isinstance(start, int) else None,
-                        "end_index": (offset + int(end)) if isinstance(end, int) else offset + len(part_text),
-                    })
-            text_parts.append(part_text)
-            offset += len(part_text)
-
-    text = "".join(text_parts) or data.get("output_text") or ""
-    for url in data.get("citations") or []:
-        if isinstance(url, str):
-            fallback_citations.append({"url": url, "end_index": len(text)})
-        elif isinstance(url, dict):
-            fallback_citations.append({
-                "url": url.get("url"),
-                "title": url.get("title"),
-                "end_index": len(text),
-            })
-    if not citations:
-        citations = fallback_citations
-    markdown = convert_markdown_citations(text, provider)
-    annotated = insert_source_tags(result_text(markdown), citations, provider)
-    return merge_results(annotated, markdown)
-
-
-def _web_search_result_sources(
-    data: Dict[str, Any], provider: str
-) -> List[Source]:
-    """Sammelt die Treffer aus `web_search_tool_result`-Bloecken.
-
-    DeepSeeks Anthropic-kompatibler Endpoint fuehrt die Suche serverseitig aus,
-    haengt aber – anders als Anthropic – **keine** `citations` an den Textblock
-    (die Kompatibilitaetstabelle listet das Feld als "Ignored"). Ohne diese
-    Treffer haette eine DeepSeek-Antwort trotz Websuche gar keine Quellen.
-
-    Bewusst ohne Inline-Tags: die Liste sagt "das hat das Modell gesucht", nicht
-    "dieser Satz stammt aus S3". Ein Tag wuerde eine Belegtiefe vortaeuschen,
-    die der Provider nicht liefert.
-    """
-    sources: List[Source] = []
-    index_by_key: Dict[str, int] = {}
-
-    for block in data.get("content", []) or []:
-        if block.get("type") != "web_search_tool_result":
-            continue
-        content = block.get("content")
-        if not isinstance(content, list):
-            continue
-        for item in content:
-            if not isinstance(item, dict):
-                continue
-            url = item.get("url")
-            if not url:
-                continue
-            _ensure_source(
-                sources,
-                index_by_key,
-                url=url,
-                title=item.get("title"),
-                snippet=None,
-                provider=provider,
-            )
-    return sources
-
-
-def parse_anthropic_response(
-    data: Dict[str, Any], provider: str = "anthropic"
+def parse_openrouter_response(
+    text: Any, annotations: Iterable[Dict[str, Any]] | None = None,
+    provider: str = "openrouter",
 ) -> LLMResult:
-    text_parts: List[str] = []
+    """Convert OpenRouter answer text and URL annotations to an ``LLMResult``.
+
+    The caller extracts ``choices[0].message.content`` and
+    ``choices[0].message.annotations`` from the chat-completions response. A
+    URL annotation has the shape
+    ``{"type": "url_citation", "url_citation": {"url", "title",
+    "content", "start_index", "end_index"}}``.  Offsets are applied to the
+    unmodified answer, then source tags are inserted from right to left so
+    earlier offsets remain valid.
+    """
+    text = coerce_text(text)
     citations: List[Dict[str, Any]] = []
-    offset = 0
-
-    for block in data.get("content", []) or []:
-        if block.get("type") != "text":
+    for annotation in annotations or []:
+        if not isinstance(annotation, dict) or annotation.get("type") != "url_citation":
             continue
-        part_text = block.get("text") or ""
-        block_citations = block.get("citations", []) or []
-        if block_citations:
-            end = offset + len(part_text)
-            for citation in block_citations:
-                citations.append({
-                    "url": citation.get("url"),
-                    "title": citation.get("title"),
-                    "snippet": citation.get("cited_text"),
-                    "end_index": end,
-                })
-        text_parts.append(part_text)
-        offset += len(part_text)
-
-    annotated = insert_source_tags("".join(text_parts), citations, provider)
-    if result_sources(annotated):
-        return annotated
-    return merge_results(
-        annotated,
-        make_llm_result(
-            result_text(annotated), _web_search_result_sources(data, provider)
-        ),
-    )
-
-
-def parse_gemini_response(resp: Any, fallback_text: str = "") -> LLMResult:
-    data = to_plain(resp) or {}
-    text = (getattr(resp, "text", None) or fallback_text or "").strip()
-    candidates = data.get("candidates") if isinstance(data, dict) else None
-    cand = (candidates or [None])[0]
-    if isinstance(cand, dict) and not text:
-        parts = (((cand.get("content") or {}).get("parts")) or [])
-        text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
-    metadata = None
-    if isinstance(cand, dict):
-        metadata = cand.get("grounding_metadata") or cand.get("groundingMetadata")
-    else:
-        metadata = getattr(cand, "grounding_metadata", None) or getattr(cand, "groundingMetadata", None)
-    metadata = to_plain(metadata) or {}
-    chunks = metadata.get("grounding_chunks") or metadata.get("groundingChunks") or []
-    supports = metadata.get("grounding_supports") or metadata.get("groundingSupports") or []
-
-    citations: List[Dict[str, Any]] = []
-    chunk_data = [to_plain(chunk) for chunk in chunks]
-
-    for support in supports:
-        support_data = to_plain(support) or {}
-        segment = support_data.get("segment") or {}
-        end = segment.get("end_index", segment.get("endIndex"))
-        indices = (
-            support_data.get("grounding_chunk_indices")
-            or support_data.get("groundingChunkIndices")
-            or []
-        )
-        for idx in indices:
-            try:
-                chunk = chunk_data[int(idx)]
-            except (TypeError, ValueError, IndexError):
-                continue
-            web = chunk.get("web") or {}
-            citations.append({
-                "url": web.get("uri"),
-                "title": web.get("title"),
-                "end_index": end,
-            })
-
-    return insert_source_tags(text, citations, "gemini")
-
-
-def parse_mistral_content(content: Any) -> LLMResult:
-    if isinstance(content, str):
-        return convert_markdown_citations(content, "mistral")
-
-    sources: List[Source] = []
-    index_by_key: Dict[str, int] = {}
-    text_parts: List[str] = []
-
-    for item in content or []:
-        data = to_plain(item) or {}
-        item_type = data.get("type")
-        if item_type == "text":
-            text_parts.append(data.get("text") or "")
+        citation = annotation.get("url_citation")
+        if not isinstance(citation, dict) or not citation.get("url"):
             continue
-        if item_type in {"tool_reference", "reference"}:
-            source_id = _ensure_source(
-                sources,
-                index_by_key,
-                url=data.get("url"),
-                title=data.get("title"),
-                snippet=data.get("source"),
-                provider="mistral",
-            )
-            text_parts.append(f"[{source_id}]")
-
-    text = "".join(text_parts).strip()
-    if not text:
-        text = str(content or "")
-    return make_llm_result(text, sources)
+        citations.append({
+            "url": citation.get("url"),
+            "title": citation.get("title"),
+            "snippet": citation.get("content"),
+            "start_index": citation.get("start_index"),
+            "end_index": citation.get("end_index"),
+        })
+    return insert_source_tags(text, citations, provider)

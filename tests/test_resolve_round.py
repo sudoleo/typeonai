@@ -83,7 +83,7 @@ def run_round_with(fake_engine):
     with patch("app.services.llm.resolve_engine._call_engine_text", side_effect=fake_engine):
         return run_resolve_round(
             "When did it open?", "Opening year", positions,
-            api_keys={"OpenAI": "sk-1", "Gemini": "g-1"},
+            api_keys={"OpenRouter": "sk-or-test"},
         )
 
 
@@ -135,16 +135,17 @@ class TestRunResolveRound:
 
         assert run_round_with(fake)["outcome"] == "error"
 
-    def test_missing_key_skips_engine_call(self):
+    def test_missing_shared_key_skips_all_engine_calls(self):
         _, positions = normalize_resolve_positions("c", make_positions())
         with patch("app.services.llm.resolve_engine._call_engine_text") as engine:
             engine.return_value = json.dumps({"decision": "maintain", "position": "p", "reason": "r"})
-            result = run_resolve_round("q", "c", positions, api_keys={"Gemini": "g-1"})
+            result = run_resolve_round("q", "c", positions, api_keys={"OpenRouter": ""})
         by_model = {r["model"]: r for r in result["results"]}
         assert by_model["OpenAI"]["decision"] == "error"
         assert by_model["OpenAI"]["reason"] == "missing API key"
-        # Nur Gemini durfte den Engine-Call ausloesen.
-        assert engine.call_count == 1
+        assert by_model["Gemini"]["decision"] == "error"
+        assert by_model["Gemini"]["reason"] == "missing API key"
+        assert engine.call_count == 0
 
 
 # ---------------------------------------------------------------------------

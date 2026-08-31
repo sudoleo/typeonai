@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import app.core.config as cfg
-from app.services.llm.consensus_engine import CONSENSUS_TEMPERATURE
+from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import build_provider_payload
 
 from benchmark import audit, config, cost, transport
@@ -305,7 +305,7 @@ class BenchmarkRunner:
 
                 request_data = self.build_model_request(model, user_prompt)
                 audit.assert_no_web_tools(request_data["payload"], context=f"{model.provider}:{qid}")
-                api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[model.provider])
+                api_key = openrouter_api_key(api_keys)
                 outcome = transport_execute(request_data, api_key)
 
                 cell = self._make_cell_record(
@@ -371,7 +371,7 @@ class BenchmarkRunner:
                         return result
                     request_data = self.build_synth_request(user_prompt)
                     audit.assert_no_web_tools(request_data["payload"], context=f"synth:{qid}")
-                    api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[request_data["provider"]])
+                    api_key = openrouter_api_key(api_keys)
                     outcome = transport_execute(request_data, api_key)
                     cell = self._make_cell_record(
                         run_id=run_id,
@@ -406,10 +406,6 @@ class BenchmarkRunner:
             max_output_tokens=CONSENSUS_MAX_TOKENS,
             benchmark_mode=True,
         )
-        # query_consensus laeuft mit CONSENSUS_TEMPERATURE; Synth-alone muss
-        # fuer den Benchmark dieselben effektiven Settings dokumentieren/nutzen.
-        if model_config.provider == "gemini":
-            request_data["payload"].setdefault("generationConfig", {})["temperature"] = CONSENSUS_TEMPERATURE
         return request_data
 
     # --- run()-Helfer ------------------------------------------------------
@@ -633,7 +629,7 @@ class BenchmarkRunner:
                     benchmark_mode=True,
                 )
                 audit.assert_no_web_tools(request_data["payload"], context=f"perm:{model.provider}:{qid}")
-                api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[model.provider])
+                api_key = openrouter_api_key(api_keys)
                 outcome = transport_execute(request_data, api_key)
                 permuted_letter = (
                     None if outcome.get("error") else extract_letter(outcome.get("text"), options=new_options)
@@ -761,11 +757,8 @@ class BenchmarkRunner:
                 max_output_tokens=CONSENSUS_MAX_TOKENS,
                 benchmark_mode=True,
             )
-            if model_config.provider == "gemini":
-                # Gleiche effektive Temperatur wie query_consensus.
-                request_data["payload"].setdefault("generationConfig", {})["temperature"] = CONSENSUS_TEMPERATURE
             audit.assert_no_web_tools(request_data["payload"], context=f"anon_consensus:{qid}")
-            api_key = api_keys.get(config.PROVIDER_API_KEY_NAME[request_data["provider"]])
+            api_key = openrouter_api_key(api_keys)
             outcome = transport_execute(request_data, api_key)
             anon_letter = (
                 None if outcome.get("error") else extract_letter(outcome.get("text"), options=record["options"])
@@ -952,42 +945,16 @@ def _manifest_row_for_request(
 
 
 def _reasoning_settings(provider: str, payload: dict):
-    if provider in ("openai", "grok"):
-        return payload.get("reasoning")
-    if provider == "mistral":
-        return {"reasoning_effort": payload.get("completion_args", {}).get("reasoning_effort")}
-    if provider == "anthropic":
-        settings = {}
-        if "thinking" in payload:
-            settings["thinking"] = payload["thinking"]
-        if "output_config" in payload:
-            settings["output_config"] = payload["output_config"]
-        return settings or None
-    if provider == "gemini":
-        thinking = payload.get("generationConfig", {}).get("thinkingConfig")
-        return {"thinkingConfig": thinking} if thinking else None
-    return None
+    return payload.get("reasoning")
 
 
 def _temperature(payload: dict):
-    if "temperature" in payload:
-        return payload.get("temperature")
-    if "completion_args" in payload:
-        return payload.get("completion_args", {}).get("temperature")
-    if "generationConfig" in payload:
-        return payload.get("generationConfig", {}).get("temperature")
-    return None
+    return payload.get("temperature")
 
 
 def _output_token_limit(payload: dict, fallback: int) -> int:
-    if "max_output_tokens" in payload:
-        return int(payload["max_output_tokens"])
     if "max_tokens" in payload:
         return int(payload["max_tokens"])
-    if "completion_args" in payload and "max_tokens" in payload["completion_args"]:
-        return int(payload["completion_args"]["max_tokens"])
-    if "generationConfig" in payload and "maxOutputTokens" in payload["generationConfig"]:
-        return int(payload["generationConfig"]["maxOutputTokens"])
     return int(fallback)
 
 

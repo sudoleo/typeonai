@@ -1,7 +1,7 @@
-"""Regressionstests: alle Provider-HTTP-Calls muessen ein Timeout setzen.
+"""Regressionstests: alle OpenRouter-HTTP-Calls muessen ein Timeout setzen.
 
 Ein requests.post ohne timeout blockiert bei einem haengenden Upstream
-dauerhaft einen Threadpool-Worker (so geschehen bei query_claude). Der
+dauerhaft einen Threadpool-Worker. Der
 AST-Audit nagelt das fuer alle requests.post/get-Aufrufe unter
 app/services/llm/ und app/api/routers/ fest; der Funktionstest prueft den
 konkreten Anthropic-Pfad zusaetzlich zur Laufzeit.
@@ -23,30 +23,19 @@ AUDITED_DIRS = [
 ]
 
 
+PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok"]
+
+
 def _call_direct_provider(provider: str):
-    calls = {
-        "OpenAI": lambda: engines.query_openai("question", "key"),
-        "Mistral": lambda: engines.query_mistral("question", "key"),
-        "Anthropic": lambda: engines.query_claude("question", "key"),
-        "Gemini": lambda: engines.query_gemini("question", "key"),
-        "Grok": lambda: engines.query_grok("question", "key"),
-    }
-    return calls[provider]()
+    return engines.query_model(provider, "question", "key")
 
 
 def _call_streaming_provider(provider: str):
-    calls = {
-        "OpenAI": lambda: streaming.stream_openai_query("question", "key"),
-        "Mistral": lambda: streaming.stream_mistral_query("question", "key"),
-        "Anthropic": lambda: streaming.stream_claude_query("question", "key"),
-        "Gemini": lambda: streaming.stream_gemini_query("question", "key"),
-        "Grok": lambda: streaming.stream_grok_query("question", "key"),
-    }
-    return list(calls[provider]())[-1]["result"]
+    return list(streaming.stream_model_query(provider, "question", "key"))[-1]["result"]
 
 
 @pytest.mark.parametrize(
-    "provider", ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"]
+    "provider", PROVIDERS
 )
 @pytest.mark.parametrize("status_code", [408, 504])
 def test_real_provider_adapters_classify_http_timeout_status_without_body_leak(
@@ -65,7 +54,7 @@ def test_real_provider_adapters_classify_http_timeout_status_without_body_leak(
 
 
 @pytest.mark.parametrize(
-    "provider", ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"]
+    "provider", PROVIDERS
 )
 def test_real_provider_adapters_preserve_read_timeout_type(provider, caplog):
     secret = "owner@example.test|private-timeout-detail"
@@ -80,7 +69,7 @@ def test_real_provider_adapters_preserve_read_timeout_type(provider, caplog):
 
 
 @pytest.mark.parametrize(
-    "provider", ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"]
+    "provider", PROVIDERS
 )
 @pytest.mark.parametrize("status_code", [408, 504])
 def test_real_streaming_adapters_classify_http_timeout_status(
@@ -99,7 +88,7 @@ def test_real_streaming_adapters_classify_http_timeout_status(
 
 
 @pytest.mark.parametrize(
-    "provider", ["OpenAI", "Mistral", "Anthropic", "Gemini", "Grok"]
+    "provider", PROVIDERS
 )
 def test_real_streaming_adapters_preserve_read_timeout_type(provider, caplog):
     secret = "owner@example.test|private-stream-timeout"
@@ -113,13 +102,13 @@ def test_real_streaming_adapters_preserve_read_timeout_type(provider, caplog):
     assert secret not in caplog.text
 
 
-def test_query_claude_sets_timeout():
+def test_query_model_sets_timeout():
     with patch.object(engines.requests, "post") as mock_post:
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
-            "content": [{"type": "text", "text": "hi"}]
+            "choices": [{"message": {"content": "hi"}}]
         }
-        engines.query_claude("hello", api_key="sk-test")
+        engines.query_model("anthropic", "hello", api_key="sk-test")
 
     assert mock_post.called
     assert mock_post.call_args.kwargs.get("timeout") == provider_runtime.PROVIDER_HTTP_TIMEOUT

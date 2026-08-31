@@ -215,8 +215,8 @@ Antwort. Ob am Ende veröffentlicht wird, entscheidet der Judge: Läufe über
 Im GitHub-Repository werden folgende Actions-Secrets benötigt:
 
 - `CONSENSUS_API_KEY`: Key einer Admin-UID mit allen drei Scopes.
-- `OPENAI_API_KEY`: nur für die automatische Themenwahl; bei manueller Frage
-  wird kein OpenAI-Call ausgeführt.
+- `OPENROUTER_API_KEY`: für die automatische Themenwahl über OpenRouter; bei
+  manueller Frage wird dieser zusätzliche Themenwahl-Call nicht ausgeführt.
 
 Optionale Repository-Variablen: `CONSENSUS_API_BASE_URL` und
 `OPENAI_TOPIC_MODEL` (Default `gpt-5.6-luna`). Topic Brief und Index-Schalter

@@ -1,123 +1,78 @@
-"""DeepSeek-Websuche ueber den Anthropic-kompatiblen Endpoint.
+"""DeepSeek uses the same OpenRouter web-search and citation contract."""
 
-DeepSeek fuehrt die Suche serverseitig aus, liefert die Treffer als
-``web_search_tool_result``-Bloecke, haengt aber **keine** ``citations`` an den
-Textblock. Ohne den Fallback aus diesen Bloecken haette eine DeepSeek-Antwort
-trotz Websuche gar keine Quellen.
-"""
-
-import unittest
-
-from app.services.llm.citations import (
-    parse_anthropic_response,
-    result_sources,
-    result_text,
-)
+import app.core.config as cfg
+from app.services.llm import engines
+from app.services.llm.citations import parse_openrouter_response
+from app.services.llm.engines import build_provider_payload
 
 
-def _deepseek_payload():
-    """Antwortform, wie sie /anthropic/v1/messages fuer DeepSeek liefert."""
-    return {
-        "stop_reason": "end_turn",
-        "content": [
-            {"type": "thinking", "thinking": "..."},
-            {
-                "type": "server_tool_use",
-                "name": "web_search",
-                "input": {"query": "who won the last race"},
-            },
-            {
-                "type": "web_search_tool_result",
-                "content": [
-                    {
-                        "type": "web_search_result",
-                        "title": "F1 2026 results",
-                        "url": "https://www.espn.com/f1/story/_/id/1",
-                        "encrypted_content": "opaque",
+def test_deepseek_payload_uses_openrouter_search_without_provider_pinning():
+    built = build_provider_payload(
+        "deepseek",
+        question="Who won the last race?",
+        system_prompt="Answer with sources.",
+        model_override=cfg.DEEPSEEK_FLASH_MODEL,
+        max_output_tokens=500,
+    )
+
+    payload = built["payload"]
+    assert built["api_model"] == f"deepseek/{cfg.DEEPSEEK_FLASH_MODEL}"
+    assert payload["tools"] == [{
+        "type": "openrouter:web_search",
+        "parameters": {"engine": "auto", "max_uses": 2},
+    }]
+    assert payload["provider"] == {"zdr": True}
+    assert "order" not in payload["provider"]
+    assert "only" not in payload["provider"]
+
+
+def test_deepseek_url_citations_keep_the_logical_provider_label():
+    text = "Lando Norris won the race."
+    parsed = parse_openrouter_response(text, [{
+        "type": "url_citation",
+        "url_citation": {
+            "url": "https://example.test/results",
+            "title": "Race results",
+            "content": "Lando Norris won",
+            "start_index": 0,
+            "end_index": len(text),
+        },
+    }], "deepseek")
+
+    assert parsed["text"].endswith("[S1]")
+    assert parsed["sources"] == [{
+        "id": "S1",
+        "title": "Race results",
+        "url": "https://example.test/results",
+        "snippet": "Lando Norris won",
+        "extract": "Lando Norris won",
+        "provider": "deepseek",
+    }]
+
+
+def test_successful_query_model_parses_openrouter_response(monkeypatch):
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {
+                "content": "Verified answer.",
+                "annotations": [{
+                    "type": "url_citation",
+                    "url_citation": {
+                        "url": "https://example.test/source",
+                        "title": "Example source",
+                        "end_index": 16,
                     },
-                    {
-                        "type": "web_search_result",
-                        "title": "Race report",
-                        "url": "https://www.formula1.com/en/results/2026/races",
-                    },
-                    # Duplikat mit Slash – muss zusammenfallen.
-                    {
-                        "type": "web_search_result",
-                        "title": "F1 2026 results",
-                        "url": "https://www.espn.com/f1/story/_/id/1/",
-                    },
-                ],
-            },
-            {"type": "text", "text": "Lando Norris won the Hungarian Grand Prix."},
-        ],
-    }
+                }],
+            }}]}
 
+        def close(self):
+            pass
 
-class DeepSeekWebSearchParsingTests(unittest.TestCase):
-    def test_search_results_become_sources(self):
-        parsed = parse_anthropic_response(_deepseek_payload(), "deepseek")
-        urls = [s["url"] for s in result_sources(parsed)]
-        self.assertEqual(
-            urls,
-            [
-                "https://www.espn.com/f1/story/_/id/1",
-                "https://www.formula1.com/en/results/2026/races",
-            ],
-        )
-        self.assertEqual(result_sources(parsed)[0]["provider"], "deepseek")
+    monkeypatch.setattr(engines.requests, "post", lambda *args, **kwargs: Response())
 
-    def test_text_stays_free_of_inline_tags(self):
-        """Die Trefferliste sagt "das wurde gesucht", nicht "dieser Satz stammt
-        aus S3" – ein Inline-Tag wuerde eine Belegtiefe vortaeuschen, die
-        DeepSeek nicht liefert."""
-        parsed = parse_anthropic_response(_deepseek_payload(), "deepseek")
-        self.assertEqual(
-            result_text(parsed), "Lando Norris won the Hungarian Grand Prix."
-        )
+    result = engines.query_model("deepseek", "question", "sk-or-test")
 
-    def test_encrypted_content_is_not_leaked(self):
-        parsed = parse_anthropic_response(_deepseek_payload(), "deepseek")
-        for source in result_sources(parsed):
-            self.assertNotIn("opaque", repr(source))
-
-    def test_no_search_block_yields_no_sources(self):
-        parsed = parse_anthropic_response(
-            {"content": [{"type": "text", "text": "2 + 2 is 4."}]}, "deepseek"
-        )
-        self.assertEqual(result_sources(parsed), [])
-        self.assertEqual(result_text(parsed), "2 + 2 is 4.")
-
-    def test_real_citations_still_win(self):
-        """Anthropic selbst liefert citations – dort bleibt es bei Inline-Tags,
-        der Suchtreffer-Fallback darf die Liste nicht aufblaehen."""
-        parsed = parse_anthropic_response(
-            {
-                "content": [
-                    {
-                        "type": "web_search_tool_result",
-                        "content": [
-                            {"type": "web_search_result", "url": "https://unused.example"}
-                        ],
-                    },
-                    {
-                        "type": "text",
-                        "text": "Paris is the capital.",
-                        "citations": [
-                            {
-                                "url": "https://cited.example",
-                                "title": "Cited",
-                                "cited_text": "Paris",
-                            }
-                        ],
-                    },
-                ]
-            }
-        )
-        self.assertEqual(
-            [s["url"] for s in result_sources(parsed)], ["https://cited.example"]
-        )
-        self.assertIn("[S1]", result_text(parsed))
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert result["text"] == "Verified answer. [S1]"
+    assert result["sources"][0]["provider"] == "deepseek"

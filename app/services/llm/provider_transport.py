@@ -8,7 +8,6 @@ persist a product-domain result.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -18,15 +17,8 @@ import app.core.config as cfg
 from app.core.observability import record_metric, safe_exception
 from app.services.llm.base import get_system_prompt
 from app.services.llm.citations import result_sources, result_text, to_plain
-from app.services.llm.credentials import enable_gemini_adc, resolve_developer_api_keys
-from app.services.llm.engines import (
-    query_claude,
-    query_deepseek,
-    query_gemini,
-    query_grok,
-    query_mistral,
-    query_openai,
-)
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
+from app.services.llm.engines import query_model
 from app.services.llm.mock_llm import mock_ask_result, mock_llm_enabled
 
 
@@ -39,16 +31,6 @@ PROVIDER_LABELS = {
     "deepseek": "DeepSeek",
     "grok": "Grok",
 }
-PROVIDER_FUNCTIONS = {
-    "openai": query_openai,
-    "mistral": query_mistral,
-    "anthropic": query_claude,
-    "gemini": query_gemini,
-    "deepseek": query_deepseek,
-    "grok": query_grok,
-}
-
-
 @dataclass(frozen=True)
 class ProviderAnswer:
     provider: str
@@ -58,18 +40,12 @@ class ProviderAnswer:
 
 
 def developer_keys() -> dict:
-    """Return the one canonical server credential map (including Gemini ADC)."""
-    return enable_gemini_adc(resolve_developer_api_keys())
+    """Return the one canonical OpenRouter server credential."""
+    return resolve_developer_api_keys()
 
 
 def provider_available(provider: str, keys: dict) -> bool:
-    if mock_llm_enabled():
-        return True
-    label = PROVIDER_LABELS[provider]
-    if keys.get(label):
-        return True
-    adc_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-    return provider == "gemini" and bool(adc_path and os.path.isfile(adc_path))
+    return mock_llm_enabled() or bool(openrouter_api_key(keys))
 
 
 def query_provider(
@@ -91,10 +67,12 @@ def query_provider(
         "max_output_tokens": cfg.get_output_token_limit(is_pro, bool(deep_think)),
         "attachments": [],
     }
-    key = keys.get(label) or ""
-    if provider == "gemini":
-        return PROVIDER_FUNCTIONS[provider](question, user_api_key=key, **kwargs)
-    return PROVIDER_FUNCTIONS[provider](question, key, **kwargs)
+    return query_model(
+        provider,
+        question,
+        openrouter_api_key(keys) or "",
+        **kwargs,
+    )
 
 
 def fan_out_provider_answers(

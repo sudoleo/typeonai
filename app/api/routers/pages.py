@@ -5,27 +5,24 @@ import logging
 import re
 from datetime import datetime, timezone
 
-import openai
-from mistralai import Mistral
-import google.generativeai as genai
 from fastapi import APIRouter, Request, Body, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 import requests
 
+import app.core.config as cfg
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.site import SITE_URL
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
-import app.core.config as cfg
 from app.services import persistence_guard
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from app.services.llm.provider_runtime import (
     PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
     managed_provider_resource,
-    openai_client,
     provider_http_timeout,
 )
+from app.services.llm.engines import OPENROUTER_BASE_URL, openrouter_headers
 
 # To be supplied by main.py dependency injection or imported 
 # We'll import templates from main or setup a generic one here.
@@ -417,157 +414,18 @@ def check_keys(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+    openrouter_key = str(data.get("openrouter_key") or "").strip()
+    if not is_valid(openrouter_key):
+        raise HTTPException(status_code=400, detail="Enter an OpenRouter API key to test.")
     try:
-        openai_key = data.get("openai_key")
-        mistral_key = data.get("mistral_key")
-        anthropic_key = data.get("anthropic_key")
-        gemini_key = data.get("gemini_key")
-        deepseek_key = data.get("deepseek_key")
-        grok_key = data.get("grok_key")
-
-        submitted_keys = [openai_key, mistral_key, anthropic_key, gemini_key, deepseek_key, grok_key]
-        if not any(is_valid(key) for key in submitted_keys):
-            raise HTTPException(status_code=400, detail="Enter at least one API key to test.")
-        
-        results = {}
-        
-        # OpenAI Handshake
-        try:
-            if openai_key and len(openai_key) > 10:
-                client = openai_client(
-                    api_key=openai_key,
-                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
-                )
-                with managed_provider_resource(client):
-                    client.chat.completions.create(
-                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["openai"],
-                        messages=[
-                            {"role": "system", "content": "ping"},
-                            {"role": "user", "content": "ping"}
-                        ],
-                        max_completion_tokens=5
-                    )
-                results["OpenAI"] = "valid"
-            else:
-                results["OpenAI"] = "invalid"
-        except Exception as exc:
-            logging.warning("OpenAI key check failed category=%s", safe_exception(exc))
-            results["OpenAI"] = "invalid"
-        
-        # Mistral Handshake
-        try:
-            if mistral_key and len(mistral_key) > 10:
-                client = Mistral(
-                    api_key=mistral_key,
-                    timeout_ms=int(PROVIDER_KEY_CHECK_TIMEOUT_SECONDS * 1000),
-                )
-                with managed_provider_resource(client):
-                    client.chat.complete(
-                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["mistral"],
-                        messages=[{"role": "user", "content": "ping"}],
-                        max_tokens=5
-                    )
-                results["Mistral"] = "valid"
-            else:
-                results["Mistral"] = "invalid"
-        except Exception as exc:
-            logging.warning("Mistral key check failed category=%s", safe_exception(exc))
-            results["Mistral"] = "invalid"
-            
-        # Anthropic Handshake
-        try:
-            if anthropic_key and len(anthropic_key) > 10:
-                url = "https://api.anthropic.com/v1/messages"
-                headers = {
-                    "x-api-key": anthropic_key,
-                    "Content-Type": "application/json",
-                    "anthropic-version": "2023-06-01"
-                }
-                payload = {
-                    "model": cfg.DEFAULT_MODEL_BY_PROVIDER["anthropic"],
-                    "max_tokens": 5,
-                    "messages": [{"role": "user", "content": "ping"}]
-                }
-                resp = requests.post(
-                    url,
-                    json=payload,
-                    headers=headers,
-                    timeout=provider_http_timeout(PROVIDER_KEY_CHECK_TIMEOUT_SECONDS),
-                )
-                with managed_provider_resource(resp):
-                    if resp.status_code == 200:
-                        results["Anthropic"] = "valid"
-                    else:
-                        results["Anthropic"] = "invalid"
-            else:
-                results["Anthropic"] = "invalid"
-        except Exception as exc:
-            logging.warning("Anthropic key check failed category=%s", safe_exception(exc))
-            results["Anthropic"] = "invalid"
-            
-        # Gemini Handshake
-        try:
-            if gemini_key and len(gemini_key) > 10:
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel(cfg.DEFAULT_MODEL_BY_PROVIDER["gemini"])
-                resp = model.generate_content(
-                    "ping",
-                    generation_config={"max_output_tokens": 5},
-                    request_options={"timeout": PROVIDER_KEY_CHECK_TIMEOUT_SECONDS},
-                )
-                results["Gemini"] = "valid"
-            else:
-                results["Gemini"] = "invalid"
-        except Exception as exc:
-            logging.warning("Gemini key check failed category=%s", safe_exception(exc))
-            results["Gemini"] = "invalid"
-
-        # DeepSeek Handshake
-        try:
-            if deepseek_key and len(deepseek_key) > 10:
-                client = openai_client(
-                    api_key=deepseek_key,
-                    base_url="https://api.deepseek.com",
-                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
-                )
-                with managed_provider_resource(client):
-                    client.chat.completions.create(
-                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["deepseek"],
-                        messages=[{"role": "user", "content": "ping"}],
-                        max_tokens=5
-                    )
-                results["DeepSeek"] = "valid"
-            else:
-                results["DeepSeek"] = "invalid"
-        except Exception as exc:
-            logging.warning("DeepSeek key check failed category=%s", safe_exception(exc))
-            results["DeepSeek"] = "invalid"
-            
-        # Grok Handshake
-        try:
-            if grok_key and len(grok_key) > 10:
-                client = openai_client(
-                    api_key=grok_key,
-                    base_url="https://api.x.ai/v1",
-                    timeout_seconds=PROVIDER_KEY_CHECK_TIMEOUT_SECONDS,
-                )
-                with managed_provider_resource(client):
-                    client.chat.completions.create(
-                        model=cfg.DEFAULT_MODEL_BY_PROVIDER["grok"],
-                        messages=[{"role": "user", "content": "ping"}],
-                        max_tokens=5
-                    )
-                results["Grok"] = "valid"
-            else:
-                results["Grok"] = "invalid"
-        except Exception as exc:
-            logging.warning("Grok key check failed category=%s", safe_exception(exc))
-            results["Grok"] = "invalid"
-            
-        return {"results": results}
-        
-    except HTTPException:
-        raise
+        response = requests.get(
+            f"{OPENROUTER_BASE_URL}/key",
+            headers=openrouter_headers(openrouter_key),
+            timeout=provider_http_timeout(PROVIDER_KEY_CHECK_TIMEOUT_SECONDS),
+        )
+        with managed_provider_resource(response):
+            valid = response.status_code == 200
+        return {"results": {"OpenRouter": "valid" if valid else "invalid"}}
     except Exception as exc:
-        logging.error("Error checking API keys category=%s", safe_exception(exc))
-        raise HTTPException(status_code=500, detail="Error checking API keys.")
+        logging.warning("OpenRouter key check failed category=%s", safe_exception(exc))
+        return {"results": {"OpenRouter": "invalid"}}

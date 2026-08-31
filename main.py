@@ -1,5 +1,4 @@
 import asyncio
-import os
 import logging
 from contextlib import asynccontextmanager
 
@@ -14,8 +13,6 @@ from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT
 
 # Init Environment
 load_dotenv()
-if os.environ.get("E2E_TEST_MODE") != "1":
-    os.environ.setdefault("GOOGLE_APPLICATION_CREDENTIALS", "gen-lang-client-0234219247-53b2b1c0e355.json")
 logging.basicConfig(level=logging.INFO)
 
 from app.core.observability import (

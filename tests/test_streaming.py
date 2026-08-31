@@ -6,18 +6,15 @@ from unittest import mock
 import anyio
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 
-from types import SimpleNamespace
-
 from app.services.llm.citations import make_llm_result
 from app.services.llm.streaming import (
-    _stream_chat_completions,
-    _stream_openai_responses,
+    _iter_openrouter_chunks,
+    _stream_openrouter_chat_completion,
     iter_sse_events,
     iter_sse_with_keepalive,
     keepalive_streaming_response,
     sse_pack,
-    stream_grok_query,
-    stream_openai_query,
+    stream_model_query,
     streaming_model_response,
 )
 from app.services.llm.provider_runtime import (
@@ -178,7 +175,7 @@ class ProviderCancellationTests(unittest.TestCase):
 
         with bind_provider_cancellation(cancellation):
             with self.assertRaises(ProviderCancelled):
-                list(stream_openai_query("question", "key"))
+                list(stream_model_query("openai", "question", "key"))
 
 
 class SSEPackTests(unittest.TestCase):
@@ -300,137 +297,71 @@ class StreamingModelResponseTests(unittest.TestCase):
         self.assertIn("RuntimeError", "\n".join(logs.output))
 
 
-def _chunk(*, content=None, reasoning_content=None, finish_reason=None):
-    delta = SimpleNamespace(content=content, reasoning_content=reasoning_content)
-    choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
-    return SimpleNamespace(choices=[choice])
+def _openrouter_sse(events) -> str:
+    return "".join(f"data: {json.dumps(event)}\n\n" for event in events) + "data: [DONE]\n\n"
 
 
-class FakeChatCompletions:
-    def __init__(self, chunks):
-        self._chunks = chunks
-
-    def create(self, **kwargs):
-        return iter(self._chunks)
-
-
-class FakeOpenAIClient:
-    def __init__(self, chunks):
-        self.chat = SimpleNamespace(completions=FakeChatCompletions(chunks))
-
-
-class ChatCompletionsStreamTests(unittest.TestCase):
-    """Deckt den DeepSeek-/OpenAI-kompatiblen Chat-Completions-Stream ab –
-    speziell den Fall, dass ein Reasoning-Modell nur Reasoning liefert und
-    nie eine Antwort ausgibt (früher: leerer String -> irreführender
-    'Please log in'-Fallback im Frontend)."""
-
-    def test_normal_answer_produces_deltas_and_text(self):
-        client = FakeOpenAIClient([
-            _chunk(content="Hel"),
-            _chunk(content="lo"),
-            _chunk(finish_reason="stop"),
-        ])
-        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
-        self.assertEqual([e["type"] for e in events], ["delta", "delta", "final"])
-        self.assertEqual(events[-1]["result"]["text"], "Hello")
-        self.assertNotIn("error", events[-1]["result"])
-
-    def test_reasoning_only_length_cutoff_yields_error_result(self):
-        client = FakeOpenAIClient([
-            _chunk(reasoning_content="thinking..."),
-            _chunk(reasoning_content="still thinking..."),
-            _chunk(finish_reason="length"),
-        ])
-        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
-        self.assertEqual([e["type"] for e in events], ["reasoning", "reasoning", "final"])
-        result = events[-1]["result"]
-        self.assertEqual(result["text"], "")
-        self.assertEqual(result["error_code"], "empty_reasoning_response")
-        self.assertIn("ran out of output tokens", result["error"])
-
-    def test_empty_response_without_length_yields_generic_error(self):
-        client = FakeOpenAIClient([_chunk(finish_reason="stop")])
-        events = list(_stream_chat_completions(client=client, payload={"model": "x"}))
-        result = events[-1]["result"]
-        self.assertEqual(result["error_code"], "empty_reasoning_response")
-        self.assertIn("no answer", result["error"])
-
-
-def _responses_sse(events) -> str:
-    return "".join(f"data: {json.dumps(evt)}\n\n" for evt in events)
-
-
-class FakeResponsesHTTP(FakeSSEResponse):
+class FakeOpenRouterHTTP(FakeSSEResponse):
     status_code = 200
-    text = ""
+
+    def __init__(self, events):
+        super().__init__(_openrouter_sse(events))
+        self.closed = False
+
+    def close(self):
+        self.closed = True
 
 
-class ResponsesStreamTests(unittest.TestCase):
-    """Responses-API-Stream (OpenAI/Grok): leere finale Antworten müssen als
-    echter Fehler gemeldet werden, sonst zeigt das Frontend nur den
-    irreführenden Generik-Text 'No response received / timed out'."""
-
-    def _run(self, events):
-        fake = FakeResponsesHTTP(_responses_sse(events))
-        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
-            return list(_stream_openai_responses(
-                api_key="k", base_url="https://api.x.ai/v1", payload={"model": "m"}, provider="grok",
+class OpenRouterStreamTests(unittest.TestCase):
+    def _run(self, events, provider="openai"):
+        fake = FakeOpenRouterHTTP(events)
+        with mock.patch("app.services.llm.streaming.requests.post", return_value=fake) as post:
+            result = list(_stream_openrouter_chat_completion(
+                api_key="sk-or-test",
+                payload={"model": "openai/gpt-5.4-mini", "provider": {"zdr": True}},
+                provider=provider,
             ))
+        return result, fake, post
 
-    def test_incomplete_without_text_yields_max_tokens_error(self):
-        events = self._run([
-            {"type": "response.output_item.added", "item": {"type": "reasoning"}},
-            {"type": "response.incomplete", "response": {
-                "status": "incomplete",
-                "incomplete_details": {"reason": "max_output_tokens"},
-                "output": [],
-            }},
+    def test_delta_final_and_url_citation_use_the_common_contract(self):
+        annotations = [{
+            "type": "url_citation",
+            "url_citation": {
+                "url": "https://example.com/a",
+                "title": "Example",
+                "content": "Hello",
+                "start_index": 0,
+                "end_index": 5,
+            },
+        }]
+        events, fake, post = self._run([
+            {"choices": [{"delta": {"content": "Hel"}}]},
+            {"choices": [{"delta": {"content": "lo", "annotations": annotations}, "finish_reason": "stop"}]},
         ])
-        self.assertEqual([e["type"] for e in events], ["reasoning", "final"])
-        result = events[-1]["result"]
-        self.assertEqual(result["error_code"], "max_output_tokens")
-        self.assertIn("output token budget", result["error"])
+        self.assertEqual([event["type"] for event in events], ["delta", "delta", "final"])
+        self.assertEqual(events[-1]["result"]["text"], "Hello [S1]")
+        self.assertEqual(events[-1]["result"]["sources"][0]["provider"], "openai")
+        self.assertTrue(fake.closed)
+        payload = post.call_args.kwargs["json"]
+        self.assertTrue(payload["stream"])
+        self.assertEqual(payload["provider"], {"zdr": True})
 
-    def test_completed_with_text_stays_untouched(self):
-        events = self._run([
-            {"type": "response.output_text.delta", "delta": "Hi"},
-            {"type": "response.completed", "response": {
-                "status": "completed",
-                "output": [{"type": "message", "content": [{"type": "output_text", "text": "Hi"}]}],
-            }},
+    def test_reasoning_only_length_cutoff_is_a_structured_error(self):
+        events, _, _ = self._run([
+            {"choices": [{"delta": {"reasoning": "thinking"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "length"}]},
         ])
-        self.assertEqual(events[-1]["result"]["text"], "Hi")
-        self.assertNotIn("error", events[-1]["result"])
+        self.assertEqual([event["type"] for event in events], ["reasoning", "final"])
+        self.assertEqual(events[-1]["result"]["error_code"], "empty_reasoning_response")
+        self.assertIn("ran out of output tokens", events[-1]["result"]["error"])
 
-
-class GrokReasoningMarkerTests(unittest.TestCase):
-    """Non-Reasoning-Grok-Varianten dürfen keine Reasoning-Marker durchreichen
-    (xAI streamt trotzdem Reasoning-Items) — das Frontend zeigte sonst
-    'Reasoning' für ein Modell mit dem Label 'No reasoning'."""
-
-    GROK_EVENTS = [
-        {"type": "response.output_item.added", "item": {"type": "reasoning"}},
-        {"type": "response.output_text.delta", "delta": "Hi"},
-        {"type": "response.completed", "response": {
-            "status": "completed",
-            "output": [{"type": "message", "content": [{"type": "output_text", "text": "Hi"}]}],
-        }},
-    ]
-
-    def _run(self, model_override):
-        fake = FakeResponsesHTTP(_responses_sse(self.GROK_EVENTS))
+    def test_low_level_parser_accepts_content_blocks_and_done(self):
+        fake = FakeOpenRouterHTTP([
+            {"choices": [{"delta": {"content": [{"type": "text", "text": "Hi"}]}}]},
+        ])
         with mock.patch("app.services.llm.streaming.requests.post", return_value=fake):
-            return list(stream_grok_query("Q?", "key", model_override=model_override))
-
-    def test_non_reasoning_model_suppresses_reasoning_markers(self):
-        events = self._run("grok-4.20-non-reasoning")
-        self.assertEqual([e["type"] for e in events], ["delta", "final"])
-        self.assertEqual(events[-1]["result"]["text"], "Hi")
-
-    def test_reasoning_model_keeps_reasoning_markers(self):
-        events = self._run("grok-4.3")
-        self.assertEqual([e["type"] for e in events], ["reasoning", "delta", "final"])
+            events = list(_iter_openrouter_chunks(api_key="key", payload={"model": "m"}))
+        self.assertEqual(events, [{"type": "delta", "text": "Hi"}])
 
 
 class ConsensusStreamTests(unittest.TestCase):
@@ -477,9 +408,7 @@ class ConsensusStreamTests(unittest.TestCase):
 
 class ConsensusRetryTests(unittest.TestCase):
     def _run(self, fake_engine):
-        # DEVELOPER_GEMINI_API_KEY leeren: mit nur einem OpenAI-Key darf kein
-        # Fallback-Provider verfuegbar sein (sonst gaebe es einen 3. Versuch).
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}), mock.patch(
+        with mock.patch(
             "app.services.llm.consensus_engine._stream_consensus_engine",
             side_effect=fake_engine,
         ) as patched:
@@ -487,7 +416,7 @@ class ConsensusRetryTests(unittest.TestCase):
                 "Q?", "a", "b", None, None, None, None,
                 excluded_models=[],
                 consensus_model="OpenAI",
-                api_keys={"OpenAI": "sk-test"},
+                api_keys={"OpenRouter": "sk-or-test"},
             ))
         return events, patched.call_count
 
@@ -513,7 +442,7 @@ class ConsensusRetryTests(unittest.TestCase):
             yield  # pragma: no cover - macht die Funktion zum Generator
 
         events, call_count = self._run(fake_engine)
-        self.assertEqual(call_count, 2)
+        self.assertEqual(call_count, 3)
         self.assertEqual(events[-1]["text"], "Consensus error: provider request failed.")
         self.assertTrue(events[-1]["error"])
 
@@ -522,7 +451,7 @@ class ConsensusRetryTests(unittest.TestCase):
             return iter(())
 
         events, call_count = self._run(fake_engine)
-        self.assertEqual(call_count, 2)
+        self.assertEqual(call_count, 3)
         self.assertEqual(events[-1]["text"], "Consensus error: empty response from consensus engine.")
         self.assertTrue(events[-1]["error"])
 

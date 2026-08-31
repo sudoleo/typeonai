@@ -64,18 +64,10 @@ def app_server():
     # Deltas gedrosselt streamen, damit die Tests den Streaming-
     # Zwischenzustand beobachten koennen (~400ms pro Modellantwort).
     env.setdefault("MOCK_LLM_DELAY_MS", "40")
-    # Der Mock faengt alle Provider-Calls ab; Dummy-Keys existieren nur,
+    # Der Mock faengt alle Modell-Calls ab; der Dummy-Key existiert nur,
     # damit Key-Pruefungen in handle_ask/consensus nicht 500/400 werfen,
     # falls die lokale .env unvollstaendig ist.
-    for name in (
-        "DEVELOPER_OPENAI_API_KEY",
-        "DEVELOPER_MISTRAL_API_KEY",
-        "DEVELOPER_ANTHROPIC_API_KEY",
-        "DEVELOPER_GEMINI_API_KEY",
-        "DEVELOPER_DEEPSEEK_API_KEY",
-        "DEVELOPER_GROK_API_KEY",
-    ):
-        env.setdefault(name, "e2e-dummy-key")
+    env.setdefault("OPENROUTER_API_KEY", "e2e-dummy-key")
 
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "main:app", "--port", str(E2E_PORT), "--log-level", "warning"],

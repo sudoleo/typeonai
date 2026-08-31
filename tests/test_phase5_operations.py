@@ -654,7 +654,7 @@ def test_upstream_http_timeout_status_is_normalized_without_response_body(caplog
 
 
 @pytest.mark.parametrize("stream_requested", [False, True])
-def test_direct_ask_metrics_classify_normalized_provider_timeouts(
+def test_ask_metrics_classify_normalized_openrouter_timeouts(
     stream_requested, monkeypatch
 ):
     timeout_result = {
@@ -665,13 +665,15 @@ def test_direct_ask_metrics_classify_normalized_provider_timeouts(
     }
     recorded = []
     provider = chat_router.AskProvider(
+        key="openai",
         label="OpenAI",
         allowed_models_attr="ALLOWED_OPENAI_MODELS",
-        query_fn=lambda *_args, **_kwargs: timeout_result,
-        stream_fn=lambda *_args, **_kwargs: iter(
-            ({"type": "final", "result": timeout_result},)
-        ),
-        developer_key_env="DEVELOPER_OPENAI_API_KEY",
+    )
+    monkeypatch.setattr(chat_router, "query_model", lambda *_args, **_kwargs: timeout_result)
+    monkeypatch.setattr(
+        chat_router,
+        "stream_model_query",
+        lambda *_args, **_kwargs: iter(({"type": "final", "result": timeout_result},)),
     )
     monkeypatch.setattr(
         chat_router,
@@ -702,7 +704,7 @@ def test_direct_ask_metrics_classify_normalized_provider_timeouts(
     assert recorded[0][2]["outcome"] == "timeout"
 
 
-def test_direct_ask_disconnect_records_cancellation_not_success(monkeypatch):
+def test_ask_disconnect_records_cancellation_not_success(monkeypatch):
     entered = threading.Event()
     released = threading.Event()
     stopped = threading.Event()
@@ -722,12 +724,11 @@ def test_direct_ask_disconnect_records_cancellation_not_success(monkeypatch):
             stopped.set()
 
     provider = chat_router.AskProvider(
+        key="openai",
         label="OpenAI",
         allowed_models_attr="ALLOWED_OPENAI_MODELS",
-        query_fn=lambda *_args, **_kwargs: None,
-        stream_fn=source,
-        developer_key_env="DEVELOPER_OPENAI_API_KEY",
     )
+    monkeypatch.setattr(chat_router, "stream_model_query", source)
     monkeypatch.setattr(
         chat_router,
         "record_metric",

@@ -380,18 +380,23 @@ def test_invalid_admin_values_fall_back_to_safe_defaults():
 def test_provider_call_is_schema_bound_no_reasoning_and_output_capped(monkeypatch):
     captured = {}
 
-    class Responses:
+    client_config = {}
+
+    class Completions:
         def create(self, **kwargs):
             captured.update(kwargs)
-            return SimpleNamespace(output_text=(
-                '{"operation":"append","target":"","replacement":"Works at Firma Y."}'
-            ))
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                content='{"operation":"append","target":"","replacement":"Works at Firma Y."}'
+            ))])
 
-    monkeypatch.setenv("DEVELOPER_OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     monkeypatch.setattr(
         memory_edit,
         "openai_client",
-        lambda **kwargs: SimpleNamespace(responses=Responses()),
+        lambda **kwargs: (
+            client_config.update(kwargs)
+            or SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+        ),
     )
     patch = memory_edit.request_memory_patch(
         model="gpt-5.6-luna",
@@ -404,70 +409,15 @@ def test_provider_call_is_schema_bound_no_reasoning_and_output_capped(monkeypatc
         intent="add",
     )
     assert patch["operation"] == "append"
-    assert captured["reasoning"] == {"effort": "none"}
-    assert captured["max_output_tokens"] == 150
-    assert captured["text"]["format"]["strict"] is True
-    assert '"intent":"add"' in captured["input"]
-    assert "smallest exact, uniquely occurring substring" in captured["instructions"]
-    assert "preserve every detail" in captured["instructions"]
-
-
-def test_provider_uses_no_retry_http_fallback_for_pre_responses_sdk(monkeypatch):
-    captured = {}
-
-    class RawResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {
-                "output": [{
-                    "type": "message",
-                    "content": [{
-                        "type": "output_text",
-                        "text": '{"operation":"append","target":"","replacement":"Lives in Hanover."}',
-                    }],
-                }]
-            }
-
-    class RawClient:
-        def __init__(self, **kwargs):
-            captured["client"] = kwargs
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return None
-
-        def post(self, url, *, json):
-            captured["url"] = url
-            captured["payload"] = json
-            return RawResponse()
-
-    monkeypatch.setenv("DEVELOPER_OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr(
-        memory_edit,
-        "openai_client",
-        lambda **kwargs: SimpleNamespace(),
-    )
-    monkeypatch.setattr(memory_edit.httpx, "Client", RawClient)
-
-    patch = memory_edit.request_memory_patch(
-        model="gpt-5.6-luna",
-        memory=user_memory.empty_profile(),
-        source_kind="question",
-        selected_text="I live in Hanover.",
-        correction="I live in Hanover.",
-        max_output_tokens=150,
-        timeout_seconds=10,
-        intent="add",
-    )
-
-    assert patch["replacement"] == "Lives in Hanover."
-    assert captured["url"] == "https://api.openai.com/v1/responses"
-    assert captured["payload"]["reasoning"] == {"effort": "none"}
-    assert captured["payload"]["text"]["format"]["strict"] is True
+    assert client_config["base_url"] == "https://openrouter.ai/api/v1"
+    assert captured["model"] == "openai/gpt-5.6-luna"
+    assert captured["reasoning_effort"] == "none"
+    assert captured["max_tokens"] == 150
+    assert captured["response_format"]["json_schema"]["strict"] is True
+    assert captured["extra_body"] == {"provider": {"zdr": True}}
+    assert '"intent":"add"' in captured["messages"][1]["content"]
+    assert "smallest exact, uniquely occurring substring" in captured["messages"][0]["content"]
+    assert "preserve every detail" in captured["messages"][0]["content"]
 
 
 def test_one_in_flight_edit_and_global_budget_are_persistent(repository):

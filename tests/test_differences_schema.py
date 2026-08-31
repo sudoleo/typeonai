@@ -6,9 +6,9 @@ from unittest import mock
 import app.core.config as cfg
 from app.services.llm.consensus_engine import (
     _build_differences_prompt,
+    _call_engine_text,
     _differences_attempts,
     _enumerate_consensus_sentences,
-    _gemini_engine_payload,
     _legacy_differences_text,
     _judge_effort,
     _provider_error_is_retryable,
@@ -274,42 +274,38 @@ class JudgePolicyTests(unittest.TestCase):
     """Judge-Familie ist immer eine andere als die der Consensus-Engine;
     die Judge-Stufe (standard/pro) folgt der gewählten Engine."""
 
-    ALL_KEYS = {
-        "OpenAI": "sk", "Mistral": "sk", "Anthropic": "sk",
-        "Gemini": "sk", "DeepSeek": "sk", "Grok": "sk",
-    }
+    ALL_KEYS = {"OpenRouter": "sk-or"}
 
     def test_judge_family_differs_from_consensus_family(self):
         # Gemini ist die erste Familie der Priorität; für eine Gemini-Engine
         # muss der Judge trotzdem auf eine andere Familie ausweichen.
         (provider, api_model, _), tier = _resolve_differences_engine("Gemini", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, cfg.DEFAULT_OPENAI_MODEL)
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
         self.assertEqual(tier, "standard")
 
         (provider, api_model, _), tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
         self.assertEqual(provider, "gemini")
-        self.assertEqual(api_model, cfg.GEMINI_FLASH_MODEL)
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"))
         self.assertEqual(tier, "standard")
 
     def test_pro_engine_gets_pro_judge_of_other_family(self):
         (provider, api_model, _), tier = _resolve_differences_engine("OpenAI-Pro", self.ALL_KEYS)
         self.assertEqual(provider, "gemini")
-        self.assertEqual(api_model, cfg.GEMINI_PRO_MODEL)
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"))
         self.assertEqual(tier, "pro")
 
         (provider, api_model, _), tier = _resolve_differences_engine("Gemini-Pro", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, "gpt-5.5")
+        self.assertEqual(api_model, "openai/gpt-5.5")
         self.assertEqual(tier, "pro")
 
-    def test_no_cross_family_key_fails_open_to_own_standard_judge(self):
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            (provider, api_model, _), tier = _resolve_differences_engine(
-                "OpenAI-Pro", {"OpenAI": "sk-1"}
-            )
+    def test_missing_common_key_fails_open_to_own_standard_judge(self):
+        (provider, api_model, _), tier = _resolve_differences_engine(
+            "OpenAI-Pro", {}
+        )
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, cfg.DEFAULT_OPENAI_MODEL)
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"))
         self.assertEqual(tier, "standard")
 
     def test_invalid_engine_returns_none(self):
@@ -317,82 +313,52 @@ class JudgePolicyTests(unittest.TestCase):
         self.assertIsNone(_differences_attempts("DoesNotExist", {}))
 
     def test_attempts_are_primary_retry_fallback(self):
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            attempts = _differences_attempts(
-                "OpenAI", {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}
-            )
+        attempts = _differences_attempts("OpenAI", self.ALL_KEYS)
         self.assertEqual(len(attempts), 3)
         (p1, _, _), retry1, tier1 = attempts[0]
         (p2, _, _), retry2, tier2 = attempts[1]
         (p3, _, _), retry3, tier3 = attempts[2]
-        # Mistral ist die letzte Notfall-Familie: Anthropic kommt hier zuerst.
-        self.assertEqual((p1, retry1, tier1), ("anthropic", False, "standard"))
-        self.assertEqual((p2, retry2, tier2), ("anthropic", True, "standard"))
-        self.assertEqual((p3, retry3, tier3), ("mistral", True, "standard"))
+        self.assertEqual((p1, retry1, tier1), ("gemini", False, "standard"))
+        self.assertEqual((p2, retry2, tier2), ("gemini", True, "standard"))
+        self.assertEqual((p3, retry3, tier3), ("deepseek", True, "standard"))
 
     def test_pro_attempts_fail_open_to_standard_judge(self):
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            attempts = _differences_attempts(
-                "OpenAI-Pro", {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}
-            )
+        attempts = _differences_attempts("OpenAI-Pro", self.ALL_KEYS)
         self.assertEqual(len(attempts), 4)
         (p1, m1, _), _, tier1 = attempts[0]
         (p3, m3, _), _, tier3 = attempts[2]
         (p4, m4, _), _, tier4 = attempts[3]
-        self.assertEqual((p1, m1, tier1), ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "pro"))
-        self.assertEqual((p3, m3, tier3), ("mistral", cfg.MISTRAL_PRO_MODEL, "pro"))
+        self.assertEqual((p1, m1, tier1), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"), "pro"))
+        self.assertEqual((p3, m3, tier3), ("deepseek", cfg.openrouter_model_id(cfg.DEEPSEEK_PRO_MODEL, "deepseek"), "pro"))
         # Letzte Stufe: Standard-Judge der Fallback-Familie
-        self.assertEqual((p4, m4, tier4), ("mistral", cfg.DEFAULT_MISTRAL_MODEL, "standard"))
-
-    def test_single_cross_family_appends_own_standard_judge(self):
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            attempts = _differences_attempts("OpenAI", {"OpenAI": "sk-1", "Mistral": "sk-2"})
-        self.assertEqual(len(attempts), 3)
-        (p3, m3, _), retry3, tier3 = attempts[2]
-        # Ohne zweite Fremd-Familie ist der eigene Standard-Judge die letzte
-        # Stufe: ein fehlender Fremd-Key darf den Lauf nicht brechen.
-        self.assertEqual((p3, m3, retry3, tier3), ("openai", cfg.DEFAULT_OPENAI_MODEL, True, "standard"))
+        self.assertEqual((p4, m4, tier4), ("deepseek", cfg.openrouter_model_id(cfg.DEFAULT_DEEPSEEK_MODEL, "deepseek"), "standard"))
 
     def test_attempts_without_any_cross_family_key(self):
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            attempts = _differences_attempts("OpenAI", {"OpenAI": "sk-1"})
+        attempts = _differences_attempts("OpenAI", {})
         self.assertEqual(len(attempts), 2)
         for (provider, api_model, _), _, tier in attempts:
-            self.assertEqual((provider, api_model, tier), ("openai", cfg.DEFAULT_OPENAI_MODEL, "standard"))
+            self.assertEqual((provider, api_model, tier), (
+                "openai", cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"), "standard"
+            ))
 
-    def test_gemini_judge_payload_enforces_differences_schema(self):
-        _, payload = _gemini_engine_payload(
-            cfg.DEFAULT_GEMINI_MODEL,
-            "system",
-            "prompt",
-            2048,
-            json_mode=True,
-            effort="low",
-            json_schema=DIFFERENCES_JSON_SCHEMA,
-        )
-        generation = payload["generationConfig"]
-        self.assertEqual(generation["responseMimeType"], "application/json")
-        self.assertEqual(generation["responseJsonSchema"], DIFFERENCES_JSON_SCHEMA)
-        self.assertEqual(
-            set(generation["responseJsonSchema"]["required"]),
-            {"claims", "differences", "best_model"},
-        )
-
-    def test_server_adc_counts_for_gemini_but_byok_does_not(self):
-        from app.services.llm.credentials import enable_gemini_adc
-
-        with mock.patch(
-            "app.services.llm.credentials.gemini_adc_available",
-            return_value=True,
-        ):
-            server_keys = enable_gemini_adc({"OpenAI": "sk-1", "Gemini": None})
-            (provider, _, _), _tier = _resolve_differences_engine("OpenAI", server_keys)
-            self.assertEqual(provider, "gemini")
-
-            (provider, _, _), _tier = _resolve_differences_engine(
-                "OpenAI", {"OpenAI": "sk-1", "Gemini": None}
+    def test_differences_judge_uses_openrouter_json_object_mode(self):
+        response = mock.Mock(status_code=200)
+        response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
+        with mock.patch("app.services.llm.consensus_engine.requests.post", return_value=response) as post:
+            raw = _call_engine_text(
+                "gemini", cfg.openrouter_model_id(cfg.DEFAULT_GEMINI_MODEL, "gemini"),
+                cfg.DEFAULT_GEMINI_MODEL, self.ALL_KEYS,
+                system="system", prompt="prompt", max_tokens=2048,
+                json_mode=True, effort="low", json_schema=DIFFERENCES_JSON_SCHEMA,
             )
-            self.assertEqual(provider, "openai")
+        self.assertEqual(raw, "{}")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        self.assertEqual(payload["provider"], {"zdr": True})
+
+    def test_one_openrouter_key_makes_every_judge_family_available(self):
+        (provider, _, _), _tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
+        self.assertEqual(provider, "gemini")
 
     def test_mistral_judge_uses_supported_none_effort(self):
         self.assertEqual(
@@ -426,28 +392,27 @@ class JudgeMetadataTests(unittest.TestCase):
 
     def _run_query(self, api_keys, side_effect):
         from app.services.llm.consensus_engine import query_differences
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            with mock.patch(
-                "app.services.llm.consensus_engine._call_engine_text",
-                side_effect=side_effect,
-            ):
-                return query_differences(
-                    "answer one", "answer two", None, None, None, None,
-                    "the consensus", api_keys,
-                    differences_model="OpenAI",
-                    excluded_models=[],
-                )
+        with mock.patch(
+            "app.services.llm.consensus_engine._call_engine_text",
+            side_effect=side_effect,
+        ):
+            return query_differences(
+                "answer one", "answer two", None, None, None, None,
+                "the consensus", api_keys,
+                differences_model="OpenAI",
+                excluded_models=[],
+            )
 
     def test_query_differences_reports_actual_judge(self):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
         _, data = self._run_query(
-            {"OpenAI": "sk-1", "Mistral": "sk-2"},
+            {"OpenRouter": "sk-or"},
             lambda provider, *a, **kw: payload,
         )
         self.assertIsNotNone(data)
         judge = data["judges"]["differences"]
-        self.assertEqual(judge["provider"], "Mistral")
-        self.assertEqual(judge["model"], cfg.DEFAULT_MISTRAL_MODEL)
+        self.assertEqual(judge["provider"], "Gemini")
+        self.assertEqual(judge["model"], cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"))
         self.assertEqual(judge["tier"], "standard")
         # v3-Metadaten: erster Versuch traf, Dauer ist eine nichtnegative Zahl.
         self.assertEqual(judge["attempts"], 1)
@@ -458,15 +423,15 @@ class JudgeMetadataTests(unittest.TestCase):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
 
         def flaky(provider, *args, **kwargs):
-            if provider == "anthropic":
+            if provider == "gemini":
                 raise RuntimeError("503")
             return payload
 
         _, data = self._run_query(
-            {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"}, flaky,
+            {"OpenRouter": "sk-or"}, flaky,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(data["judges"]["differences"]["provider"], "Mistral")
+        self.assertEqual(data["judges"]["differences"]["provider"], "DeepSeek")
 
     def test_non_retryable_primary_error_skips_duplicate_call(self):
         payload = json.dumps({"claims": [], "differences": [], "best_model": ""})
@@ -474,17 +439,17 @@ class JudgeMetadataTests(unittest.TestCase):
 
         def invalid_key_then_fallback(provider, *args, **kwargs):
             providers.append(provider)
-            if provider == "anthropic":
-                raise RuntimeError("Anthropic: 401 - invalid API key")
+            if provider == "gemini":
+                raise RuntimeError("OpenRouter: 401 - invalid API key")
             return payload
 
         _, data = self._run_query(
-            {"OpenAI": "sk-1", "Mistral": "sk-2", "Anthropic": "sk-3"},
+            {"OpenRouter": "sk-or"},
             invalid_key_then_fallback,
         )
         self.assertIsNotNone(data)
-        self.assertEqual(providers, ["anthropic", "mistral"])
-        self.assertEqual(data["judges"]["differences"]["provider"], "Mistral")
+        self.assertEqual(providers, ["gemini", "deepseek"])
+        self.assertEqual(data["judges"]["differences"]["provider"], "DeepSeek")
         self.assertEqual(data["judges"]["differences"]["attempts"], 2)
 
     def test_stream_differences_reports_judge(self):
@@ -499,21 +464,20 @@ class JudgeMetadataTests(unittest.TestCase):
             yield {"type": "reasoning"}
             yield {"type": "delta", "text": payload}
 
-        with mock.patch.dict("os.environ", {"DEVELOPER_GEMINI_API_KEY": ""}):
-            with mock.patch(
-                "app.services.llm.consensus_engine._stream_engine_text",
-                side_effect=fake_stream,
-            ):
-                events = list(stream_differences(
-                    "answer one", "answer two", None, None, None, None,
-                    "the consensus", {"OpenAI": "sk-1", "Mistral": "sk-2"},
-                    differences_model="OpenAI",
-                    excluded_models=[],
-                ))
+        with mock.patch(
+            "app.services.llm.consensus_engine._stream_engine_text",
+            side_effect=fake_stream,
+        ):
+            events = list(stream_differences(
+                "answer one", "answer two", None, None, None, None,
+                "the consensus", {"OpenRouter": "sk-or"},
+                differences_model="OpenAI",
+                excluded_models=[],
+            ))
         final = events[-1]
         self.assertEqual(final["type"], "final")
-        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "Mistral")
-        self.assertEqual(efforts, [("mistral", "none")])
+        self.assertEqual(final["data"]["judges"]["differences"]["provider"], "Gemini")
+        self.assertEqual(efforts, [("gemini", "low")])
 
 
 FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]

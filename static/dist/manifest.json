@@ -1,5 +1,5 @@
 {
-  "sources": "521ce5b0d1f8",
+  "sources": "e9018b9d8aff",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -86,7 +86,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.d12872ac19dd.js",
+      "src": "/static/dist/firebase.0d832f2bdc2e.js",
       "module": true,
       "defer": false
     },
@@ -98,7 +98,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.7048969ed801.js",
+      "src": "/static/dist/app.4b74106bbdfe.js",
       "module": false,
       "defer": true
     }

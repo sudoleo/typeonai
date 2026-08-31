@@ -416,7 +416,7 @@
       if (!idToken) throw new Error("Authentication required for chat context.");
       const body = { useOwnKeys };
       if (useOwnKeys) {
-        if (memoryApiKey) body.memory_api_key = memoryApiKey;
+        if (memoryApiKey) body.openrouter_key = memoryApiKey;
       } else {
         if (!usageRunKey) throw new Error("The prepared usage run is unavailable.");
         body.usage_run_key = usageRunKey;

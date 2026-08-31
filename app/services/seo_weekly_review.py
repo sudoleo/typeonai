@@ -13,16 +13,18 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-import openai
 from firebase_admin import firestore
 from google.cloud.firestore_v1 import Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.background_tasks import task_succeeded
+from app.core.config import get_model_config
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.services import publisher_config, seo_data, seo_recommendation
 from app.services import share_snapshots, telegram_notifier, watch_service
+from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
+from app.services.llm.engines import OPENROUTER_BASE_URL
 from app.services.llm.provider_runtime import managed_provider_resource, openai_client
 from app.services.seo_repository import FirestoreSeoRepository
 
@@ -257,9 +259,7 @@ PORTFOLIO_INSTRUCTIONS = (
 
 class SeoPortfolioJudge:
     def __init__(self, *, api_key=None, model=None, caller=None):
-        self.api_key = (
-            api_key if api_key is not None else os.environ.get("DEVELOPER_OPENAI_API_KEY")
-        )
+        self.api_key = api_key if api_key is not None else openrouter_api_key(resolve_developer_api_keys())
         self.model = model if model is not None else (
             os.environ.get("SEO_PORTFOLIO_JUDGE_MODEL")
             or os.environ.get("SEO_CONTENT_JUDGE_MODEL")
@@ -365,10 +365,16 @@ class SeoPortfolioJudge:
         if self.caller:
             raw = self.caller(prompt, PORTFOLIO_JUDGE_SCHEMA)
         else:
-            client = openai_client(api_key=self.api_key, timeout_seconds=60)
+            model_config = get_model_config(self.model, provider="openai")
+            api_model = model_config.api_model if model_config else self.model
+            client = openai_client(
+                api_key=self.api_key,
+                base_url=OPENROUTER_BASE_URL,
+                timeout_seconds=60,
+            )
             with managed_provider_resource(client):
                 response = client.chat.completions.create(
-                    model=self.model,
+                    model=api_model,
                     reasoning_effort="medium",
                     messages=[
                         {"role": "system", "content": "You are a conservative SEO portfolio reviewer."},
@@ -382,6 +388,7 @@ class SeoPortfolioJudge:
                             "schema": PORTFOLIO_JUDGE_SCHEMA,
                         },
                     },
+                    extra_body={"provider": {"zdr": True}},
                 )
             raw = response.choices[0].message.content or ""
         try:

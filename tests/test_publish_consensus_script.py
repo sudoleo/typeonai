@@ -204,7 +204,7 @@ def test_telegram_failure_is_non_fatal_and_does_not_log_token(monkeypatch, capsy
 
 def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch):
     monkeypatch.delenv("CONSENSUS_QUESTION", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     monkeypatch.setenv("CONSENSUS_TOPIC_BRIEF", "")
     monkeypatch.setattr(
         publisher,
@@ -215,36 +215,30 @@ def test_topic_selection_uses_web_search_and_recent_question_history(monkeypatch
 
     def fake_http(method, url, *, headers=None, payload=None, timeout=60):
         captured.update(method=method, url=url, headers=headers, payload=payload)
-        return 200, {
-            "output": [
-                {
-                    "type": "message",
-                    "content": [
-                        {
-                            "type": "output_text",
-                            "text": "Is Google's Gemini 3.5 Pro available yet?",
-                        }
-                    ],
-                }
-            ]
-        }
+        return 200, {"choices": [{"message": {
+            "content": "Is Google's Gemini 3.5 Pro available yet?"
+        }}]}
 
     monkeypatch.setattr(publisher, "http_json", fake_http)
     question = publisher.choose_question("https://consensus.example", "cns_test")
 
     assert question.endswith("?")
-    assert captured["url"] == "https://api.openai.com/v1/responses"
-    assert captured["payload"]["model"] == "gpt-5.6-luna"
-    assert captured["payload"]["tools"] == [{"type": "web_search"}]
-    assert "What was already published?" in captured["payload"]["input"]
-    assert "still answer differently" in captured["payload"]["input"]
-    assert "Google-style search query and clickable page title" in captured["payload"]["input"]
-    assert "last 24 hours" in captured["payload"]["input"]
-    assert "must outlive the event" in captured["payload"]["input"]
-    assert "Require visible disagreement" in captured["payload"]["input"]
-    assert "Require a live demand signal" in captured["payload"]["input"]
-    assert "Do not manufacture a controversy" in captured["payload"]["input"]
-    prompt = captured["payload"]["input"]
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    assert captured["payload"]["model"] == "openai/gpt-5.6-luna"
+    assert captured["payload"]["tools"] == [{
+        "type": "openrouter:web_search",
+        "parameters": {"engine": "auto", "max_uses": 2},
+    }]
+    assert captured["payload"]["provider"] == {"zdr": True}
+    prompt = captured["payload"]["messages"][0]["content"]
+    assert "What was already published?" in prompt
+    assert "still answer differently" in prompt
+    assert "Google-style search query and clickable page title" in prompt
+    assert "last 24 hours" in prompt
+    assert "must outlive the event" in prompt
+    assert "Require visible disagreement" in prompt
+    assert "Require a live demand signal" in prompt
+    assert "Do not manufacture a controversy" in prompt
     assert "viral wave is still rolling" not in prompt
     assert "Le Chaton Fat" not in prompt
 
@@ -353,7 +347,7 @@ def test_scheduled_publisher_runs_three_times_per_week():
 
 def test_topic_selection_retries_a_long_multi_clause_title(monkeypatch):
     monkeypatch.delenv("CONSENSUS_QUESTION", raising=False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     monkeypatch.setattr(publisher, "recent_questions", lambda *_: [])
     candidates = iter(
         [
@@ -364,12 +358,8 @@ def test_topic_selection_retries_a_long_multi_clause_title(monkeypatch):
     prompts = []
 
     def fake_http(method, url, *, headers=None, payload=None, timeout=60):
-        prompts.append(payload["input"])
-        return 200, {
-            "output": [{"type": "message", "content": [
-                {"type": "output_text", "text": next(candidates)}
-            ]}]
-        }
+        prompts.append(payload["messages"][0]["content"])
+        return 200, {"choices": [{"message": {"content": next(candidates)}}]}
 
     monkeypatch.setattr(publisher, "http_json", fake_http)
 

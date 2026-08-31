@@ -18,10 +18,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 - **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
   SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
-- **LLM-Provider**: OpenAI, Mistral, Anthropic, Gemini, DeepSeek, Grok — über die
-  jeweiligen SDKs bzw. REST. Provider-Label-Konvention: Claude = `Anthropic`.
+- **LLM-Modelle**: sechs feste Produktfamilien (OpenAI, Mistral, Anthropic,
+  Gemini, DeepSeek, Grok), alle über einen OpenRouter-Chat-Completions-Transport
+  mit ZDR. Provider-Label-Konvention: Claude = `Anthropic`.
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
-  Gemini kann zusätzlich über ein Google Service Account laufen.
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
   `static/js/`, überwiegend als klassische `<script defer>`-Tags. `window.App`
   ist Bus und State-Owner; ausgewählte `window.*`-Getter/-Funktionen bleiben als
@@ -37,9 +37,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 ## 2. Einstiegspunkte / Routing / Templates
 
-**`main.py`** ist der App-Entry: lädt `.env`, setzt außerhalb des E2E-Profils
-`GOOGLE_APPLICATION_CREDENTIALS`,
-fügt das vor dem Framework-Parsing greifende `RequestBodyLimitMiddleware`,
+**`main.py`** ist der App-Entry: lädt `.env`, fügt das vor dem
+Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 `CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter
 hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
@@ -79,7 +78,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Provider-Registry `ASK_PROVIDERS` (Provider-Eigenheiten wie Gemini-Service-Account, `gemini_key`-Legacy-Feld, `useOwnKeys`-Flag und Env-Key-Namen stehen dort, Rate-Limits als Literal am Endpoint). `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`, die Rate-Limits bleiben als Literal am Endpoint. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
@@ -1241,7 +1240,7 @@ Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
   Query-/Consensus-Streams werden abgebrochen, alle Conversation-Fences und
   Contexts verworfen sowie Usage-, Watch-, Bookmark-/Share-UI und Detail-Caches
   und lokal gespeicherte eigene
-  Provider-API-Keys geleert und der Hero-
+  OpenRouter-Key geleert und der Hero-
   Ausgangszustand wiederhergestellt. UID/Auth-Generation schützen nach jedem
   relevanten Await Usage sowie Bookmark-List/Detail/Conversation/Save/Delete;
   eine zusätzliche Bookmark-View-Epoch macht die letzte Auswahl autoritativ.
@@ -1305,8 +1304,8 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    Auth sowie transaktionale Usage-Reservierung und sofortiger
    Verbrauch anhand des vom Client erzeugten, kostenfreien `usage_run_key`; Antwort: finaler
    `system_prompt` + persistenter UTC-Tagesstand.
-   Echtzeitdaten holen sich die Modelle selbst über die native Web-Suche in jedem
-   Provider-Call (`engines.py`), daher kein Intent-Router/Realtime-Injektion mehr.
+   Echtzeitdaten holen sich die Modelle über das gemeinsame OpenRouter-Web-Tool
+   in jedem Modell-Call (`engines.py`), daher kein Intent-Router mehr.
    Bei `usage_storage_busy` wiederholt der Client `/prepare` kurz mit demselben
    Key. Bleibt Firestore beschäftigt, bleibt die Frage erhalten und der Lauf
    endet vor dem Fan-out mit einer Retry-Karte.
@@ -1317,7 +1316,7 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    Alle parallelen Provider teilen denselben Key und sehen `consumed`; sie
    kosten nichts zusätzlich. Clientseitige Modellanzahl/Kosten werden nicht
    akzeptiert.
-   Eigene Provider-Keys dürfen nur verifizierte Nutzer verwenden; sie umgehen
+   Einen eigenen OpenRouter-Key dürfen nur verifizierte Nutzer verwenden; er umgeht
    die Usage-Zählung, aber nicht Auth/Pro-Gates.
 3. **SSE-Protokoll Modellantwort** (`streaming_model_response` in `streaming.py`):
    `event: delta {text}` … dann `event: final {response, sources,
@@ -1473,14 +1472,12 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `question`, `mode`, `deep_search`, `selected_models`, `consensus_model` und die
   pro logischem Run stabile `client_request_id`.
 - Im Own-Key-Modus validiert `query-send.js` vor Usage-Reservierung, `/prepare`
-  und Turn-Anlage vollständig die lokalen Keys aller ausgewählten Antwort-
-  Provider sowie des Memory-Providers. Fehlt einer, bleibt der completed
+  und Turn-Anlage den einen lokalen OpenRouter-Key. Fehlt er, bleibt der completed
   Vorgänger unverändert und es entsteht kein pending Turn.
   Bei aktiven Fortsetzungen ruft `query-send.js` danach genau einmal den
   Context-Endpoint. Developer-Läufe senden denselben bereits durch `/prepare`
-  konsumierten `usage_run_key`; Own-Key-Läufe senden ausschließlich den zum
-  Provider des gewählten Consensus-Modells gehörenden `memory_api_key` aus dem
-  lokalen Keybestand. Keys gehen nie an `/prepare`. Erst nach einer fertigen
+  konsumierten `usage_run_key`; Own-Key-Läufe senden denselben `openrouter_key`
+  an Context, Antworten, Consensus und Resolve. Keys gehen nie an `/prepare`. Erst nach einer fertigen
   `ready|degraded`-Version beginnt der Fan-out; alle `/ask_*` laden dieselbe
   Version und komprimieren nicht selbst.
 - Mit Chat-IDs sendet `executeConsensusRun` zusätzlich die contextgebundenen
@@ -1579,8 +1576,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   keine Roh-Turns. Der Developer-Modus akzeptiert nur einen bereits durch
   `/prepare` konsumierten `usage_run_key`, bindet dessen Usage-Dokument per
   SHA-256-Zielhash idempotent an genau diesen Chat/Turn und erzeugt keinen zweiten Slot;
-  Own-Key nutzt ausschließlich `memory_api_key`, speichert/loggt ihn nicht und
-  fällt bei Fehlen niemals auf Developer-Keys oder Gemini-ADC zurück.
+  Own-Key nutzt ausschließlich `openrouter_key`, speichert/loggt ihn nicht und
+  fällt bei Fehlen niemals auf den serverseitigen OpenRouter-Key zurück.
 - Deep Think bleibt ein separater Pro-Laufmodus neben High Quality: Das Preset
   waehlt Premium-Modelle, Deep Think ergaenzt Prompt, Provider-Reasoning,
   hoeheres Tokenbudget und eigenes Kontingent. Deep Think wählt im Frontend
@@ -1643,11 +1640,10 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   identische Alerts zehn Minuten und begrenzt pro Prozess auf zehn Alerts in
   zehn Minuten.
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
-  (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`), Structured
-  Output je Provider (json_object / Gemini-`responseMimeType` plus
-  `responseJsonSchema` / Anthropic-Prefill). Das Gemini-Schema erzwingt die
-  Pflichtfelder `claims`, `differences` und `best_model` auch im Stream, statt
-  lediglich syntaktisches JSON anzufordern.
+  (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`) über OpenRouter
+  Chat Completions. Alle Familien fordern `response_format=json_object`; der
+  gemeinsame Parser validiert danach die Pflichtfelder `claims`, `differences`
+  und `best_model` und repariert begrenzt abgeschnittenes JSON.
   Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
   eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
   die Stufe folgt der Engine — Standard-Engine → Standard-Judge
@@ -2134,8 +2130,8 @@ app/services/llm/
   provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
   provider_transport.py      Kanonischer Provider-Fan-out, Labels, Key-/Transport-Dispatch
   base.py                    System-Prompt, Wortzählung, validate_model
-  engines.py                 Provider-Requests (build_provider_payload, query_*)
-  streaming.py               SSE-Helfer, stream_*_query, streaming_model_response
+  engines.py                 Gemeinsamer OpenRouter-Payload und query_model
+  streaming.py               OpenRouter-SSE-Streamer, SSE-Helfer, Response-Adapter
   consensus_engine.py        query/stream_consensus + query/stream_differences, strukturierter Engine-Dispatch
   consensus_parsing.py       JSON-Extraktion und abgesicherte Truncation-Reparatur
   consensus_scoring.py       Deterministischer Agreement-Score und Schwellen
@@ -2408,8 +2404,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   (`apply_judge_families`; nie die eigene Familie, ohne Eintrag/Credential Auto
   über `JUDGE_FAMILY_PRIORITY`). Auto priorisiert Gemini, dann OpenAI; Mistral
   steht als funktionsfähiger Notfall-Judge ganz hinten. In Serverpfaden zählt
-  für Gemini neben dem Developer-Key auch explizit freigegebenes ADC, im
-  Own-Key-Modus niemals.
+  in allen Familien denselben OpenRouter-Key; im Own-Key-Modus gibt es keinen
+  Fallback auf das Server-Credential.
 - `app_config/scheduled_consensus_publisher` — Admin-Steuerung für den GitHub-
   Publisher: `enabled`, Themen-Brief, automatische Indexfreigabe sowie
   Aktivierung, lokaler Wochentag, Uhrzeit und IANA-Zeitzone des Weekly-Watches.
@@ -2552,9 +2548,9 @@ kommt aus `watches.history_points`. Kann die Detail-History nicht geladen
 werden, meldet die API `history_status=unavailable` statt fälschlich eine leere
 History zu behaupten.
 
-**Service-Account-JSONs** im Root (gitignored): `consensai-firebase-adminsdk-*.json`
-(Firebase Admin) und `gen-lang-client-*.json` (Google ADC für Gemini, via
-`GOOGLE_APPLICATION_CREDENTIALS`).
+**Service-Account-JSONs** im Root (gitignored):
+`consensai-firebase-adminsdk-*.json` für Firebase Admin. LLM-Aufrufe verwenden
+keinen Gemini-Service-Account und kein Google ADC.
 
 **Umgebungsvariablen** (`.env`, Beispiel in `.env.example`):
 - Request-Schutz: `MAX_REQUEST_BODY_BYTES` (Default 16 MiB, erlaubter Bereich
@@ -2574,14 +2570,11 @@ History zu behaupten.
   `FIRESTORE_EMULATOR_HOST` sowie die in `app/core/e2e_profile.py` fest
   allowgelisteten Demo-Projekt-ID. Das Profil ist in Produktion verboten und
   in der normalen `.env` deaktiviert.
-- Developer-LLM-Keys (Fallback wenn Nutzer keine eigenen Keys hat):
-  `DEVELOPER_OPENAI_API_KEY`, `DEVELOPER_MISTRAL_API_KEY`,
-  `DEVELOPER_ANTHROPIC_API_KEY`, `DEVELOPER_GEMINI_API_KEY`,
-  `DEVELOPER_DEEPSEEK_API_KEY`, `DEVELOPER_GROK_API_KEY`. App-Consensus,
-  Consensus-API und Benchmark lösen diese über
+- Der serverseitige LLM-Key ist ausschließlich `OPENROUTER_API_KEY`.
+  App-Consensus, Consensus-API und Benchmark lösen ihn über
   `llm.credentials.resolve_developer_api_keys` mit identischer
-  Leerwert-Behandlung auf; der Own-Key-Modus fällt auch für Gemini niemals
-  verdeckt auf einen Developer-Key zurück.
+  Leerwert-Behandlung auf. Es gibt keinen provider-spezifischen Developer-Key
+  und keinen Gemini-ADC-Fallback im Benchmark.
 - Consensus-Watch-/Topic-Follow-Mail und Abmeldung: `SMTP_HOST`, `SMTP_PORT`,
   `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM`, `WATCH_UNSUBSCRIBE_SECRET`.
   Topic-Tokens tragen einen eigenen Typ und abonnieren ausschließlich
@@ -2602,14 +2595,14 @@ History zu behaupten.
   direkt verwendet. Verwendet ausschließlich
   `https://www.googleapis.com/auth/webmasters.readonly`; fehlende/ungültige
   Werte bleiben für normale App-Flows nicht-fatal und erscheinen sanitisiert im
-  Admin-SEO-Tab. `GOOGLE_APPLICATION_CREDENTIALS` bleibt davon unabhängig und
-  weiterhin für Gemini reserviert.
+  Admin-SEO-Tab. Diese Search-Console-Credentials sind unabhängig vom
+  OpenRouter-LLM-Key.
 - Optionaler SEO-Content-Judge: `SEO_CONTENT_JUDGE_MODEL`; ohne explizites
   Modell bleibt er aus. Bei Aktivierung nutzt er serverseitig
-  `DEVELOPER_OPENAI_API_KEY`; der deterministische Judge benötigt beides nicht.
+  `OPENROUTER_API_KEY`; der deterministische Judge benötigt beides nicht.
 - Portfolio-Judge: `SEO_PORTFOLIO_JUDGE_MODEL` (Fallback auf
   `SEO_CONTENT_JUDGE_MODEL`, danach `gpt-5.6-terra`) plus
-  `DEVELOPER_OPENAI_API_KEY`; ohne Server-Key bleibt der Weekly Review
+  `OPENROUTER_API_KEY`; ohne Server-Key bleibt der Weekly Review
   vollständig deterministisch.
 - SEO-Review-Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` und optional
   `SEO_ADMIN_URL` (Default `https://www.consens.io/admin#seo`). Jeder terminale
@@ -2787,7 +2780,10 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   dedizierter 1-Frage-MMLU-Pro-Pfad
   mit eigenem Manifest/Run-Kontext; Smoke und Pilot haben separate Live-Gates,
   der finale Run bleibt durch `LIVE_EXECUTION_ENABLED` hart gegatet. Die MC-
-  Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile.
+  Auswertung akzeptiert nur die letzte `FINAL_ANSWER: X`-Zeile. Alle sechs
+  Modellfamilien und die Synthese laufen über denselben OpenRouter-Chat-
+  Completions-Transport mit `OPENROUTER_API_KEY`; Benchmark-Payloads bleiben
+  im `benchmark_mode` ohne Websuche.
 - JS-Syntaxcheck einzelner Module:
   ```powershell
   node --check static\js\<modul>.js
@@ -3103,8 +3099,8 @@ ersten Check statt eines leeren Consensus-Panels.
   `DEFAULT_CONSENSUS_PRESET`, `FREE_LIMIT`) oder
   serverseitig gerenderte Template-Optionen wie
   `consensus_models` für den Consensus-Picker. Dessen
-  `data-engine-provider` bestimmt im Own-Key-Modus ausschließlich, welcher
-  einzelne lokale API-Key als `memory_api_key` an `/context` geht.
+  `data-engine-provider` hält weiterhin die logische Modellfamilie fest; im
+  Own-Key-Modus geht der eine lokale `openrouter_key` an `/context`.
   `app-init.js` kann kein Jinja rendern — neue Server-Werte müssen im Meta-
   Vertrag plus `app-bootstrap.js` ergänzt werden. Admin nutzt entsprechend
   `#adminBootstrapConfig` + `admin-config.js`.
@@ -3163,6 +3159,11 @@ ersten Check statt eines leeren Consensus-Panels.
   Chat-Context-Endpoint darf im Developer-Modus nur einen bereits konsumierten
   Run verwenden und bindet dessen Hash-Metadaten vor dem LLM-Call einmalig an
   genau einen Chat/Turn; diese Bindung verändert keine Usage-Zähler.
+- **Own-Key-Vertrag:** Die App bietet genau ein optionales `openrouterKey`-Feld in
+  `localStorage`. Im Own-Key-Modus senden die sechs `/ask_*`-Flows,
+  `/consensus` und `/resolve` ausschließlich `openrouter_key`; `/prepare` trägt
+  weiterhin keine Provider-Key-Felder. Die sechs
+  Modell-/Antwortboxen und ihre Endpoints bleiben unverändert.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
 

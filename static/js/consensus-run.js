@@ -785,12 +785,7 @@
         previousTurn: context.previousExchange?.turn || null,
         excluded_models: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
           .filter(provider => !context.config.providers.some(item => item.provider === provider)),
-        openai_key: context.credentials?.openaiKey || "",
-        mistral_key: context.credentials?.mistralKey || "",
-        anthropic_key: context.credentials?.anthropicKey || "",
-        gemini_key: context.credentials?.geminiKey || "",
-        deepseek_key: context.credentials?.deepseekKey || "",
-        grok_key: context.credentials?.grokKey || "",
+        openrouter_key: context.credentials?.openrouterKey || "",
         keepalive: true
       };
       if (chatTurnIds) {
@@ -1273,12 +1268,7 @@
     }
 
     // Hole API Keys aus localStorage
-    const openaiKey = localStorage.getItem("openaiKey") || "";
-    const mistralKey = localStorage.getItem("mistralKey") || "";
-    const anthropicKey = localStorage.getItem("anthropicKey") || "";
-    const geminiKey = localStorage.getItem("geminiKey") || "";
-    const deepseekKey = localStorage.getItem("deepseekKey") || "";
-    const grokKey = localStorage.getItem("grokKey") || "";
+    const openrouterKey = localStorage.getItem("openrouterKey") || "";
 
     // --------- NEU: genaue Konsensus-Metadaten für Zitation speichern ---------
     const includedModelsDetailed = [];
@@ -1443,12 +1433,7 @@
           previousQuestion: bookmarkPreviousQuestion,
           previousTurn: bookmarkPreviousTurn,
           excluded_models: excludedModels,
-          openai_key: openaiKey,
-          mistral_key: mistralKey,
-          anthropic_key: anthropicKey,
-          gemini_key: geminiKey,
-          deepseek_key: deepseekKey,
-          grok_key: grokKey,
+          openrouter_key: openrouterKey,
           keepalive: true
         };
       if (chatTurnIds) {

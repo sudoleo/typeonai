@@ -1576,7 +1576,7 @@
         });
 
         // Erneut API Keys in Felder schreiben (falls benötigt)
-        ["openaiKey", "mistralKey", "anthropicKey", "geminiKey", "deepseekKey", "grokKey"].forEach(function (key) {
+        ["openrouterKey"].forEach(function (key) {
           const stored = localStorage.getItem(key);
           if (stored) {
             document.getElementById(key).value = stored;
@@ -1631,16 +1631,9 @@
             return;
           }
 
-          const openaiKey = document.getElementById("openaiKey").value;
-          const mistralKey = document.getElementById("mistralKey").value;
-          const anthropicKey = document.getElementById("anthropicKey").value;
-          const geminiKey = document.getElementById("geminiKey").value;
-          const deepseekKey = document.getElementById("deepseekKey").value;
-          const grokKey = document.getElementById("grokKey").value;
-          const enteredKeys = [openaiKey, mistralKey, anthropicKey, geminiKey, deepseekKey, grokKey]
-            .filter(key => (key || "").trim() !== "");
-          if (!enteredKeys.length) {
-            setApiKeysStatus("Enter at least one API key to test.", "error");
+          const openrouterKey = document.getElementById("openrouterKey").value;
+          if (!openrouterKey.trim()) {
+            setApiKeysStatus("Enter an OpenRouter API key to test.", "error");
             trackAppEvent("app_api_keys_test_result", { status: "no_keys" });
             return;
           }
@@ -1654,12 +1647,7 @@
             return;
           }
 
-          localStorage.setItem("openaiKey", openaiKey);
-          localStorage.setItem("mistralKey", mistralKey);
-          localStorage.setItem("anthropicKey", anthropicKey);
-          localStorage.setItem("geminiKey", geminiKey);
-          localStorage.setItem("deepseekKey", deepseekKey);
-          localStorage.setItem("grokKey", grokKey);
+          localStorage.setItem("openrouterKey", openrouterKey);
           if (typeof window.updateQuestionInputAccess === "function") {
             window.updateQuestionInputAccess();
           }
@@ -1674,12 +1662,7 @@
               },
               body: JSON.stringify({
                 id_token: idToken,
-                openai_key: openaiKey,
-                mistral_key: mistralKey,
-                anthropic_key: anthropicKey,
-                gemini_key: geminiKey,
-                deepseek_key: deepseekKey,
-                grok_key: grokKey
+                openrouter_key: openrouterKey
               })
             });
             if (!response.ok) {
@@ -1694,38 +1677,15 @@
             if (!data || !data.results) {
               throw new Error("The response does not contain a 'results' object. Response: " + JSON.stringify(data));
             }
-            const openaiResult = data.results["OpenAI"];
-            const mistralResult = data.results["Mistral"];
-            const anthropicResult = data.results["Anthropic"];
-            const geminiResult = data.results["Gemini"];
-            const deepseekResult = data.results["DeepSeek"];
-            const grokResult = data.results["Grok"];
-            const validCount = [openaiResult, mistralResult, anthropicResult, geminiResult, deepseekResult, grokResult]
-              .filter(result => result === "valid").length;
-            const openaiFeedback = document.getElementById("openaiFeedback");
-            const mistralFeedback = document.getElementById("mistralFeedback");
-            const anthropicFeedback = document.getElementById("anthropicFeedback");
-            const geminiFeedback = document.getElementById("geminiFeedback");
-            const deepseekFeedback = document.getElementById("deepseekFeedback");
-            const grokFeedback = document.getElementById("grokFeedback");
-            openaiFeedback.innerHTML = openaiResult === "valid" ? "&#9734;" : "&#10007;";
-            openaiFeedback.style.color = openaiResult === "valid" ? "green" : "red";
-            mistralFeedback.innerHTML = mistralResult === "valid" ? "&#9734;" : "&#10007;";
-            mistralFeedback.style.color = mistralResult === "valid" ? "green" : "red";
-            anthropicFeedback.innerHTML = anthropicResult === "valid" ? "&#9734;" : "&#10007;";
-            anthropicFeedback.style.color = anthropicResult === "valid" ? "green" : "red";
-            geminiFeedback.innerHTML = geminiResult === "valid" ? "&#9734;" : "&#10007;";
-            geminiFeedback.style.color = geminiResult === "valid" ? "green" : "red";
-            deepseekFeedback.innerHTML = deepseekResult === "valid" ? "&#9734;" : "&#10007;";
-            deepseekFeedback.style.color = deepseekResult === "valid" ? "green" : "red";
-            grokFeedback.innerHTML = grokResult === "valid" ? "&#9734;" : "&#10007;";
-            grokFeedback.style.color = grokResult === "valid" ? "green" : "red";
-            trackAppEvent("app_api_keys_test_result", { status: "success", valid_count: validCount });
+            const openrouterResult = data.results["OpenRouter"];
+            const valid = openrouterResult === "valid";
+            const feedback = document.getElementById("openrouterFeedback");
+            feedback.innerHTML = valid ? "&#9734;" : "&#10007;";
+            feedback.style.color = valid ? "green" : "red";
+            trackAppEvent("app_api_keys_test_result", { status: "success", valid_count: valid ? 1 : 0 });
             setApiKeysStatus(
-              validCount > 0
-                ? "Keys saved. " + validCount + " of 6 verified successfully."
-                : "Keys saved, but none could be verified. Please check them.",
-              validCount > 0 ? "success" : "error"
+              valid ? "OpenRouter key saved and verified successfully." : "OpenRouter key saved, but could not be verified. Please check it.",
+              valid ? "success" : "error"
             );
           } catch (error) {
             console.error("Error while testing API keys:", error);

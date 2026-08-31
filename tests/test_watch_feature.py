@@ -1104,7 +1104,7 @@ class SchedulerSafetyTests(unittest.TestCase):
             "gemini": cfg.DEFAULT_GEMINI_MODEL,
             "anthropic": cfg.ANTHROPIC_PRO_MODEL,
         }
-        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
+        keys = {"OpenRouter": "key"}
         with patch.object(cfg, "get_watch_models", return_value=configured):
             selected = watch_scheduler._selected_models(keys, True)
         self.assertEqual(dict(selected), configured)
@@ -1208,7 +1208,7 @@ class SchedulerSafetyTests(unittest.TestCase):
                     "provider_available",
                     return_value=False,
                 ):
-            engine = watch_scheduler._configured_consensus_engine({"Gemini": ""}, False)
+            engine = watch_scheduler._configured_consensus_engine({"OpenRouter": ""}, False)
 
         self.assertIsNone(engine)
 
@@ -1218,24 +1218,23 @@ class SchedulerSafetyTests(unittest.TestCase):
             "mistral": cfg.DEFAULT_MISTRAL_MODEL,
             "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
         }
-        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
+        keys = {"OpenRouter": "key"}
         with patch.object(cfg, "get_watch_models", return_value=configured):
             selected = watch_scheduler._selected_models(keys, False)
 
         self.assertEqual(set(dict(selected)), {"openai", "mistral", "deepseek"})
 
-    def test_configured_provider_without_credential_is_the_only_thing_dropped(self):
+    def test_missing_shared_credential_drops_every_configured_model(self):
         configured = {
             "openai": cfg.DEFAULT_OPENAI_MODEL,
             "mistral": cfg.DEFAULT_MISTRAL_MODEL,
             "deepseek": cfg.DEFAULT_DEEPSEEK_MODEL,
         }
-        keys = {label: "key" for label in watch_scheduler.PROVIDER_LABELS.values()}
-        keys["DeepSeek"] = ""
+        keys = {"OpenRouter": ""}
         with patch.object(cfg, "get_watch_models", return_value=configured):
             selected = watch_scheduler._selected_models(keys, False)
 
-        self.assertEqual(set(dict(selected)), {"openai", "mistral"})
+        self.assertEqual(selected, [])
 
 
 class MailerTests(unittest.TestCase):

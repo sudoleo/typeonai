@@ -371,7 +371,8 @@ def run_ask(monkeypatch, profile, payload=None):
     body = {
         "question": "hello",
         "model": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER["openai"],
-        "api_key": "own-key",
+        "useOwnKeys": True,
+        "openrouter_key": "own-key",
     }
     body.update(payload or {})
     with patch.object(chat_router, "verify_user_token", return_value=UID), \

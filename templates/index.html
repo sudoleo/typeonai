@@ -1225,14 +1225,14 @@
             aria-labelledby="settingsConnectionsTitle">
             <div class="settings-category-heading">
               <h3 id="settingsConnectionsTitle">Connections</h3>
-              <p>Run on my quota, or use your own provider keys and pay your own bill.</p>
+              <p>Run on my quota, or use your own OpenRouter key and pay your own bill.</p>
             </div>
             <div class="settings-group">
               <div class="settings-section">
                 <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Use your own API keys</strong>
-                    <small>Keys stay in this browser and replace my quota, so runs then cost you, not me.</small>
+                    <small>Your key stays in this browser and replaces my quota, so runs then cost you, not me.</small>
                   </span>
                   <input type="checkbox" id="useOwnKeysSwitch">
                 </label>
@@ -1241,8 +1241,8 @@
               <div class="settings-section">
                 <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea">
                   <div>
-                    <h4>Provider API keys</h4>
-                    <p>Manage and test credentials for individual providers.</p>
+                    <h4>OpenRouter API key</h4>
+                    <p>Manage and test your OpenRouter credential.</p>
                   </div>
                   <span id="apiArrow" class="arrow">&#9660;</span>
                 </div>
@@ -1250,29 +1250,8 @@
                 <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">
 
               <div class="api-key-group">
-                <label for="openaiKey">OpenAI API Key <span id="openaiFeedback" class="feedback"></span></label>
-                <input type="text" id="openaiKey" placeholder="sk-..." autocomplete="off">
-              </div>
-              <div class="api-key-group">
-                <label for="mistralKey">Mistral API Key <span id="mistralFeedback" class="feedback"></span></label>
-                <input type="text" id="mistralKey" placeholder="Your Mistral Key" autocomplete="off">
-              </div>
-              <div class="api-key-group">
-                <label for="anthropicKey">Anthropic API Key <span id="anthropicFeedback"
-                    class="feedback"></span></label>
-                <input type="text" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off">
-              </div>
-              <div class="api-key-group">
-                <label for="geminiKey">Google API Key <span id="geminiFeedback" class="feedback"></span></label>
-                <input type="text" id="geminiKey" placeholder="AIza..." autocomplete="off">
-              </div>
-              <div class="api-key-group">
-                <label for="deepseekKey">DeepSeek API Key <span id="deepseekFeedback" class="feedback"></span></label>
-                <input type="text" id="deepseekKey" placeholder="sk-..." autocomplete="off">
-              </div>
-              <div class="api-key-group">
-                <label for="grokKey">Grok API Key <span id="grokFeedback" class="feedback"></span></label>
-                <input type="text" id="grokKey" placeholder="Your Grok Key" autocomplete="off">
+                <label for="openrouterKey">OpenRouter API Key <span id="openrouterFeedback" class="feedback"></span></label>
+                <input type="text" id="openrouterKey" placeholder="sk-or-..." autocomplete="off">
               </div>
 
               <button id="testAllKeysButton" type="button" class="save-keys-btn">

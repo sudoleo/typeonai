@@ -5,7 +5,6 @@ from unittest import mock
 from fastapi import HTTPException
 
 import app.core.config as cfg
-from app.services.llm.credentials import GEMINI_ADC_ALLOWED
 from app.api.routers import admin as admin_router
 from app.api.routers.admin import (
     get_models,
@@ -144,24 +143,13 @@ class ModelConfigurationTests(unittest.TestCase):
         document.set.assert_not_called()
 
     def test_engine_developer_keys_use_shared_credentials_source(self):
-        expected = {
-            "OpenAI": "openai-dev",
-            "Mistral": "mistral-dev",
-            "Anthropic": None,
-            "Gemini": "gemini-dev",
-            "DeepSeek": None,
-            "Grok": "grok-dev",
-        }
+        expected = {"OpenRouter": "server-key"}
         with mock.patch(
             "app.api.routers.chat.resolve_developer_api_keys",
             return_value=expected,
         ) as resolver:
             resolved = build_engine_api_keys({}, False)
-            self.assertEqual(
-                {key: value for key, value in resolved.items() if key != GEMINI_ADC_ALLOWED},
-                expected,
-            )
-            self.assertTrue(resolved[GEMINI_ADC_ALLOWED])
+            self.assertEqual(resolved, expected)
         resolver.assert_called_once_with()
 
     def test_engine_own_keys_are_stripped_and_never_use_developer_keys(self):
@@ -170,17 +158,12 @@ class ModelConfigurationTests(unittest.TestCase):
         ) as resolver:
             keys = build_engine_api_keys(
                 {
-                    "openai_key": "  user-openai  ",
-                    "gemini_key": "",
-                    "mistral_key": "   ",
+                    "openrouter_key": "  user-openrouter  ",
                 },
                 True,
             )
         resolver.assert_not_called()
-        self.assertEqual(keys["OpenAI"], "user-openai")
-        self.assertIsNone(keys["Gemini"])
-        self.assertIsNone(keys["Mistral"])
-        self.assertNotIn(GEMINI_ADC_ALLOWED, keys)
+        self.assertEqual(keys, {"OpenRouter": "user-openrouter"})
 
     def test_admin_models_get_is_read_only_and_preserves_judge_family(self):
         raw = {
@@ -276,11 +259,12 @@ class ModelConfigurationTests(unittest.TestCase):
                     max_output_tokens=123,
                 )
                 self.assertEqual(request["internal_model"], model_id)
-                self.assertEqual(request["api_model"], model_id)
-                generation = request["payload"]["generationConfig"]
-                self.assertEqual(generation["maxOutputTokens"], 123)
-                self.assertNotIn("temperature", generation)
-                self.assertNotIn("thinkingConfig", generation)
+                self.assertEqual(request["api_model"], cfg.openrouter_model_id(model_id, "gemini"))
+                payload = request["payload"]
+                self.assertEqual(payload["max_tokens"], 123)
+                self.assertNotIn("temperature", payload)
+                self.assertEqual(payload["provider"], {"zdr": True})
+                self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
 
     def test_gemini_models_are_available_to_admin(self):
         enforced = _server_enforced_models()["gemini"]
@@ -329,7 +313,7 @@ class ModelConfigurationTests(unittest.TestCase):
             "grok", question="q", system_prompt="s",
             model_override=cfg.GROK_NO_REASONING_MODEL, max_output_tokens=123,
         )
-        self.assertEqual(no_reasoning["api_model"], "grok-4.3")
+        self.assertEqual(no_reasoning["api_model"], "x-ai/grok-4.3")
         self.assertEqual(no_reasoning["payload"]["reasoning"], {"effort": "none"})
 
         high = build_provider_payload(

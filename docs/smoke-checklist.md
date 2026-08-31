@@ -167,7 +167,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       niemals parallel den Legacy-`context`.
 - [ ] Developer-Modus verwendet beim Context-Build denselben von `/prepare`
       konsumierten `usage_run_key`. Own-Key sendet ausschließlich den Key des
-      Providers der gewählten Consensus-Engine als `memory_api_key`; im
+      gemeinsame OpenRouter-Key als `openrouter_key`; im
       Netzwerk-Payload stehen keine weiteren Nutzer-Keys und kein Developer-
       Fallback.
 - [ ] Fehlt im Own-Key-Modus ein Key eines ausgewählten Antwort-Providers oder

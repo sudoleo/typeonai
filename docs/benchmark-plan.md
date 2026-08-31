@@ -58,36 +58,19 @@ besonders wenn Modelle widersprechen."
 
 ## 1. Zentraler technischer Befund
 
-Websuche ist nicht konfigurierbar, sondern in `build_provider_payload`
-(`app/services/llm/engines.py:168`) **pro Provider fest verdrahtet**. Das ist der
-**einzige** produktive Eingriffspunkt, den der Benchmark braucht.
+Websuche ist in `build_provider_payload` zentral für alle sechs logischen
+Modellfamilien konfiguriert. Das ist der einzige produktive Eingriffspunkt,
+den der Benchmark braucht.
 
 Die Consensus-Synthese selbst (`app/services/llm/consensus_engine.py`) ist
-**bereits tool-frei** (reine Chat/Messages-Calls; Gemini poppt `tools` in
-`consensus_engine.py:63`) — dort ist nichts zu ändern.
+**bereits tool-frei**: Consensus- und Differences-Aufrufe verwenden denselben
+OpenRouter-Chat-Completions-Transport ohne Web-Tool.
 
-| Provider | Stelle in engines.py | injiziertes Web-Tool |
-|---|---|---|
-| OpenAI | `:126‑129` (`_openai_responses_payload`) | `tools:[{type:web_search}]` + `include:[web_search_call…]` |
-| Mistral | `:243` | `tools:[{type:web_search}]` |
-| Anthropic | `:268‑272` | `web_search_20250305` |
-| Gemini | `:302` | `tools:[{google_search:{}}]` |
-| Grok | `:357` (via `_openai_responses_payload`) | `web_search` |
-| DeepSeek | `:391‑453` | `web_search_20250305` (seit 2026-08-15, nur auf `api.deepseek.com/anthropic/v1/messages`) |
-
-DeepSeek ist der einzige Provider, bei dem `benchmark_mode=True` nicht nur das
-Tool entfernt, sondern auch den Endpoint wechselt: closed book laeuft weiter
-ueber `/chat/completions` (OpenAI-kompatibel), damit die V1-Laeufe vergleichbar
-bleiben. Die Web-Suche gibt es dort nicht — `/chat/completions` akzeptiert nur
-`function`-Tools.
-
-**Nicht verwechseln:** `api.deepseek.com/anthropic/...` ist DeepSeeks eigener
-Server mit DeepSeek-Key, -Modellen und -Preisen; nur das JSON-Format ist
-Anthropics Messages-Schema nachgebaut. Es geht kein Request an Anthropic, und
-die Websuche wird nicht separat berechnet (nur Tokens). DeepSeeks zweiter
-Suchweg, `/responses` mit `{"type": "web_search"}`, ist zwar offiziell
-dokumentiert, liefert aber weder `action.sources` noch Annotationen — gemessen
-0 Quellen — und ist fuer eine App, die Herkunft anzeigt, unbrauchbar.
+Im normalen Antwortpfad injiziert `build_provider_payload` für jede der sechs
+Modellfamilien dasselbe OpenRouter-Tool
+`openrouter:web_search` (`engine:auto`). Mit `benchmark_mode=True` fehlen
+`tools` und `max_tool_calls` vollständig; Endpoint und Antwortformat bleiben
+für alle Familien identisch.
 
 Hinweis: Der frühere `/prepare`-Intent-Router (`tool_heuristics.py`) wurde
 entfernt — Echtzeitdaten kommen ausschließlich aus der nativen Web-Suche oben.
@@ -102,11 +85,12 @@ Der Runner umgeht ohnehin `/prepare` und baut den System-Prompt selbst.
   **Achtung:** `load_models_from_db()` (`:439`) überschreibt Defaults beim Startup
   aus Firestore. Der Benchmark **darf nicht** davon abhängen und friert die 6
   Modell-IDs explizit in seiner eigenen Config ein.
-- **Provider-Adapter:** `build_provider_payload` (`engines.py:168`) +
-  `query_openai/_mistral/_claude/_gemini/_deepseek/_grok` (`engines.py:416‑684`).
-- **Response-Parser:** `parse_openai_response` / `parse_anthropic_response` /
-  `parse_gemini_response` / `parse_mistral_content` (`citations.py:208‑360`) →
-  liefern `{"text", "sources"}`.
+- **Transport:** `build_provider_payload` + `query_model` in `engines.py` und
+  `benchmark/transport.py` nutzen OpenRouter Chat Completions. Die logische
+  Familie beeinflusst nur Modell-ID, Produktlabel und Modellkonfiguration.
+- **Response-Parser:** `parse_openrouter_response` in `citations.py` verarbeitet
+  standardisierte `url_citation`-Annotationen und liefert
+  `{"text", "sources"}`.
 - **Consensus-Synthese (wiederverwenden):** `query_consensus` / `stream_consensus`
   (`consensus_engine.py:248, 963`). In-process aufrufen, **nicht** über
   `/consensus`. `query_differences` / `stream_differences` (`:694, 1101`) werden in
@@ -141,14 +125,14 @@ Es wird eine eigene `benchmark/transport.py` gebaut, die:
 - den **HTTP-Call und die Usage-Erfassung selbst** übernimmt (Usage aus demselben
   Roh-JSON, das auch der Parser bekommt).
 
-Die produktiven `query_*`-Funktionen bleiben **unangetastet**.
+Der Benchmark nutzt denselben OpenRouter-Payloadbau wie das produktive `query_model`.
 
 **Absicherung gegen Drift** (Pflicht):
 - Unit-Tests für den Transport je Provider gegen kanonische Provider-JSONs
   (gemockt), inkl. korrekter Usage-Extraktion.
 - Ein späterer **Cross-Check** gegen die produktive Request-Logik: für denselben
   Prompt/dasselbe Modell wird der Benchmark-Transport-Text mit dem Ergebnis eines
-  echten `query_*`-Calls verglichen (Toleranz für LLM-Nichtdeterminismus
+  echten `query_model`-Calls verglichen (Toleranz für LLM-Nichtdeterminismus
   beachten; primär struktureller Abgleich von Payload/Parsing-Pfad).
 
 ### E2 — Majority-Tie: `no_majority` ✅
@@ -480,8 +464,8 @@ Entscheidung (User): `OUTPUT_TOKEN_LIMIT = 24576`, `CONSENSUS_OUTPUT_TOKEN_LIMIT
 Auswertungs-Output sichtbar (abstain + completion_tokens == Limit).
 
 ### M2 — Temperatur: Produktions-Defaults beibehalten (reale Experience)
-Nur Mistral/Gemini tragen `temp 0.2`, die übrigen Provider laufen auf
-Provider-Default (siehe `engines.build_provider_payload`). Ein reiner Wissens-
+Die produktiven Payloads lassen die Temperatur derzeit für alle Familien beim
+Modell-/Provider-Default (siehe `engines.build_provider_payload`). Ein reiner Wissens-
 Benchmark wäre mit `temp 0` sauberer/reproduzierbarer, **misst aber ein anderes
 System** als das, was Nutzer real bekommen. Konsistent zu E5 (Label-Modus =
 „reale Experience") wird die **Produktions-Temperatur-Politik beibehalten** und je
@@ -525,17 +509,16 @@ aktiv); Test 6 (anonymize) noch nicht gebaut (Audit-Modus ist Phase 3).
 Final ≈ \$43.69, Schätzungen). **Kein echter Call ausgeführt.**
 
 **Phase 2.5a — Pilot-Startfähigkeit ohne Live-Run:** *(umgesetzt, Stand 2026-06-28.)*
-Neue import-sichere Helper-Schicht `app/services/llm/credentials.py` (einzige
-Quelle der `DEVELOPER_*_API_KEY`-Namen; reuse der produktiven ADC-Funktion
-`engines._google_adc_headers`) — **kein** Router-Eingriff, Produktion unverändert.
+Die import-sichere Helper-Schicht `app/services/llm/credentials.py` löst heute
+ausschließlich `OPENROUTER_API_KEY` auf; providerbezogene Keys und ADC sind entfernt.
 CLI erweitert: `--pilot --run-id --resume --budget --live`; legt deterministisch
 `data/benchmark/runs/<run_id>/` an, schreibt/validiert das Manifest (Drift-Abbruch
 bei eingefrorenen Feldern, E6). Ohne `--live`: sichere Dry-Run-Vorschau, **kein**
-HTTP. Mit `--live`: Credential-Check aller 6 Provider (fehlende → Abbruch mit
-Liste, **vor** jedem Call), Gemini per Key **oder** ADC; danach Preflight
+HTTP. Mit `--live`: Check des gemeinsamen OpenRouter-Credentials (fehlend →
+Abbruch **vor** jedem Call); danach Preflight
 (Audit + Projektion). Die echte Ausführung bleibt **bewusst gesperrt**
 (`LIVE_EXECUTION_ENABLED = False`) und löst selbst keinen HTTP-Call aus.
-`transport` unterstützt jetzt den Gemini-ADC-Fallback. `_redact_payload` ist
+`transport` nutzt ausschließlich OpenRouter. `_redact_payload` ist
 **kein No-op** mehr: rekursive Redaction von Authorization/api_key/x-api-key/token/
 bearer + Header-Blöcken → keine Secrets in JSONL/Manifest. Gesamt-Suite 210 passed
 (62 Benchmark-Tests). **Weiterhin kein echter Call ausgeführt.**
