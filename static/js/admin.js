@@ -154,6 +154,82 @@ function chip(kind, text, title) {
     return span;
 }
 
+function reasoningText(entry) {
+    const value = entry && entry.reasoning;
+    if (!value) return 'provider default';
+    if (value.effort) return `effort: ${value.effort}`;
+    if (value.enabled === false) return 'reasoning disabled';
+    if (value.enabled === true) return 'reasoning enabled';
+    return Object.entries(value).map(([key, setting]) => `${key}: ${setting}`).join(', ');
+}
+
+function renderReasoningOverview() {
+    const policy = meta().reasoning || {};
+    const flowContainer = document.getElementById('reasoningFlowOverview');
+    const modelContainer = document.getElementById('reasoningModelOverview');
+    if (!flowContainer || !modelContainer) return;
+
+    flowContainer.innerHTML = '';
+    (policy.flows || []).forEach(flow => {
+        const card = document.createElement('div');
+        card.className = 'reasoning-flow-card';
+        const name = document.createElement('strong');
+        name.textContent = flow.name || '';
+        const setting = document.createElement('span');
+        setting.className = 'reasoning-flow-setting';
+        setting.textContent = flow.setting || '';
+        const detail = document.createElement('small');
+        detail.textContent = flow.detail || '';
+        const code = document.createElement('code');
+        code.textContent = flow.code || '';
+        card.append(name, setting, detail, code);
+        flowContainer.appendChild(card);
+    });
+
+    modelContainer.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'reasoning-model-row reasoning-model-head';
+    ['Family', 'Request path / model', 'Effective setting', 'Source / API model'].forEach(text => {
+        const cell = document.createElement('span');
+        cell.textContent = text;
+        header.appendChild(cell);
+    });
+    modelContainer.appendChild(header);
+
+    function appendRow(provider, scope, entry) {
+        if (!entry || !entry.model) return;
+        const row = document.createElement('div');
+        row.className = 'reasoning-model-row';
+        const family = document.createElement('span');
+        family.textContent = providerLabel(provider);
+        const model = document.createElement('span');
+        const shownLabel = entry.label && entry.label !== entry.model ? entry.label : entry.model;
+        model.textContent = `${scope} · ${shownLabel}`;
+        model.title = entry.model;
+        const setting = document.createElement('code');
+        setting.textContent = reasoningText(entry);
+        const source = document.createElement('span');
+        const apiSuffix = entry.api_model && entry.api_model !== entry.model
+            ? ` · API: ${entry.api_model}`
+            : '';
+        source.textContent = `${entry.source || 'unknown'}${apiSuffix}`;
+        row.append(family, model, setting, source);
+        modelContainer.appendChild(row);
+    }
+
+    providers.forEach(provider => {
+        const answers = (policy.model_answers || {})[provider] || {};
+        (globalModelsData[provider] || []).forEach(model => {
+            appendRow(provider, 'Answer', answers[model]);
+        });
+        appendRow(provider, 'Deep Think answer', (policy.deep_think_answers || {})[provider]);
+        const judgePolicy = (policy.judges || {})[provider] || {};
+        appendRow(provider, 'Standard judge', judgePolicy.standard);
+        appendRow(provider, 'Pro judge', judgePolicy.pro);
+        appendRow(provider, 'Chat memory', (policy.chat_memory || {})[provider]);
+    });
+}
+
 function renderWatchModelConfig() {
     const container = document.getElementById('watchModelConfig');
     if (!container) return;
@@ -416,6 +492,7 @@ function renderPresetModels() {
 // ==============================
 function renderUI() {
     renderLimits();
+    renderReasoningOverview();
 
     const container = document.getElementById('providersContainer');
     container.innerHTML = '';
@@ -508,6 +585,15 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
 
     const flags = document.createElement('div');
     flags.className = 'model-flags';
+
+    const reasoningEntry = (((meta().reasoning || {}).model_answers || {})[provider] || {})[modelName];
+    if (reasoningEntry && reasoningEntry.reasoning) {
+        flags.appendChild(chip(
+            'reasoning',
+            reasoningText(reasoningEntry),
+            `Effective answer request · ${reasoningEntry.source}`
+        ));
+    }
 
     if (dependencies.length) {
         flags.appendChild(chip(

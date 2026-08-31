@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from app.core.config import get_model_config
+from app.core.config import get_model_config, REASONING_EFFORT_FOR_PUBLISHER_SCREEN
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.engines import OPENROUTER_CHAT_COMPLETIONS_URL, openrouter_headers
 
@@ -213,7 +213,7 @@ Return exactly one neutral English question, with no quotation marks, preface, m
                     "parameters": {"engine": "auto", "max_uses": 2},
                 }],
                 "max_tool_calls": 3,
-                "reasoning": {"effort": "low"},
+                "reasoning": {"effort": REASONING_EFFORT_FOR_PUBLISHER_SCREEN},
                 "max_tokens": 800,
                 "provider": {"zdr": True},
             },

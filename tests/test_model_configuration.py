@@ -409,6 +409,26 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(glm["api_model"], "z-ai/glm-5.3")
         self.assertEqual(glm["payload"]["reasoning"], {"effort": "low"})
 
+    def test_effective_reasoning_policy_matches_answer_payload_precedence(self):
+        self.assertEqual(
+            cfg.effective_model_reasoning("grok", cfg.GROK_PRO_MODEL),
+            ({"effort": "high"}, "MODEL_REQUEST_CONFIG"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning("mistral", cfg.MISTRAL_PRO_MODEL),
+            ({"effort": "high"}, "MISTRAL_REASONING_MODELS"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning(
+                "openai", cfg.OPENAI_PRO_MODEL, deep_think=True
+            ),
+            ({"effort": cfg.REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP"),
+        )
+        self.assertEqual(
+            cfg.effective_model_reasoning("anthropic", cfg.DEFAULT_ANTHROPIC_MODEL),
+            (None, "provider default"),
+        )
+
     def test_access_control_only_has_free_and_pro_models(self):
         validate_model(
             cfg.DEFAULT_OPENAI_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False

@@ -18,7 +18,7 @@ from typing import Callable
 
 from firebase_admin import firestore
 from app.core.observability import safe_exception
-from app.core.config import get_model_config
+from app.core.config import get_model_config, REASONING_EFFORT_FOR_MEMORY_EDIT
 from app.services import persistence_guard, user_memory
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.engines import OPENROUTER_BASE_URL
@@ -222,7 +222,7 @@ def request_memory_patch(
                 {"role": "user", "content": prompt},
             ],
             max_tokens=int(max_output_tokens),
-            reasoning_effort="none",
+            reasoning_effort=REASONING_EFFORT_FOR_MEMORY_EDIT,
             response_format={
                 "type": "json_schema",
                 "json_schema": {

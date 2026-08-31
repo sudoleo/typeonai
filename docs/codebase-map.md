@@ -1698,7 +1698,8 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   genutzte Judge steht als `differences_data.judges.differences`
   ({provider, model, tier, attempts, duration_ms}) im Payload/Snapshot und in
   der Telemetrie. Judges laufen mit providerkompatibler niedriger
-  Reasoning-Effort-Kappung (`low` für OpenAI/Gemini, `none` für Mistral);
+  Reasoning-Effort-Kappung (normalerweise `low`, für Mistral `none`; ein
+  explizites `MODEL_REQUEST_CONFIG` wie „Reasoning aus“ bleibt vorrangig);
   die Consensus-Synthese selbst behält die volle Modell-Denktiefe.
   das Frontend zeigt ihn als Fußnote im Verdict-Header. Außerdem:
   JSON-Truncation-Repair aus `consensus_parsing.py`, serverseitige Anchor-/Quote-Verifikation gegen
@@ -2718,8 +2719,14 @@ Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
 Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
 Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6/K3 senden
-`reasoning.enabled=false`, GLM 5.3 Flash/5.3 `reasoning.effort=low`. Bewusst abweichende
-Reihenfolgen (`_CONSENSUS_ALIAS_ORDER`, `watch_scheduler._WATCH_ENGINE_PREFERENCE`)
+`reasoning.enabled=false`, GLM 5.3 Flash/5.3 `reasoning.effort=low`.
+Feste Reasoning-Werte liegen ebenfalls zentral in `config.py`
+(`REASONING_EFFORT_FOR_*`, `judge_reasoning_effort`);
+`effective_model_reasoning` bildet daraus mit den Modell-Overrides exakt die
+Prioritaet des Antwort-Request-Builders. Memory Edit, SEO-Review und Publisher
+importieren diese Werte statt eigener Stringliterale.
+Bewusst abweichende Reihenfolgen (`_CONSENSUS_ALIAS_ORDER`,
+`watch_scheduler._WATCH_ENGINE_PREFERENCE`)
 haengen unbekannte Familien hinten an, statt sie zu verlieren;
 `tests/test_provider_registry.py` haelt das fest. Consensus- und
 Differences-Prompt bekommen die Antworten als Mapping Familie->Text
@@ -2810,7 +2817,15 @@ Pflege bleibt eine explizite Admin-Aufgabe.
 Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / API / Shared Pages /
 Consensus Watch / SEO) bekommt via
   `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, Labels und
-  referenzierende Defaults/Presets/Watches/Judges). Das „In use“-Badge ist
+  referenzierende Defaults/Presets/Watches/Judges). `meta.reasoning` ist eine
+  read-only Projektion derselben zentralen Runtime-Policy: Der Models-Tab zeigt
+  die effektiven Einstellungen je Laufart sowie aufgeklappt je Modell, Deep-
+  Think-Modell, Standard-/Pro-Judge und Chat-Memory-Modell einschließlich
+  Policy-Name und aufgelöstem API-Modell (Judges und Chat-Memory teilen sich
+  denselben `_call_engine_text`-Effort-Cap, deshalb dieselbe Auflösung);
+  Modelle mit explizitem Override tragen zusätzlich
+  direkt in ihrer Zeile ein Reasoning-Badge. „Provider default“ bedeutet, dass
+  consens.io kein `reasoning`-Feld mitsendet. Das „In use“-Badge ist
   informativ und sperrt keine Providerzeile; nichts wird nach einem Save heimlich
   als „Required“ wieder eingefügt. Der
 „API“-Tab gibt Schlüssel für eine bestehende Firebase-UID aus, zeigt den

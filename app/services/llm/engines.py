@@ -198,10 +198,13 @@ def build_provider_payload(
         payload["max_tool_calls"] = max_uses + 1
 
     request_config = dict(model_config.request_config or {})
-    if provider_key == "mistral" and internal_model in cfg.MISTRAL_REASONING_MODELS:
-        request_config.setdefault("reasoning", {"effort": "high"})
-    if deep_search:
-        request_config.setdefault("reasoning", {"effort": cfg.REASONING_EFFORT_FOR_DEEP})
+    reasoning_config, _reasoning_source = cfg.effective_model_reasoning(
+        provider_key,
+        internal_model,
+        deep_think=deep_search,
+    )
+    if reasoning_config is not None:
+        request_config["reasoning"] = reasoning_config
     _merge_nested_config(payload, request_config)
 
     return {

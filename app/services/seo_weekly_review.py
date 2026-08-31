@@ -18,7 +18,7 @@ from google.cloud.firestore_v1 import Query
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.core.background_tasks import task_succeeded
-from app.core.config import get_model_config
+from app.core.config import get_model_config, REASONING_EFFORT_FOR_SEO_REVIEW
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.services import publisher_config, seo_data, seo_recommendation
@@ -375,7 +375,7 @@ class SeoPortfolioJudge:
             with managed_provider_resource(client):
                 response = client.chat.completions.create(
                     model=api_model,
-                    reasoning_effort="medium",
+                    reasoning_effort=REASONING_EFFORT_FOR_SEO_REVIEW,
                     messages=[
                         {"role": "system", "content": "You are a conservative SEO portfolio reviewer."},
                         {"role": "user", "content": prompt},

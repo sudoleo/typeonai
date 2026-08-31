@@ -1010,6 +1010,142 @@ def _model_dependencies(data: dict) -> dict:
     return dependencies
 
 
+def _reasoning_admin_meta(data: dict) -> dict:
+    """Read-only projection of the effective runtime reasoning policy.
+
+    This deliberately derives from ``app.core.config`` instead of maintaining
+    an Admin-only explanation. A changed model override or fixed flow effort is
+    therefore visible on the next GET without another UI edit.
+    """
+    model_answers = {}
+    deep_think_answers = {}
+    judges = {}
+    chat_memory = {}
+
+    def entry(provider: str, model: str, reasoning, source: str) -> dict:
+        model_config = cfg.get_model_config(model, provider)
+        return {
+            "model": model,
+            "label": cfg.get_model_label(model),
+            "api_model": model_config.api_model if model_config else model,
+            "reasoning": dict(reasoning) if isinstance(reasoning, dict) else None,
+            "source": source,
+        }
+
+    def capped_reasoning(provider: str, model: str) -> tuple[dict, str]:
+        """Effort cap shared by every _call_engine_text caller.
+
+        Judges and the chat-memory compressor pass ``effort`` into the same
+        ``setdefault``, so an explicit model policy keeps winning there too.
+        """
+        model_config = cfg.get_model_config(model, provider)
+        request_reasoning = (
+            (model_config.request_config or {}).get("reasoning")
+            if model_config else None
+        )
+        if isinstance(request_reasoning, dict) and request_reasoning:
+            return dict(request_reasoning), "MODEL_REQUEST_CONFIG"
+        return {"effort": cfg.judge_reasoning_effort(provider)}, "judge_reasoning_effort"
+
+    for provider in PROVIDER_KEYS:
+        model_answers[provider] = {}
+        for model in data.get(provider) or []:
+            reasoning, source = cfg.effective_model_reasoning(provider, model)
+            model_answers[provider][model] = entry(
+                provider, model, reasoning, source
+            )
+
+        deep_model = cfg.PROVIDERS[provider].pro_model
+        deep_reasoning, deep_source = cfg.effective_model_reasoning(
+            provider, deep_model, deep_think=True
+        )
+        deep_think_answers[provider] = entry(
+            provider, deep_model, deep_reasoning, deep_source
+        )
+
+        judges[provider] = {}
+        for tier, field in (
+            ("standard", "judge_models"),
+            ("pro", "judge_models_pro"),
+        ):
+            model = str((data.get(field) or {}).get(provider) or "")
+            reasoning, source = capped_reasoning(provider, model)
+            judges[provider][tier] = entry(
+                provider, model, reasoning, source
+            )
+
+        memory_model = str(
+            (data.get("chat_memory_models") or {}).get(provider) or ""
+        )
+        memory_reasoning, memory_source = capped_reasoning(provider, memory_model)
+        chat_memory[provider] = entry(
+            provider, memory_model, memory_reasoning, memory_source
+        )
+
+    return {
+        "model_answers": model_answers,
+        "deep_think_answers": deep_think_answers,
+        "judges": judges,
+        "chat_memory": chat_memory,
+        "flows": [
+            {
+                "name": "Standard answers",
+                "setting": "Per model",
+                "detail": "Explicit model policy; otherwise the provider default.",
+                "code": "app/core/config.py · MODEL_REQUEST_CONFIG",
+            },
+            {
+                "name": "Deep Think answers",
+                "setting": f"{cfg.REASONING_EFFORT_FOR_DEEP} fallback",
+                "detail": "Uses each family's Pro model. Model overrides and Mistral high take precedence.",
+                "code": "app/core/config.py · effective_model_reasoning",
+            },
+            {
+                "name": "Differences & coverage judges",
+                "setting": (
+                    f"{cfg.REASONING_EFFORT_FOR_JUDGE}; Mistral "
+                    f"{cfg.judge_reasoning_effort('mistral')}"
+                ),
+                "detail": "Reduced effort unless the selected model has an explicit reasoning policy.",
+                "code": "app/core/config.py · judge_reasoning_effort",
+            },
+            {
+                "name": "Chat memory & follow-up rewrite",
+                "setting": (
+                    f"{cfg.REASONING_EFFORT_FOR_JUDGE}; Mistral "
+                    f"{cfg.judge_reasoning_effort('mistral')}"
+                ),
+                "detail": "Same cap as the judges, on the family's chat memory model.",
+                "code": "app/core/config.py · judge_reasoning_effort",
+            },
+            {
+                "name": "Consensus synthesis",
+                "setting": "Per model",
+                "detail": "No global effort cap; the selected engine keeps its model policy.",
+                "code": "app/core/config.py · MODEL_REQUEST_CONFIG",
+            },
+            {
+                "name": "Memory edit",
+                "setting": cfg.REASONING_EFFORT_FOR_MEMORY_EDIT,
+                "detail": "Fixed extraction task.",
+                "code": "app/core/config.py · REASONING_EFFORT_FOR_MEMORY_EDIT",
+            },
+            {
+                "name": "SEO portfolio review",
+                "setting": cfg.REASONING_EFFORT_FOR_SEO_REVIEW,
+                "detail": "Fixed review task.",
+                "code": "app/core/config.py · REASONING_EFFORT_FOR_SEO_REVIEW",
+            },
+            {
+                "name": "Publisher topic screen",
+                "setting": cfg.REASONING_EFFORT_FOR_PUBLISHER_SCREEN,
+                "detail": "Fixed scheduled-publisher task.",
+                "code": "app/core/config.py · REASONING_EFFORT_FOR_PUBLISHER_SCREEN",
+            },
+        ],
+    }
+
+
 def _admin_meta(data: dict) -> dict:
     """Metadaten fuer Alias-Aufloesung, Labels und sichtbare Abhaengigkeiten."""
     aliases = {
@@ -1050,6 +1186,7 @@ def _admin_meta(data: dict) -> dict:
         "preset_definitions": list(cfg.CONSENSUS_PRESET_DEFINITIONS),
         "provider_keys": list(PROVIDER_KEYS),
         "provider_labels": dict(cfg.PROVIDER_LABEL_BY_ID),
+        "reasoning": _reasoning_admin_meta(data),
     }
 
 

@@ -231,7 +231,7 @@ def query_engine_json(
         max_tokens=max_tokens,
         temperature=0,
         json_mode=True,
-        effort="low",
+        effort=cfg.judge_reasoning_effort(provider),
         json_schema=json_schema,
     )
 
@@ -1671,9 +1671,7 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
     Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash, das
     OpenAI-Mini) — und Gemini steht in JUDGE_FAMILY_PRIORITY vorn, ist also der
     häufigste Judge überhaupt. Das Modell selbst wird dabei nie getauscht."""
-    if provider == "mistral":
-        return "none"
-    return "low"
+    return cfg.judge_reasoning_effort(provider)
 
 
 # ---------------------------------------------------------------------------

@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20260831-kimiglm1">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260825-watcheffective1">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260831-reasoning1">
 
-    <script type="module" src="/static/js/admin.js?v=20260831-modelsets1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260831-reasoning1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -53,6 +53,19 @@
         </div>
 
         <section id="tab-models" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section reasoning-overview">
+                <h3>Effective Reasoning Policy</h3>
+                <p class="section-hint">
+                    Read-only runtime view. It shows the values actually added to provider requests and
+                    where each value comes from; change the named source in code when the policy should change.
+                    <strong>Provider default</strong> means consens.io sends no reasoning field.
+                </p>
+                <div id="reasoningFlowOverview" class="reasoning-flow-grid"></div>
+                <details class="reasoning-model-details">
+                    <summary>Model-by-model request settings</summary>
+                    <div id="reasoningModelOverview" class="reasoning-model-grid"></div>
+                </details>
+            </div>
             <p class="section-hint section-hint-compact">
                 Per-provider model lists shown in the app's model pickers (row order = picker order).
                 <strong>Default</strong> sets the Free-tier preselection. <strong>Premium</strong> marks Pro-only models.

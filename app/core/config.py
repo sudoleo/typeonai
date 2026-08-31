@@ -102,6 +102,15 @@ CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
 DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
 COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
 REASONING_EFFORT_FOR_DEEP = "low"
+# Zentrale Reasoning-Policy fuer alle festen Laufarten. Modellbezogene
+# Overrides stehen weiter unten in MODEL_REQUEST_CONFIG. Aufrufer sollen
+# keine String-Literale mehr verteilen: So kann das Admin-Dashboard denselben
+# autoritativen Stand anzeigen, den die Requests tatsaechlich verwenden.
+REASONING_EFFORT_FOR_JUDGE = "low"
+REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
+REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
+REASONING_EFFORT_FOR_SEO_REVIEW = "medium"
+REASONING_EFFORT_FOR_PUBLISHER_SCREEN = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
@@ -862,6 +871,42 @@ def get_model_config(model_id: str | None, provider: str | None = None) -> Model
             PROVIDERS[provider].model_accepts_attachments(model_id)
             if provider in PROVIDERS else True
         ),
+    )
+
+
+def effective_model_reasoning(
+    provider: str,
+    model_id: str | None,
+    *,
+    deep_think: bool = False,
+) -> tuple[dict[str, Any] | None, str]:
+    """Resolve the reasoning payload and its source for an answer-model call.
+
+    The precedence intentionally matches ``build_provider_payload``: an
+    explicit model policy wins, Mistral reasoning models default to ``high``,
+    and Deep Think only fills a still-unset policy with its global effort.
+    Returning the source makes the exact runtime decision inspectable without
+    duplicating the rules in the Admin UI.
+    """
+    provider_key = str(provider or "").lower()
+    internal_model = canonical_model_id(model_id, provider_key)
+    model_config = get_model_config(internal_model, provider_key)
+    request_config = dict(model_config.request_config or {}) if model_config else {}
+    explicit = request_config.get("reasoning")
+    if isinstance(explicit, dict) and explicit:
+        return dict(explicit), "MODEL_REQUEST_CONFIG"
+    if provider_key == "mistral" and internal_model in MISTRAL_REASONING_MODELS:
+        return {"effort": "high"}, "MISTRAL_REASONING_MODELS"
+    if deep_think:
+        return {"effort": REASONING_EFFORT_FOR_DEEP}, "REASONING_EFFORT_FOR_DEEP"
+    return None, "provider default"
+
+
+def judge_reasoning_effort(provider: str) -> str:
+    """Provider-compatible effort requested by Differences/Coverage judges."""
+    return REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER.get(
+        str(provider or "").lower(),
+        REASONING_EFFORT_FOR_JUDGE,
     )
 
 

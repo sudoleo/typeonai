@@ -134,6 +134,69 @@
     font-size: var(--font-size-sm);
     color: var(--sidebar-text-muted);
 }
+.reasoning-overview { border-color: color-mix(in srgb, var(--accent) 34%, var(--input-border)); }
+.reasoning-flow-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+.reasoning-flow-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 10px;
+    align-items: baseline;
+    padding: 10px 12px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--input-bg) 72%, transparent);
+}
+.reasoning-flow-card strong { font-size: var(--font-size-sm); }
+.reasoning-flow-setting {
+    color: var(--accent);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    white-space: nowrap;
+}
+.reasoning-flow-card small {
+    grid-column: 1 / -1;
+    color: var(--sidebar-text-muted);
+    line-height: var(--line-height-ui);
+}
+.reasoning-flow-card code {
+    grid-column: 1 / -1;
+    color: var(--sidebar-text-muted);
+    font-size: var(--font-size-micro);
+    overflow-wrap: anywhere;
+}
+.reasoning-model-details { margin-top: 12px; }
+.reasoning-model-details summary {
+    color: var(--sidebar-text-muted);
+    cursor: pointer;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+.reasoning-model-grid { margin-top: 10px; overflow-x: auto; }
+.reasoning-model-row {
+    display: grid;
+    grid-template-columns: 100px minmax(210px, 1.2fr) minmax(135px, .7fr) minmax(190px, 1fr);
+    gap: 12px;
+    align-items: center;
+    min-width: 720px;
+    padding: 7px 8px;
+    border-top: 1px solid var(--input-border);
+    color: var(--sidebar-text-muted);
+    font-size: var(--font-size-xs);
+}
+.reasoning-model-row code {
+    color: var(--text-color);
+    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: var(--font-size-xs);
+}
+.reasoning-model-head {
+    border-top: 0;
+    color: var(--text-color);
+    font-weight: var(--font-weight-bold);
+}
 .topic-admin-layout { display: grid; grid-template-columns: minmax(210px, .7fr) minmax(0, 2fr); gap: 18px; }
 .topic-admin-list { display: grid; align-content: start; gap: 8px; }
 .topic-admin-list button { width: 100%; padding: 10px 12px; border: 1px solid var(--input-border); border-radius: var(--radius-sm); color: var(--text-color); background: var(--input-bg); text-align: left; cursor: pointer; }
@@ -206,6 +269,7 @@
 }
 .admin-chip.required { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 .admin-chip.deepthink { color: var(--accent-tertiary); border-color: color-mix(in srgb, var(--accent-tertiary) 45%, transparent); }
+.admin-chip.reasoning { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 42%, transparent); }
 /* Shared traffic-light amber, same meaning as everywhere else: not broken,
    but not what the configuration above says either. */
 .admin-chip.warn { color: var(--partial); border-color: color-mix(in srgb, var(--partial) 45%, transparent); }
@@ -648,7 +712,7 @@
     .api-key-secret-row { align-items: stretch; flex-direction: column; }
     .api-key-row { grid-template-columns: 1fr; }
     .publisher-config-grid { grid-template-columns: 1fr; }
-    .preset-model-cards { grid-template-columns: 1fr; }
+    .preset-model-cards, .reasoning-flow-grid { grid-template-columns: 1fr; }
     .watch-model-grid .watch-model-head { display: none; }
     .watch-model-provider { margin-top: 8px; }
     .admin-savebar { top: 58px; flex-wrap: wrap; }

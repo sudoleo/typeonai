@@ -395,6 +395,43 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(meta["api_models"]["grok-4.3"], "x-ai/grok-4.3")
         self.assertEqual(meta["api_models"][cfg.DEFAULT_GROK_MODEL], "x-ai/grok-4.20")
 
+    def test_admin_meta_exposes_the_effective_reasoning_policy(self):
+        data = {
+            provider: list(config.models)
+            for provider, config in cfg.PROVIDERS.items()
+        }
+        data["judge_models"] = cfg.get_judge_models()
+        data["judge_models_pro"] = cfg.get_pro_judge_models()
+        data["chat_memory_models"] = cfg.get_chat_memory_models()
+        reasoning = _admin_meta(data)["reasoning"]
+
+        grok = reasoning["model_answers"]["grok"][cfg.GROK_NO_REASONING_MODEL]
+        self.assertEqual(grok["reasoning"], {"effort": "none"})
+        self.assertEqual(grok["source"], "MODEL_REQUEST_CONFIG")
+        self.assertEqual(
+            reasoning["deep_think_answers"]["mistral"]["reasoning"],
+            {"effort": "high"},
+        )
+        self.assertEqual(
+            reasoning["judges"]["mistral"]["standard"]["reasoning"],
+            {"effort": "none"},
+        )
+        # Die Chat-Memory laeuft ueber denselben _call_engine_text-Pfad wie die
+        # Judges; ohne eigene Zeile behauptet das Panel Vollstaendigkeit, die es
+        # nicht hat. Mistral zeigt die Provider-Ausnahme, GLM den Vorrang des
+        # Modell-Overrides.
+        self.assertEqual(
+            reasoning["chat_memory"]["mistral"]["reasoning"],
+            {"effort": "none"},
+        )
+        self.assertEqual(
+            reasoning["chat_memory"]["mistral"]["source"], "judge_reasoning_effort"
+        )
+        self.assertEqual(
+            reasoning["chat_memory"]["glm"]["source"], "MODEL_REQUEST_CONFIG"
+        )
+        self.assertIn("app/core/config.py", repr(reasoning["flows"]))
+
     def test_admin_meta_reports_provider_credentials_as_booleans_only(self):
         """Ein Provider ohne Server-Key faellt sonst still aus dem Lauf."""
         from unittest.mock import patch
@@ -457,6 +494,10 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertIn('data-tab="models"', template)
         self.assertIn('id="presetModelsContainer"', template)
         self.assertIn('preset_models: currentPresetModels()', module)
+        self.assertIn('reasoningFlowOverview', template)
+        self.assertIn('reasoningModelOverview', template)
+        self.assertIn('function renderReasoningOverview()', module)
+        self.assertIn('renderReasoningOverview();', module)
         self.assertIn('.top-bar-favicon {', css)
         self.assertIn('width: 30px;', css)
 
