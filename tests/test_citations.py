@@ -100,6 +100,56 @@ class OpenRouterCitationParsingTests(unittest.TestCase):
         )
         self.assertEqual(result_sources(parsed)[0]["snippet"], "Ein kurzer Beleg.")
 
+    def test_zero_width_annotation_never_precedes_the_answer(self):
+        parsed = parse_openrouter_response(
+            "Die Antwort beginnt hier.",
+            [{
+                "type": "url_citation",
+                "url_citation": {
+                    "url": "https://example.com/zero",
+                    "title": "Zero-width source",
+                    "start_index": 0,
+                    "end_index": 0,
+                },
+            }],
+        )
+
+        self.assertEqual(result_text(parsed), "Die Antwort beginnt hier. [S1]")
+
+    def test_stream_fallback_advances_to_the_next_sentence_boundary(self):
+        parsed = parse_openrouter_response(
+            "Der erste belegte Satz endet hier. Danach folgt Kontext.",
+            [{
+                "type": "url_citation",
+                "url_citation": {
+                    "url": "https://example.com/claim",
+                    "start_index": 0,
+                    "end_index": 0,
+                    "_stream_text_end_index": 18,
+                },
+            }],
+        )
+
+        self.assertEqual(
+            result_text(parsed),
+            "Der erste belegte Satz endet hier. [S1] Danach folgt Kontext.",
+        )
+
+    def test_invalid_offset_does_not_split_a_word(self):
+        parsed = parse_openrouter_response(
+            "Eine belegte Aussage.",
+            [{
+                "type": "url_citation",
+                "url_citation": {
+                    "url": "https://example.com/word",
+                    "start_index": 0,
+                    "end_index": 8,
+                },
+            }],
+        )
+
+        self.assertEqual(result_text(parsed), "Eine belegte [S1] Aussage.")
+
 
 if __name__ == "__main__":
     unittest.main()

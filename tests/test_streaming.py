@@ -394,6 +394,45 @@ class OpenRouterStreamTests(unittest.TestCase):
         self.assertTrue(payload["stream"])
         self.assertEqual(payload["provider"], {"zdr": True})
 
+    def test_zero_width_citation_uses_its_stream_position(self):
+        annotations = [{
+            "type": "url_citation",
+            "url_citation": {
+                "url": "https://example.com/claim",
+                "title": "Claim source",
+                "start_index": 0,
+                "end_index": 0,
+            },
+        }]
+        events, _, _ = self._run([
+            {"choices": [{"delta": {
+                "content": "First supported claim.",
+                "annotations": annotations,
+            }}]},
+            {"choices": [{"delta": {"content": " More context follows."}, "finish_reason": "stop"}]},
+        ])
+
+        self.assertEqual(
+            events[-1]["result"]["text"],
+            "First supported claim. [S1] More context follows.",
+        )
+
+    def test_repeated_zero_width_snapshot_does_not_duplicate_a_citation(self):
+        annotation = {
+            "type": "url_citation",
+            "url_citation": {
+                "url": "https://example.com/repeated",
+                "start_index": 0,
+                "end_index": 0,
+            },
+        }
+        events, _, _ = self._run([
+            {"choices": [{"delta": {"content": "Supported.", "annotations": [annotation]}}]},
+            {"choices": [{"delta": {"content": " More.", "annotations": [annotation]}, "finish_reason": "stop"}]},
+        ])
+
+        self.assertEqual(events[-1]["result"]["text"].count("[S1]"), 1)
+
     def test_reasoning_only_length_cutoff_is_a_structured_error(self):
         events, _, _ = self._run([
             {"choices": [{"delta": {"reasoning": "thinking"}}]},

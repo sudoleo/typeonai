@@ -395,9 +395,34 @@ function mergeEvidenceSources(incomingSources) {
   return merged.idMap;
 }
 
+// Alte OpenRouter-Snapshots koennen einen reinen Block aus Quellenmarken vor
+// dem ersten Wort enthalten, weil ein Provider fuer alle Annotationen 0/0 als
+// Position geliefert hat. Diese Texte sind bereits in Bookmarks gespeichert
+// und laufen nicht noch einmal durch citations.py. Nur dieser eindeutige
+// Legacy-Fall wird repariert: hinter die erste vollstaendige Aussage, niemals
+// in den Consensus-Pfad (der diese Modellantwort-Hilfe nicht aufruft).
+function normalizeLeadingModelSourceTags(markdown) {
+  const source = String(markdown || "");
+  const leading = source.match(
+    /^(?:[ \t]*\[(?:S?\d+)(?:,\s*S?\d+)*\])+(?:[ \t]*\r?\n[ \t]*)?/i
+  );
+  if (!leading) return source;
+
+  const tags = (leading[0].match(/\[(?:S?\d+)(?:,\s*S?\d+)*\]/gi) || []).join(" ");
+  const body = source.slice(leading[0].length).replace(/^[ \t]+/, "");
+  if (!body || !tags) return source;
+
+  const sentence = /[.!?\u2026](?:["'\u201d\u2019)\]}]+)?(?=\s|$)/.exec(body);
+  const paragraph = /\r?\n\s*\r?\n/.exec(body);
+  const end = sentence
+    ? sentence.index + sentence[0].length
+    : (paragraph ? paragraph.index : body.length);
+  return `${body.slice(0, end).replace(/[ \t]+$/, "")} ${tags}${body.slice(end)}`;
+}
+
 function rewriteSourceTags(markdown, idMap) {
   if (!markdown || !idMap || !Object.keys(idMap).length) {
-    return normalizeTerminalSourceTagOrder(markdown);
+    return normalizeTerminalSourceTagOrder(normalizeLeadingModelSourceTags(markdown));
   }
   const rewritten = markdown.replace(/\[((?:S?\d+)(?:,\s*S?\d+)*)\]/g, (match, inner) => {
     const mapped = inner.split(",").map(part => {
@@ -407,7 +432,7 @@ function rewriteSourceTags(markdown, idMap) {
     }).filter(Boolean);
     return mapped.length ? `[${mapped.join(", ")}]` : match;
   });
-  return normalizeTerminalSourceTagOrder(rewritten);
+  return normalizeTerminalSourceTagOrder(normalizeLeadingModelSourceTags(rewritten));
 }
 
 function registerResponseSources(markdown, incomingSources) {

@@ -226,4 +226,24 @@ describe("run-local evidence mapping", () => {
     expect(renderEvidence).not.toHaveBeenCalled();
     dom.window.close();
   });
+
+  it("moves a legacy leading source block behind the first model claim", () => {
+    const { window, dom } = loadScripts(["static/js/sources.js"], {
+      before(target) {
+        target.App = { state: { set: vi.fn() } };
+        target.currentEvidenceSources = [];
+      }
+    });
+
+    expect(window.rewriteSourceTags(
+      "[S1] [S2] Die erste Aussage ist belegt. Danach folgt mehr Text.",
+      { S1: 3, 1: 3, S2: 4, 2: 4 }
+    )).toBe("Die erste Aussage ist belegt. [3] [4] Danach folgt mehr Text.");
+
+    expect(window.rewriteSourceTags(
+      "Die Quellen stehen bereits richtig.[S1]",
+      { S1: 1, 1: 1 }
+    )).toBe("Die Quellen stehen bereits richtig.[1]");
+    dom.window.close();
+  });
 });

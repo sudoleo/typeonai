@@ -611,7 +611,10 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `Aussage [S1].` zu `Aussage.[S1]`, damit die hochgestellte Fussnote nach
   Satzendzeichen (und ggf. schliessendem Anfuehrungszeichen) steht. Der
   DOM-Linkifier besitzt denselben Fallback fuer alte Bookmarks; das
-  serverseitige Pendant liegt in `app/services/public_markdown.py`.
+  serverseitige Pendant liegt in `app/services/public_markdown.py`. Fuer alte
+  Modellantwort-Bookmarks verschiebt `rewriteSourceTags` ausserdem einen
+  eindeutigen, reinen `[S…]`-Block vor dem ersten Wort hinter die erste
+  vollstaendige Aussage; der Consensus-Renderpfad ruft diese Reparatur nicht auf.
 - **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
   Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
   Input-Container. Solange ein echter
@@ -1350,7 +1353,12 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    durch FastAPIs `jsonable_encoder`, weil SSE die normale Response-Kodierung
    umgeht; Firestore-`DatetimeWithNanoseconds` aus kompakten Bookmark-Metadaten
    wird dadurch vor dem abschließenden `json.dumps` zum ISO-Zeitstring. Frontend
-   rendert Deltas und wertet `final` aus.
+   rendert Deltas und wertet `final` aus. OpenRouter-URL-Annotationen werden in
+   `citations.py` zu `[S…]`-Marken. Nullbreite/ungueltige Provider-Offsets nutzen
+   defensiv die beim Streaming erreichte Textposition und die naechste
+   Satz-/Absatzgrenze; ohne brauchbaren Anker landen sie am Antwortende, niemals
+   vor dem ersten Wort. Wiederholte kumulative Annotation-Snapshots werden im
+   Stream dedupliziert.
    Nicht-SSE-Antworten werden zuerst als Text gelesen und, falls möglich, als
    JSON geparst; Plain-Text-/Proxy-/HTTP-Fehler bleiben dadurch sichtbar und
    werden nicht mehr zur generischen „No response received“-Meldung.

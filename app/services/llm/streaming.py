@@ -227,18 +227,45 @@ def _stream_openrouter_chat_completion(
     provider: str,
 ) -> Generator[StreamEvent, None, None]:
     text_parts: list[str] = []
+    text_length = 0
     annotations: list = []
+    annotation_keys: set[tuple] = set()
     finish_reason = None
     for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
         event_type = event.get("type")
         if event_type == "delta":
             text_parts.append(event["text"])
+            text_length += len(event["text"])
             yield event
         elif event_type == "reasoning":
             yield event
         elif event_type == "annotations":
             value = event.get("annotations")
-            annotations.extend(value if isinstance(value, list) else [value])
+            for annotation in value if isinstance(value, list) else [value]:
+                if not isinstance(annotation, dict):
+                    continue
+                annotation = dict(annotation)
+                citation = annotation.get("url_citation")
+                if isinstance(citation, dict):
+                    citation = dict(citation)
+                    # Native-search providers do not all return trustworthy
+                    # offsets.  Preserve the amount of text seen when the
+                    # annotation arrived so citations with a 0/0 range can be
+                    # placed after the supported claim instead of at byte 0.
+                    citation["_stream_text_end_index"] = text_length
+                    annotation["url_citation"] = citation
+                    key = (
+                        str(citation.get("url") or ""),
+                        str(citation.get("start_index")),
+                        str(citation.get("end_index")),
+                    )
+                    # Some streams repeat the accumulated annotation snapshot
+                    # in later chunks.  Keep the first occurrence: it is the
+                    # one closest to the claim that caused it.
+                    if key in annotation_keys:
+                        continue
+                    annotation_keys.add(key)
+                annotations.append(annotation)
         elif event_type == "finish":
             finish_reason = event.get("reason")
 

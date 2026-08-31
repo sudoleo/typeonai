@@ -182,6 +182,68 @@ def _ensure_source(
     return source_id
 
 
+_TERMINAL_CITATION_BOUNDARY_RE = re.compile(
+    r"[.!?\u2026](?:[\"'\u201d\u2019)\]}]+)?(?=\s|$)|\n"
+)
+
+
+def _integer_index(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fallback_citation_end(text: str, hint: Any) -> int:
+    """Place an unpositioned citation after the nearest complete claim.
+
+    Some OpenRouter native-search adapters emit a zero-width annotation
+    (``start_index == end_index == 0``).  In a stream, the caller records how
+    much answer text had arrived with that annotation.  That point is a useful
+    anchor, but it can fall in the middle of a streamed token, so advance to
+    the next sentence or line boundary.  Without a usable stream hint the only
+    honest placement is the end of the answer -- never its beginning.
+    """
+    if not text:
+        return 0
+
+    position = _integer_index(hint)
+    if position is None or position <= 0:
+        return len(text)
+    position = min(position, len(text))
+    if position >= len(text):
+        return len(text)
+
+    prefix = text[:position].rstrip()
+    if prefix and prefix[-1] in ".!?\u2026\n":
+        return len(prefix)
+
+    boundary = _TERMINAL_CITATION_BOUNDARY_RE.search(text, position)
+    return boundary.end() if boundary else len(text)
+
+
+def _citation_end(text: str, citation: Dict[str, Any]) -> int:
+    start = _integer_index(citation.get("start_index"))
+    end = _integer_index(citation.get("end_index"))
+
+    # A citation must cover at least one character.  Zero-width ranges are a
+    # real OpenRouter/provider failure mode and used to create the row of chips
+    # before the first word of the model answer.
+    valid_range = (
+        end is not None
+        and 0 < end <= len(text)
+        and (start is None or 0 <= start < end)
+    )
+    if not valid_range:
+        return _fallback_citation_end(text, citation.get("fallback_end_index"))
+
+    # Defensive guard for offsets counted slightly differently by an upstream
+    # adapter: never split a visible word with a source chip.
+    while end < len(text) and text[end - 1].isalnum() and text[end].isalnum():
+        end += 1
+    return end
+
+
 def insert_source_tags(
     text: str,
     citations: Iterable[Dict[str, Any]],
@@ -204,12 +266,7 @@ def insert_source_tags(
             snippet=snippet,
             provider=provider,
         )
-        end_index = citation.get("end_index")
-        try:
-            end = int(end_index)
-        except (TypeError, ValueError):
-            end = len(text)
-        end = max(0, min(len(text), end))
+        end = _citation_end(text, citation)
         tags_by_end.setdefault(end, [])
         if source_id not in tags_by_end[end]:
             tags_by_end[end].append(source_id)
@@ -274,5 +331,6 @@ def parse_openrouter_response(
             "snippet": citation.get("content"),
             "start_index": citation.get("start_index"),
             "end_index": citation.get("end_index"),
+            "fallback_end_index": citation.get("_stream_text_end_index"),
         })
     return insert_source_tags(text, citations, provider)
