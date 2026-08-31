@@ -1,19 +1,41 @@
-# consens.io
+<h1>
+  <img src="static/favicon-square-dark.png#gh-light-mode-only" width="34" height="34" alt="consens.io">
+  <img src="static/favicon-square.png#gh-dark-mode-only" width="34" height="34" alt="consens.io">
+  consens.io
+</h1>
 
 <p align="center">
   <strong>Multi-model consensus for large language models.</strong>
 </p>
 
-<p align="center">
-  <img src="static/favicon-square.png" height="30" alt="consens.io">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/chatgpt.png" height="28" alt="OpenAI">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/claude.png" height="28" alt="Anthropic">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/gemini.png" height="28" alt="Google Gemini">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/mistral.png" height="28" alt="Mistral AI">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/deepseek.png" height="28" alt="DeepSeek">&nbsp;&nbsp;&nbsp;
-  <img src="static/icons/grok.png" height="28" alt="xAI Grok">
-</p>
-
+<table align="center">
+  <tr>
+    <td align="center" width="90">
+      <img src="static/icons/chatgpt.png" height="28" alt="OpenAI">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/claude.png" height="28" alt="Anthropic">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/gemini.png" height="28" alt="Gemini">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/mistral.png" height="28" alt="Mistral AI">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/deepseek.png" height="28" alt="DeepSeek">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/grok.png" height="28" alt="xAI Grok">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/glm.png" height="28" alt="GLM">
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/kimi.png" height="28" alt="Kimi">
+    </td>
+  </tr>
+</table>
 **consens.io** is an experimental multi-model AI system for comparing and synthesizing responses from independent large language models.
 
 Instead of relying on a single model, consens.io queries models from multiple providers independently and analyzes their responses to identify **agreement, disagreement, and uncertainty**. A separate synthesis step can then generate a consolidated answer from the collected outputs.
@@ -37,10 +59,10 @@ Model agreement should not be interpreted as factual correctness. Consensus is t
 
 ## Stack
 
-* Python / FastAPI
-* JavaScript
-* Firebase / Firestore
-* Multiple LLM provider APIs
+- Python / FastAPI
+- JavaScript
+- Firebase / Firestore
+- Multiple LLM provider APIs
 
 ## Live
 
