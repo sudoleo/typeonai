@@ -66,6 +66,11 @@ function boot() {
             generation: 1,
             snapshot: () => ({ uid: user.uid, generation: 1 })
           },
+          modelPrefs: [{
+            key: "OpenAI",
+            responseId: "openaiResponse",
+            textId: "openaiModelText"
+          }],
           state: { set: vi.fn() },
           consensusBodyEl: root => root?.querySelector("#consensusAnswerBody"),
           setAppTitle: vi.fn(),
@@ -154,6 +159,31 @@ describe("guided-run block belongs to the visible run", () => {
 
     await new Promise(resolve => setTimeout(resolve, 260));
     expect(document.getElementById("runTime").textContent).toBe("0:12");
+    dom.window.close();
+  });
+
+  it("shows a live per-model bar and completes it with the answer", async () => {
+    const { registry, document, dom } = boot();
+    const run = startRun(registry, "A");
+
+    await new Promise(resolve => setTimeout(resolve, 220));
+    const bar = document.querySelector(".run-model-track i");
+    const runningProgress = parseFloat(bar.style.getPropertyValue("--p"));
+    expect(runningProgress).toBeGreaterThan(0);
+    expect(runningProgress).toBeLessThan(100);
+
+    registry.update(run.runId, context => {
+      context.modelResults.OpenAI = {
+        provider: "OpenAI",
+        boxId: "openaiResponse",
+        status: "complete",
+        text: "finished answer"
+      };
+    });
+    await new Promise(resolve => setTimeout(resolve, 220));
+
+    expect(bar.style.getPropertyValue("--p")).toBe("100.0%");
+    expect(bar.closest(".run-model").dataset.state).toBe("done");
     dom.window.close();
   });
 

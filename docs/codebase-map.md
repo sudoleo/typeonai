@@ -678,11 +678,13 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
   `consensus-run.js`/`consensus-actions.js` und `isBoxDone` in
   `consensus-progress.js` sind entsprechend umgestellt.
-  Seit **2026-08-31** ist die geschaetzte Stream-Fortschritts-Rechnung
-  (`--stream-progress`, der 120-ms-Ticker und
-  `window.App.agentMode.streamProgressByResponseId()`) **entfallen**: sie hat
-  nur Balken gefuellt, und die gibt es nicht mehr (siehe
-  `consensus-progress.js`). Ebenfalls seit 2026-08-31 zeigen die beiden
+  Seit **2026-08-31** ist die globale Stream-Fortschritts-Bruecke
+  (`--stream-progress`, der 120-ms-Agent-Ticker und
+  `window.App.agentMode.streamProgressByResponseId()`) **entfallen**.
+  `consensus-progress.js` berechnet die visuellen Modell-Balken stattdessen
+  lokal aus dem sichtbaren Antwortstream, haelt sie innerhalb eines Laufs
+  monoton und setzt sie erst beim terminalen Modellstatus auf 100 Prozent.
+  Ebenfalls seit 2026-08-31 zeigen die beiden
   Agent-Mode-Schalter (`#agentModeSwitch`, `#agentModeMenuSwitch`) **immer die
   Einstellung** (`isAgentModeEnabled()`), nie den projizierten Lauf — sie
   beschreiben den NAECHSTEN Lauf. Vorher sprangen sie nach jeder Antwort in
@@ -704,10 +706,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Sichtbar ist immer nur EIN aktiver Schritt — vier Phasen in dieser Reihenfolge:
   `prepare → answers → consensus → differences`. Erledigte Schritte schrumpfen
   auf graue Haken-Zeilen (`#runPast`), die Modell-Zeilen (`#runDetail`:
-  Name links, **gemessene** Zeit rechts) existieren nur waehrend der
-  Antwortphase — der geschaetzte Balken pro Modell ist seit 2026-08-31 raus,
-  weil die Antworten sichtbar streamen und der Schritt darueber sie zaehlt —,
-  und Phasen ohne ehrlichen Prozentwert laufen
+  Name links, Live-Balken aus dem Antwortstream, **gemessene** Zeit rechts)
+  existieren nur waehrend der Antwortphase, und Phasen ohne ehrlichen
+  Prozentwert laufen
   indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
@@ -1371,10 +1372,12 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
    schließt aktive HTTP-/SDK-Streams, unterbindet weitere Provider-Retries und
    der abgebrochene Generator erreicht keine nachgelagerte Persistenz.
 4. **Agent Mode an:** `consensus-progress.js` begleitet den gefuehrten Lauf
-   rahmenlos unter dem Input. Antwortfortschritt basiert auf
-   `dataset.responseState`; nach dem Fan-out wechselt die Anzeige zur nicht
-   prozentual geschaetzten Synthesephase und verschwindet bei Abschluss, Fehler
-   oder Abbruch. **Agent Mode aus:** `query-send.js` behaelt den Hero-/Screenshot-
+   rahmenlos unter dem Input. Der Gesamtzaehler basiert auf
+   `dataset.responseState`; die einzelnen Modell-Balken wachsen monoton aus
+   dem sichtbaren Stream und erreichen erst beim Abschluss 100 Prozent. Nach
+   dem Fan-out wechselt die Anzeige zur nicht prozentual geschaetzten
+   Synthesephase und verschwindet bei Abschluss, Fehler oder Abbruch.
+   **Agent Mode aus:** `query-send.js` behaelt den Hero-/Screenshot-
    Aufbau mit Composer oben und sechs sichtbaren Antwortboxen bei; die Frage wird
    nur an `/ask_*` gefächert. Es gibt keinen Pipeline-Block, keinen
    `/consensus`-Aufruf und folglich keine Differences oder Claims. Die Body-

@@ -62,22 +62,16 @@ def test_the_direct_comparison_has_no_run_block_at_all():
         assert "if (isDirectComparison()) {" in body, hook
 
 
-def test_the_per_model_rows_measure_instead_of_animating():
-    """Jede Modellzeile hatte einen Balken, gefuellt aus einer Schaetzung des
-    Streams. Waehrend die Antworten sichtbar streamen und der Schritt darueber
-    sie zaehlt, war das die dritte Auskunft ueber denselben Vorgang — und die
-    einzige geratene (User-Befund 2026-08-31). Uebrig bleibt, was gemessen
-    ist: die Zeit, die jedes Modell gebraucht hat."""
+def test_the_per_model_rows_show_live_progress_and_measured_time():
+    """Jede Modellzeile behaelt den Live-Balken aus dem Antwortstream und
+    friert beim Abschluss die gemessene Laufzeit ein."""
     progress = read("static/js/consensus-progress.js")
-    agent = read("static/js/agent-mode.js")
 
-    assert "run-model-track" not in progress
-    assert "run-model-track" not in read("static/css/shell.css")
-    assert "streamProgressByResponseId" not in progress
-    assert "streamProgressByResponseId" not in agent
-    assert "--stream-progress" not in read("static/css/components-consensus.css")
-    # Der 120-ms-Ticker, der die Schaetzung fortschrieb, ist mit ihr weg.
-    assert "agentProgressTicker" not in agent
+    assert 'class="run-model-track"' in progress
+    assert ".run-model-track" in read("static/css/shell.css")
+    assert "function estimateRowProgress(box, done)" in progress
+    assert "Math.max(rowProgress.get(box.id) || 0, nextProgress)" in progress
+    assert 'bar.style.setProperty("--p"' in progress
     assert "rowTimes.set(box.id, Date.now() - startedAt)" in progress
     assert 'class="run-model-time"' in progress
 

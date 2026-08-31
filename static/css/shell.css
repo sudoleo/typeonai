@@ -980,22 +980,21 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
-/* Name links, gemessene Zeit rechts, das Skip-Angebot dazwischen. Der
-   Modell-Balken dazwischen ist entfallen: die Antworten streamen sichtbar,
-   und der Schritt darueber zaehlt sie — ein geschaetzter Balken war die
-   dritte Auskunft ueber denselben Vorgang und die einzige geratene. */
+/* Name links, der Live-Fortschritt in der Mitte, gemessene Zeit rechts. Das
+   Skip-Angebot belegt erst dann eine eigene Spalte, wenn es gebraucht wird. */
 .run-model {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) auto 38px;
   align-items: center;
   gap: 10px;
 }
 
 .run-model-name {
-  flex: 1 1 auto;
+  grid-column: 1;
 }
 
 .run-model-skip {
-  flex: 0 0 auto;
+  grid-column: 3;
 }
 
 /* The skip offer only takes room once it has something to say. */
@@ -1034,16 +1033,32 @@ body:not(.dark-mode) .chat-input-container {
   text-overflow: ellipsis;
 }
 
-/* Ein fertiges Modell ist die einzige Zustandsaenderung, die diese Zeile
-   noch anzeigt: der Name tritt aus dem Grau heraus, die Zeit steht daneben. */
-
 .run-model[data-state="done"] .run-model-name {
   color: var(--ink-2);
 }
 
+.run-model-track {
+  grid-column: 2;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.run-model-track i {
+  display: block;
+  height: 100%;
+  width: var(--p, 0%);
+  background: var(--ink-3);
+  transition: width 0.3s linear;
+}
+
+.run-model[data-state="done"] .run-model-track i {
+  background: var(--agree);
+}
+
 .run-model-time {
-  flex: 0 0 auto;
-  min-width: 38px;
+  grid-column: 4;
   font-size: var(--font-size-micro);
   color: var(--ink-3);
   text-align: right;

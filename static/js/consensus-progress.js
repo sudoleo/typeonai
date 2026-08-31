@@ -102,13 +102,11 @@
   }
 
   // ---- Per-model rows ------------------------------------------------
-  // Only rendered while the models are answering: who is still out, and how
-  // long the ones that came back took. There used to be a bar per model
-  // here, filled from an estimate of the stream. It was a second, guessed
-  // answer to a question the screen already answers truthfully — the
-  // answers stream in visibly, and the step above counts them. What is left
-  // is the part that is measured: the elapsed time each model needed.
+  // Only rendered while the models are answering. Each row combines the
+  // visible activity from the live stream with the measured completion time.
+  // The fill stays monotone and only reaches 100% once the model is done.
   const rowTimes = new Map();
+  const rowProgress = new Map();
 
   // A run is only as fast as its slowest model. Once enough models have
   // answered, a straggler is measurably late rather than merely slow — and
@@ -132,6 +130,7 @@
       const name = box.dataset.shortLabel || box.dataset.model || "Model";
       return '<span class="run-model" data-box="' + box.id + '">'
         + '<span class="run-model-name">' + name + "</span>"
+        + '<span class="run-model-track" aria-hidden="true"><i></i></span>'
         + '<span class="run-model-skip"></span>'
         + '<span class="run-model-time">·</span>'
         + "</span>";
@@ -166,6 +165,19 @@
     slot.appendChild(btn);
   }
 
+  function estimateRowProgress(box, done) {
+    if (done) return 1;
+    const content = box.querySelector(".collapsible-content");
+    if (content?.classList.contains("is-streaming")) {
+      const chars = (content.textContent || "").trim().length;
+      const eased = 1 - Math.exp(-chars / 420);
+      return Math.min(0.92, 0.12 + eased * 0.8);
+    }
+    // Before the first token, a restrained time-based lead-in shows that the
+    // individual request is alive without letting it look nearly complete.
+    return startedAt ? Math.min(0.1, (Date.now() - startedAt) / 26000) : 0;
+  }
+
   function renderDetail() {
     const detail = $("runDetail");
     if (!detail || detail.hidden) return;
@@ -174,8 +186,14 @@
       const box = document.getElementById(row.dataset.box);
       if (!box) return;
       const done = isBoxDone(box);
+      const nextProgress = estimateRowProgress(box, done);
+      const progress = Math.max(rowProgress.get(box.id) || 0, nextProgress);
+      rowProgress.set(box.id, progress);
 
       row.dataset.state = done ? "done" : "running";
+
+      const bar = row.querySelector(".run-model-track i");
+      if (bar) bar.style.setProperty("--p", (progress * 100).toFixed(1) + "%");
 
       const time = row.querySelector(".run-model-time");
       if (time) {
@@ -354,6 +372,7 @@
     }
     past = [];
     rowTimes.clear();
+    rowProgress.clear();
     detailBuilt = false;
     startedAt = 0;
     answersFinishedAt = 0;
