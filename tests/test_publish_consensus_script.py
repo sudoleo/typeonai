@@ -343,6 +343,8 @@ def test_scheduled_publisher_runs_three_times_per_week():
     ).read_text(encoding="utf-8")
 
     assert 'cron: "15 7 * * 1,3,5"' in workflow
+    assert "OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}" in workflow
+    assert "OPENAI_API_KEY" not in workflow
 
 
 def test_topic_selection_retries_a_long_multi_clause_title(monkeypatch):

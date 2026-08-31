@@ -13,10 +13,12 @@ from app.services.llm.consensus_engine import (
     _judge_effort,
     _provider_error_is_retryable,
     _resolve_differences_engine,
+    _stream_engine_text,
     compute_agreement_score,
     DIFFERENCES_JSON_SCHEMA,
     parse_differences_payload,
 )
+from app.services.llm.engines import _ProviderHTTPStatusError
 
 ANON_MAP = {
     "Model A": "OpenAI",
@@ -341,7 +343,7 @@ class JudgePolicyTests(unittest.TestCase):
                 "openai", cfg.openrouter_model_id(cfg.DEFAULT_OPENAI_MODEL, "openai"), "standard"
             ))
 
-    def test_differences_judge_uses_openrouter_json_object_mode(self):
+    def test_differences_judge_uses_openrouter_json_schema(self):
         response = mock.Mock(status_code=200)
         response.json.return_value = {"choices": [{"message": {"content": "{}"}}]}
         with mock.patch("app.services.llm.consensus_engine.requests.post", return_value=response) as post:
@@ -353,8 +355,62 @@ class JudgePolicyTests(unittest.TestCase):
             )
         self.assertEqual(raw, "{}")
         payload = post.call_args.kwargs["json"]
-        self.assertEqual(payload["response_format"], {"type": "json_object"})
+        response_format = payload["response_format"]
+        self.assertEqual(response_format["type"], "json_schema")
+        self.assertEqual(
+            response_format["json_schema"]["schema"],
+            DIFFERENCES_JSON_SCHEMA,
+        )
+        self.assertIs(response_format["json_schema"]["strict"], True)
         self.assertEqual(payload["provider"], {"zdr": True})
+
+    def test_differences_schema_is_strict_mode_compatible(self):
+        def assert_strict_object_schema(schema):
+            if not isinstance(schema, dict):
+                return
+            if schema.get("type") == "object":
+                properties = schema.get("properties", {})
+                self.assertEqual(set(schema.get("required", [])), set(properties))
+                self.assertIs(schema.get("additionalProperties"), False)
+            for value in schema.values():
+                if isinstance(value, dict):
+                    assert_strict_object_schema(value)
+                elif isinstance(value, list):
+                    for item in value:
+                        assert_strict_object_schema(item)
+
+        assert_strict_object_schema(DIFFERENCES_JSON_SCHEMA)
+
+    def test_streaming_differences_judge_uses_same_json_schema(self):
+        captured = {}
+
+        def fake_stream(**kwargs):
+            captured.update(kwargs)
+            yield {"type": "delta", "text": "{}"}
+
+        with mock.patch(
+            "app.services.llm.streaming.stream_chat_completion_text",
+            side_effect=fake_stream,
+        ):
+            events = list(_stream_engine_text(
+                "gemini",
+                cfg.openrouter_model_id(cfg.DEFAULT_GEMINI_MODEL, "gemini"),
+                cfg.DEFAULT_GEMINI_MODEL,
+                self.ALL_KEYS,
+                system="system",
+                prompt="prompt",
+                max_tokens=2048,
+                json_mode=True,
+                effort="low",
+                json_schema=DIFFERENCES_JSON_SCHEMA,
+            ))
+
+        self.assertEqual(events, [{"type": "delta", "text": "{}"}])
+        self.assertEqual(captured["response_format"]["type"], "json_schema")
+        self.assertEqual(
+            captured["response_format"]["json_schema"]["schema"],
+            DIFFERENCES_JSON_SCHEMA,
+        )
 
     def test_one_openrouter_key_makes_every_judge_family_available(self):
         (provider, _, _), _tier = _resolve_differences_engine("OpenAI", self.ALL_KEYS)
@@ -382,6 +438,22 @@ class JudgePolicyTests(unittest.TestCase):
             with self.subTest(message=message):
                 self.assertEqual(
                     _provider_error_is_retryable(RuntimeError(message)),
+                    expected,
+                )
+
+        for status_code, expected in (
+            (400, False),
+            (401, False),
+            (403, False),
+            (404, False),
+            (429, True),
+            (503, True),
+        ):
+            with self.subTest(status_code=status_code):
+                self.assertEqual(
+                    _provider_error_is_retryable(
+                        _ProviderHTTPStatusError(status_code)
+                    ),
                     expected,
                 )
 

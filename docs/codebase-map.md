@@ -1641,9 +1641,11 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   zehn Minuten.
 - Robustheit Differences (`consensus_engine.py`): einheitlicher Engine-Dispatch
   (`_resolve_engine`/`_call_engine_text`/`_stream_engine_text`) über OpenRouter
-  Chat Completions. Alle Familien fordern `response_format=json_object`; der
-  gemeinsame Parser validiert danach die Pflichtfelder `claims`, `differences`
-  und `best_model` und repariert begrenzt abgeschnittenes JSON.
+  Chat Completions. Strukturierte Aufgaben senden in Streaming- und
+  Non-Streaming-Pfaden das jeweilige JSON-Schema als
+  `response_format=json_schema` mit `strict=true`; der gemeinsame Parser
+  validiert danach weiterhin die Pflichtfelder `claims`, `differences` und
+  `best_model` und repariert begrenzt abgeschnittenes JSON.
   Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
   eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
   die Stufe folgt der Engine — Standard-Engine → Standard-Judge
@@ -2549,8 +2551,10 @@ werden, meldet die API `history_status=unavailable` statt fälschlich eine leere
 History zu behaupten.
 
 **Service-Account-JSONs** im Root (gitignored):
-`consensai-firebase-adminsdk-*.json` für Firebase Admin. LLM-Aufrufe verwenden
-keinen Gemini-Service-Account und kein Google ADC.
+`consensai-firebase-adminsdk-*.json` für Firebase Admin sowie ausschließlich
+der über `GSC_SERVICE_ACCOUNT_JSON` referenzierte Schlüssel für Search Console.
+LLM-Aufrufe verwenden keinen Gemini-Service-Account und kein Google ADC; das
+alte Gemini-ADC-JSON ist entfernt.
 
 **Umgebungsvariablen** (`.env`, Beispiel in `.env.example`):
 - Request-Schutz: `MAX_REQUEST_BODY_BYTES` (Default 16 MiB, erlaubter Bereich
@@ -2660,8 +2664,10 @@ migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
   Zusatz „— Pro only“, damit die Liste vollständig bleibt.
 
 Die frühere Early-/Frontier-Low-Schicht ist vollständig entfernt. Es gibt nur
-Free- und Pro-Zugriff; alte interne Low-Aliasse stehen in `REMOVED_MODEL_IDS`
-und werden beim Laden/Speichern aus bestehenden Admin-Daten entfernt. Gemini
+Free- und Pro-Zugriff; alte interne Low-Aliasse sowie nicht mehr im
+OpenRouter-Katalog vorhandene Legacy-Modell-IDs stehen als Tombstones in
+`REMOVED_MODEL_IDS` und werden beim Laden/Speichern aus bestehenden Admin-Daten
+entfernt. Gemini
   3.5 Flash-Lite ist der Code-/Firestore-Free-Default, Gemini 3.6 Flash ist eine
   direkte Modell-ID. Gemini-Payloads senden modellgenerationsunabhängig keine
   optionale `temperature`, damit neue Admin-IDs nicht an geänderten
@@ -2765,7 +2771,7 @@ Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
   2026-08-09: **39 passed, 1 warning**. Der writerfreie Phase-4-Browserlauf
   wurde nach Phase 6 erneut mit **8 passed, 1 warning** verifiziert. Details in
   `tests/e2e/README.md`.
-- **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-10
+- **Keine CI für Tests**: `.github/workflows/tests.yml` ist am 2026-08-31
   entfernt worden, die Suite läuft nur lokal. Die verbliebenen Workflows
   (`publish-consensus.yml`, `restart-render.yml`) sind Betriebs-Automationen,
   keine Tests. Befehle und Ausschlüsse stehen in `docs/testing.md`.

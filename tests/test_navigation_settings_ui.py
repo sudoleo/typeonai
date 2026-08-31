@@ -491,8 +491,19 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     assert '["freeUsageDisplay", "deepUsageDisplay", "watchUsageDisplay", "countdownDisplay"]' in firebase
     assert "window.App?.sidebarQuota?.setOpen?.(false);" in firebase
     assert "window.App?.sharedModal?.close?.();" in firebase
+    assert "function clearLegacyProviderKeys()" in firebase
+    assert "clearLegacyProviderKeys();" in firebase
     assert "function clearLocalProviderKeys()" in firebase
-    assert '["openrouterKey"]' in firebase
+    for key in (
+        "openrouterKey",
+        "openaiKey",
+        "mistralKey",
+        "anthropicKey",
+        "geminiKey",
+        "deepseekKey",
+        "grokKey",
+    ):
+        assert f'"{key}"' in firebase
     assert "if (previousAuthUid) clearLocalProviderKeys();" in firebase
     assert "function isCurrentAuthenticatedUser(uid, generation)" in firebase
     assert "setBookmarksAccess(false);" in firebase

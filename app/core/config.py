@@ -362,13 +362,12 @@ LEADERBOARD_MODEL_ALIASES = {
 
 ALLOWED_OPENAI_MODELS = {
     "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o", "gpt-3.5-turbo",
-    "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
+    "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
     "gpt-5.5", "gpt-5.4-mini", OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
 }
 
 ALLOWED_MISTRAL_MODELS = {
-    "mistral-large-latest", "mistral-medium-latest", "mistral-small-latest", MISTRAL_PRO_MODEL,
-    "ministral-3b-latest", "ministral-8b-latest",
+    "mistral-small-latest", MISTRAL_PRO_MODEL,
 }
 MISTRAL_REASONING_MODELS = {
     DEFAULT_MISTRAL_MODEL,
@@ -382,14 +381,12 @@ DEPRECATED_MISTRAL_MODELS = {
 }
 
 ALLOWED_ANTHROPIC_MODELS = {
-    "claude-haiku-4-5", "claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-haiku-20241022",
-    "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
+    "claude-haiku-4-5", ANTHROPIC_PRO_MODEL,
 }
 
 ALLOWED_GEMINI_MODELS = {
     GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
-    "gemini-3.1-flash-lite-preview", "gemini-2.5-flash", "gemini-2.0-flash",
+    "gemini-3.1-flash-lite-preview", "gemini-2.5-flash",
     GEMINI_35_FLASH_MODEL,
     GEMINI_PRO_MODEL, "gemini-2.5-pro",
 }
@@ -424,6 +421,24 @@ GROK_MODEL_MIGRATIONS = {
 }
 DEPRECATED_GROK_MODELS = set(GROK_MODEL_MIGRATIONS)
 REMOVED_MODEL_IDS = {
+    # Nicht mehr im OpenRouter-Katalog vorhandene Legacy-IDs. Die Tombstones
+    # verhindern, dass alte Firestore-Konfigurationen sie erneut aktivieren.
+    "gpt-5-chat-latest",
+    "gpt-5.3",
+    "gpt-5.3-chat-latest",
+    "mistral-large-latest",
+    "mistral-medium-latest",
+    "ministral-3b-latest",
+    "ministral-8b-latest",
+    "claude-sonnet-4-20250514",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-haiku-20241022",
+    "claude-sonnet-4-5",
+    "claude-opus-4-5",
+    "claude-sonnet-4-6",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "gemini-2.0-flash",
     "gpt-5.5-frontier-low",
     "claude-opus-4-8-frontier-low",
     "gemini-3.1-pro-preview-frontier-low",
@@ -486,12 +501,11 @@ def ensure_default_models_allowed():
 ensure_default_models_allowed()
 
 PREMIUM_MODELS = {
-    "gpt-5", "gpt-5-chat-latest", "gpt-5.1", "gpt-5.2", "gpt-5.3", "gpt-5.3-chat-latest", "gpt-5.4",
+    "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
     "gpt-5.5",
     OPENAI_SOL_MODEL,
-    "claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-6", "claude-opus-4-6",
-    "claude-opus-4-7", ANTHROPIC_PRO_MODEL,
-    "mistral-large-latest", "mistral-medium-latest", MISTRAL_PRO_MODEL,
+    ANTHROPIC_PRO_MODEL,
+    MISTRAL_PRO_MODEL,
     GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "gemini-2.5-pro",
     DEEPSEEK_PRO_MODEL,
     "grok-4.20", "grok-4.3",
@@ -522,7 +536,6 @@ MODEL_LABEL_OVERRIDES = {
     "grok-4.5": "Grok 4.5",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
-    "claude-opus-4-7": "Claude Opus 4.7",
     ANTHROPIC_PRO_MODEL: "Claude Opus 4.8",
     GEMINI_36_FLASH_MODEL: "Gemini 3.6 Flash",
     GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
@@ -1370,6 +1383,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 ALLOWED_MISTRAL_MODELS.clear()
                 ALLOWED_MISTRAL_MODELS.update(data["mistral"])
                 ALLOWED_MISTRAL_MODELS.difference_update(DEPRECATED_MISTRAL_MODELS)
+                ALLOWED_MISTRAL_MODELS.difference_update(REMOVED_MODEL_IDS)
             
             # Update Anthropic
             if "anthropic" in data:
@@ -1388,6 +1402,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 ALLOWED_DEEPSEEK_MODELS.clear()
                 ALLOWED_DEEPSEEK_MODELS.update(data["deepseek"])
                 ALLOWED_DEEPSEEK_MODELS.difference_update(DEPRECATED_DEEPSEEK_MODELS)
+                ALLOWED_DEEPSEEK_MODELS.difference_update(REMOVED_MODEL_IDS)
             
             # Update Grok
             if "grok" in data:

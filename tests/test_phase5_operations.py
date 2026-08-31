@@ -593,7 +593,7 @@ def test_correlation_header_metrics_and_log_redaction(caplog, monkeypatch):
     with caplog.at_level("WARNING"):
         result = consensus_engine.query_consensus(
             "question", "answer one", "answer two", None, None, None, None,
-            excluded_models=[], consensus_model="OpenAI", api_keys={"OpenAI": "key"},
+            excluded_models=[], consensus_model="OpenAI", api_keys={"OpenRouter": "key"},
         )
     assert secret not in caplog.text
     assert secret not in result
@@ -626,7 +626,7 @@ def test_provider_pipeline_metrics_classify_normalized_results_without_secrets(
         answers = provider_transport.fan_out_provider_answers(
             question="private question",
             provider_models={"openai": "model"},
-            keys={"OpenAI": "secret-key"},
+            keys={"OpenRouter": "secret-key"},
             is_pro=False,
             deep_think=False,
             provider_call=lambda *args: raw_result,

@@ -374,7 +374,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.get_model_label("grok-4.5"), "Grok 4.5")
 
     def test_unknown_allowed_style_ids_get_public_product_labels(self):
-        self.assertEqual(cfg.get_model_label("mistral-medium-latest"), "Mistral Medium")
+        self.assertEqual(cfg.get_model_label("mistral-medium-4"), "Mistral Medium 4")
         self.assertEqual(cfg.get_model_label("claude-haiku-4-5"), "Claude Haiku 4.5")
         self.assertEqual(cfg.get_model_label("gpt-5.1"), "GPT-5.1")
 
@@ -393,7 +393,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         with patch.object(
             admin_router.provider_transport,
             "developer_keys",
-            return_value={"OpenAI": "sk-secret-value", "Gemini": ""},
+            return_value={"OpenRouter": "sk-secret-value"},
         ), patch.object(
             admin_router.provider_transport,
             "provider_available",

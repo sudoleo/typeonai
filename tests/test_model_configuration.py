@@ -230,6 +230,38 @@ class ModelConfigurationTests(unittest.TestCase):
                 self.assertNotIn(model_id, cfg.ALLOWED_CONSENSUS_MODELS)
                 self.assertNotIn(model_id, cfg.PREMIUM_MODELS)
 
+    def test_missing_openrouter_legacy_ids_stay_removed(self):
+        legacy_ids = {
+            "gpt-5-chat-latest",
+            "gpt-5.3",
+            "gpt-5.3-chat-latest",
+            "mistral-large-latest",
+            "mistral-medium-latest",
+            "ministral-3b-latest",
+            "ministral-8b-latest",
+            "claude-sonnet-4-20250514",
+            "claude-3-7-sonnet-20250219",
+            "claude-3-5-haiku-20241022",
+            "claude-sonnet-4-5",
+            "claude-opus-4-5",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
+            "claude-opus-4-7",
+            "gemini-2.0-flash",
+        }
+        self.assertLessEqual(legacy_ids, cfg.REMOVED_MODEL_IDS)
+        self.assertTrue(legacy_ids.isdisjoint(cfg.ALL_ALLOWED_MODELS))
+        self.assertTrue(legacy_ids.isdisjoint(cfg.PREMIUM_MODELS))
+
+        for provider, model_id in (
+            ("openai", "gpt-5.3"),
+            ("mistral", "mistral-large-latest"),
+            ("anthropic", "claude-sonnet-4-6"),
+            ("gemini", "gemini-2.0-flash"),
+        ):
+            normalized = normalize_models_document({provider: [model_id]})
+            self.assertNotIn(model_id, normalized[provider])
+
     def test_admin_drops_removed_aliases_everywhere(self):
         removed = next(iter(cfg.REMOVED_MODEL_IDS))
         normalized = normalize_models_document({

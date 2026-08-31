@@ -286,14 +286,31 @@ function setBookmarksAccess(isLoggedIn) {
   }
 }
 
+const LEGACY_PROVIDER_KEY_STORAGE = [
+    "openaiKey",
+    "mistralKey",
+    "anthropicKey",
+    "geminiKey",
+    "deepseekKey",
+    "grokKey",
+];
+
+function clearLegacyProviderKeys() {
+  LEGACY_PROVIDER_KEY_STORAGE.forEach(key => localStorage.removeItem(key));
+}
+
 function clearLocalProviderKeys() {
-  ["openrouterKey"]
+  ["openrouterKey", ...LEGACY_PROVIDER_KEY_STORAGE]
     .forEach(key => {
       localStorage.removeItem(key);
       const input = document.getElementById(key);
       if (input) input.value = "";
     });
 }
+
+// Einmalige Migration für bereits eingeloggte Nutzer, die seit der
+// OpenRouter-Umstellung noch keinen Logout ausgeführt haben.
+clearLegacyProviderKeys();
 
 function clearAuthenticatedUiState() {
   bookmarkViewEpoch += 1;

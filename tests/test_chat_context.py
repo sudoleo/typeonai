@@ -723,7 +723,7 @@ def test_memory_input_is_valid_json_within_budget_and_fallback_keeps_newest_turn
         captured.update(kwargs)
         return json.dumps(response)
 
-    ChatMemoryCompressor("OpenAI", {"OpenAI": "key"}, query_fn=query).update(
+    ChatMemoryCompressor("OpenAI", {"OpenRouter": "key"}, query_fn=query).update(
         empty_memory(), turns, allowed_turns=turns
     )
     parsed_prompt = json.loads(captured["prompt"])

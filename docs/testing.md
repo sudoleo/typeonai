@@ -94,12 +94,12 @@ Remove-Item Env:RUN_E2E
 
 ## CI
 
-`.github/workflows/tests.yml` ist für Pull Requests, Pushes auf `main` und
-manuelle Dispatches blockierend. Der erste Job installiert
-`requirements-test.txt` und führt die reguläre Suite aus. Danach startet ein
-separater Job den Firestore-Emulator mit Java/Firebase CLI und führt die echten
-Emulator-Race-/Browser-E2E-Verträge aus. Ein grüner lokaler Lauf ersetzt diese
-beiden unabhängigen CI-Gates nicht.
+Für Tests existiert bewusst kein GitHub-Actions-Workflow. Insbesondere ist
+`.github/workflows/tests.yml` entfernt, damit Pushes keine Test-Runs oder
+Fehlermails auslösen. Reguläre Suite, JavaScript-Tests, Frontend-Build und bei
+Bedarf die Emulator-E2E-Suite werden ausschließlich lokal mit den Befehlen in
+diesem Dokument ausgeführt. Die verbliebenen GitHub-Workflows sind
+Betriebs-Automationen und keine Test-CI.
 
 Tests dürfen weiterhin nicht still von der lokalen `.env` abhängen; nötige
 Environment-Variablen im Test selbst setzen (`monkeypatch.setenv`) statt sie

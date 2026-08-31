@@ -14,6 +14,7 @@ from app.services.llm.citations import coerce_text
 from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
+    _raise_provider_http_status,
     openrouter_headers,
 )
 from app.services.llm.consensus_scoring import (
@@ -76,6 +77,24 @@ def resolve_consensus_engine_model(consensus_model: str):
 
 class _InvalidEngineError(Exception):
     pass
+
+
+def _structured_response_format(
+    json_mode: bool,
+    json_schema: dict | None,
+) -> dict | None:
+    if not json_mode:
+        return None
+    if json_schema:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "consensio_structured_response",
+                "strict": True,
+                "schema": json_schema,
+            },
+        }
+    return {"type": "json_object"}
 
 
 def _effective_temperature(provider: str, api_model: str, temperature: float | None) -> float | None:
@@ -145,8 +164,9 @@ def _call_engine_text(
     }
     if temperature is not None:
         payload["temperature"] = temperature
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
+    response_format = _structured_response_format(json_mode, json_schema)
+    if response_format is not None:
+        payload["response_format"] = response_format
     if effort:
         payload["reasoning"] = {"effort": effort}
     response = requests.post(
@@ -157,7 +177,7 @@ def _call_engine_text(
     )
     with managed_provider_resource(response):
         if response.status_code >= 400:
-            raise RuntimeError(f"OpenRouter: {response.status_code}")
+            _raise_provider_http_status(response)
         data = response.json()
     message = ((data.get("choices") or [{}])[0].get("message") or {})
     text = coerce_text(message.get("content")).strip()
@@ -179,8 +199,8 @@ def query_engine_json(
 
     This deliberately shares the exact credential and model-resolution path
     used by Consensus/Differences. Callers remain responsible for parsing and
-    validating the returned JSON; providers other than Gemini currently receive
-    JSON mode without a provider-native schema.
+    validating the returned JSON in addition to OpenRouter's structured-output
+    schema enforcement.
     """
     resolved = _resolve_engine(engine_model)
     if resolved is None:
@@ -231,7 +251,7 @@ def _stream_engine_text(
     if not api_key:
         raise _InvalidEngineError("OpenRouter credential is missing")
     temperature = _effective_temperature(provider, api_model, temperature)
-    response_format = {"type": "json_object"} if json_mode else None
+    response_format = _structured_response_format(json_mode, json_schema)
     yield from stream_chat_completion_text(
         api_key=api_key,
         model=api_model,
@@ -1384,7 +1404,8 @@ DIFFERENCES_RETRY_SUFFIX = (
 # Feldreihenfolge ist Absicht: "differences" steht vor "claims", damit bei
 # einem gerissenen Token-Budget eher die redundantere Claim-Liste als die
 # Widersprueche fehlt. Alle Modellfamilien erhalten denselben OpenRouter-
-# JSON-Object-Vertrag; dieses Schema wird danach serverseitig validiert.
+# Structured-Output-Vertrag; dieses Schema wird danach zusätzlich serverseitig
+# validiert.
 DIFFERENCES_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -1409,11 +1430,15 @@ DIFFERENCES_JSON_SCHEMA = {
                                 "quote": {"type": "string"},
                             },
                             "required": ["stance", "models", "quote"],
+                            "additionalProperties": False,
                         },
                     },
                     "verify": {"type": "string"},
                 },
-                "required": ["claim", "s", "type", "positions"],
+                "required": [
+                    "claim", "s", "type", "severity", "positions", "verify",
+                ],
+                "additionalProperties": False,
             },
         },
         "claims": {
@@ -1434,15 +1459,18 @@ DIFFERENCES_JSON_SCHEMA = {
                                 "quote": {"type": "string"},
                             },
                             "required": ["model", "quote"],
+                            "additionalProperties": False,
                         },
                     },
                 },
                 "required": ["s", "agree", "dissent"],
+                "additionalProperties": False,
             },
         },
         "best_model": {"type": "string"},
     },
     "required": ["differences", "claims", "best_model"],
+    "additionalProperties": False,
 }
 
 _NON_RETRYABLE_PROVIDER_STATUS_RE = re.compile(
@@ -1453,6 +1481,9 @@ _NON_RETRYABLE_PROVIDER_STATUS_RE = re.compile(
 def _provider_error_is_retryable(error: Exception) -> bool:
     """4xx-Konfigurations/Auth-/Model-Fehler werden durch denselben Request
     nicht besser. Rate limits (429), 5xx und Transportfehler duerfen retryen."""
+    status_code = getattr(error, "status_code", None)
+    if status_code in {400, 401, 403, 404}:
+        return False
     return not bool(_NON_RETRYABLE_PROVIDER_STATUS_RE.search(str(error or "")))
 
 

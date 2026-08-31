@@ -157,8 +157,8 @@ Suchindex bleibt Sache der jeweiligen Suchmaschine/Search Console.
 1. Admin-Konfiguration über `GET /api/v1/publisher/config` laden und bei
    `enabled=false` ohne LLM-Call erfolgreich beenden,
 2. letzte eigene Share-Fragen laden,
-3. optional per OpenAI Responses API + Web Search eine neue, nicht redundante
-   Frage wählen,
+3. optional per OpenRouter Chat Completions + Web Search eine neue, nicht
+   redundante Frage wählen,
 4. die Frage als kurze, einzelne Google-Suchintention prüfen (6–16 Wörter,
    höchstens 110 Zeichen, kein „As of …“, keine verschachtelte Trade-off-Frage)
    und bei Bedarf bis zu zweimal neu generieren,
