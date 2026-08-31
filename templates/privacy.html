@@ -67,7 +67,7 @@
             run, so those model providers receive it with each question. Nothing is derived, summarized, or rewritten automatically from your
             questions or from model answers. If you explicitly select a statement in an interactive question, Consensus, or model answer and submit
             a &ldquo;Remember&rdquo; or &ldquo;Correct memory&rdquo; action, we send the current Memory (up to your plan limit), the selected statement,
-            your text, and the selected add-or-correct intent to the configured OpenAI model. It may return only one structured replace, append, or delete proposal;
+            your text, and the selected add-or-correct intent to the configured model through OpenRouter. It may return only one structured replace, append, or delete proposal;
             our server validates and applies it. A Remember action may append or replace one uniquely matching passage but cannot delete one.
             We store an idempotency record, persistent usage counters, and the previous Memory revision
             for the short Undo window. These records and revisions are never used for Watch, Publisher, or Topic runs and are deleted with your account.
@@ -79,7 +79,7 @@
           <li><strong>Feedback:</strong> if you send feedback, we store your message, the e-mail address you optionally provide, your account ID, and a timestamp, for as long as needed to follow up on the feedback.</li>
           <li><strong>Pro interest list:</strong> if you click a Pro-interest option, we store your account ID, e-mail address, and a timestamp so we can inform you about this feature.</li>
           <li><strong>Local storage:</strong> used for interface preferences, session flags, and optional user settings. We do not use non-essential cookies.</li>
-          <li><strong>Your own API keys, optional:</strong> if you enter keys, they are stored in your browser only. With each request, the key is transmitted over an encrypted connection through our server to the selected provider. We do not store your keys on the server.</li>
+          <li><strong>Your own OpenRouter key, optional:</strong> if you enter it, the key is stored in your browser only. With each request, it is transmitted over an encrypted connection through our server to OpenRouter, which acts as our processor for this purpose. We do not store your key on the server.</li>
         </ul>
       </section>
 
@@ -120,22 +120,22 @@
       <section class="legal-panel">
         <h2>4. Provider routing</h2>
         <p>
-          Model requests are sent to the model providers selected for the query: OpenAI (USA), Anthropic (USA),
-          Google (USA), Mistral AI (France), xAI (USA), and DeepSeek (People's Republic of China). consens.io does
-          not add an extra model marketplace or router layer between your prompt and those selected providers.
+          All model requests are sent first to OpenRouter (OpenRouter, Inc., USA), which routes them to the model
+          providers selected for the query: OpenAI (USA), Anthropic (USA), Google (USA), Mistral AI (France), xAI
+          (USA), and DeepSeek (People's Republic of China). The six model families and their labels remain visible
+          in the app.
         </p>
         <p>
-          <strong>Note on DeepSeek:</strong> DeepSeek processes data in China, a country without an EU adequacy
-          decision. If you select DeepSeek models, your prompt and attachments are transmitted to DeepSeek for
-          processing. If you do not want this, deselect DeepSeek models before sending a query; the other models
-          work independently of this choice. See also the <a href="/terms">Terms of Use</a>.
+          consens.io marks every OpenRouter request as Zero Data Retention (ZDR). OpenRouter does not log prompt or
+          response content for these requests, does not use it for training, and routes only to provider endpoints
+          that do not retain prompt or response content. The underlying provider still processes the request in
+          order to generate its answer. We do not enable provider pinning.
         </p>
         <p>
-          <strong>Consensus API notice:</strong> unlike the interactive web app, Consensus API v1 runs use a fixed
-          server-selected six-provider comparison. DeepSeek is therefore a mandatory recipient of API prompts and
-          cannot be deselected by API customers. This includes the admin-controlled Scheduled Publisher, which runs
-          on automatically selected public-interest topics. Do not use API runs for content that must not be
-          transferred to or processed in China.
+          <strong>Note on DeepSeek:</strong> if you select DeepSeek, or use a fixed six-family Consensus API run,
+          OpenRouter may transmit the request to a DeepSeek endpoint for processing. This can involve processing in
+          China, a country without an EU adequacy decision. Do not submit content that must not be processed there.
+          See also the <a href="/terms">Terms of Use</a>.
         </p>
         <p class="subtle">
           Necessary infrastructure providers, authentication services, and selected AI providers may still process
@@ -236,14 +236,15 @@
           <li><strong>Hosting:</strong> Render (Render Services, Inc., USA) hosts the application server, including technical request logs.</li>
           <li><strong>Authentication and database:</strong> Google Firebase Authentication and Google Cloud Firestore (Google Ireland Ltd. / Google LLC, USA) for accounts, tier status, and bookmarks.</li>
           <li><strong>Analytics:</strong> Umami Cloud (see section 3).</li>
-          <li><strong>AI model providers:</strong> the providers selected per query (see section 4).</li>
+          <li><strong>AI routing:</strong> OpenRouter (OpenRouter, Inc., USA) as processor, with ZDR enabled for every request.</li>
+          <li><strong>AI model providers:</strong> the underlying providers selected per query (see section 4).</li>
           <li><strong>Optional notifications:</strong> Telegram Messenger Inc. via the Telegram Bot API, only after you
             connect Telegram and enable that delivery channel. Telegram receives the notification content described
             in section 5.</li>
         </ul>
         <p>
-          Processing may occur outside the EU/EEA, in particular in the USA and, if you select DeepSeek models or
-          submit a Consensus API run, in China. For transfers to
+          Processing may occur outside the EU/EEA, in particular in the USA and, if a DeepSeek endpoint handles a
+          selected model or fixed Consensus API run, in China. For transfers to
           the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
           Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
           DeepSeek, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
@@ -254,11 +255,11 @@
         <h2>8. Storage periods</h2>
         <p>
           We retain data only as long as necessary for the stated purposes or as required by law. Technical
-          logs are generally kept short-term. Consensus API run content is retained for at most 30 days after
-          acceptance and completed API runs can be deleted earlier through the API. Other model content is retained
-          only insofar as needed for stability, abuse defense, or aggregated and anonymized product improvement. For
-          shared pages and pending share results, the specific retention periods in section 5 apply. On request, we
-          will review earlier deletion.
+          logs are generally kept short-term and do not contain prompt or response content. Consensus API run content
+          is retained for at most 30 days after acceptance and completed API runs can be deleted earlier through the
+          API. Ordinary web-app prompts and outputs are not retained unless you save, share, or watch the result. For
+          bookmarks, shared pages, Watches, and pending share results, the specific retention periods described above
+          apply. On request, we will review earlier deletion.
         </p>
       </section>
 
