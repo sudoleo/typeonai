@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="static/favicon.png" height="30" alt="consens.io">&nbsp;&nbsp;&nbsp;
+  <img src="static/favicon-square.png" height="30" alt="consens.io">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/chatgpt.png" height="28" alt="OpenAI">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/claude.png" height="28" alt="Anthropic">&nbsp;&nbsp;&nbsp;
   <img src="static/icons/gemini.png" height="28" alt="Google Gemini">&nbsp;&nbsp;&nbsp;
