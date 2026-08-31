@@ -109,7 +109,16 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
 DEEPSEEK_FLASH_MODEL = "deepseek-v4-flash"
 DEEPSEEK_PRO_MODEL = "deepseek-v4-pro"
-DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_PRO_MODEL
+# Basis-Default wie bei jeder anderen Familie das guenstige Modell. Stand hier
+# als einzige Familie auf dem Pro-Modell, was drei Stellen still verteuert hat:
+# die Consensus-Engine "DeepSeek" (als free ausgewiesen, lief aber auf Pro und
+# damit auf demselben Modell wie "DeepSeek-Pro"), den Standard-Judge der
+# Differences-Engine und den Fallback in engines.py fuer Aufrufe ohne
+# ausdrueckliche Modellwahl. Die Antwortmodelle waren nie betroffen: Presets
+# fast/balanced und der Free-Default zeigen laengst auf Flash. Wo Pro gewollt
+# ist, steht es ausdruecklich da -- Preset "thorough", Alias "DeepSeek-Pro",
+# judge_models_pro und die Benchmark-Matrix.
+DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_FLASH_MODEL
 GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"
 GROK_FAST_MODEL = GROK_NO_REASONING_MODEL
 DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
