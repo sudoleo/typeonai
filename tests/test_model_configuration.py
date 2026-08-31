@@ -298,6 +298,41 @@ class ModelConfigurationTests(unittest.TestCase):
                 self.assertEqual(payload["provider"], {"zdr": True})
                 self.assertEqual(payload["tools"][0]["type"], "openrouter:web_search")
 
+    def test_web_search_budget_and_engine_per_family(self):
+        """Grok braucht `exa`, sonst greift keiner der Suchparameter.
+
+        Mit "auto" landet Grok auf xAIs nativer Live-Suche, die `max_uses`
+        ignoriert: gemessen 6-11 Quellen und ~66.000 Prompt-Tokens statt 5
+        Quellen und ~4.800. Die anderen Familien bleiben auf "auto" -- ein
+        erzwungenes "native" schaltet Geminis Grounding-Suche ganz ab.
+        """
+        for provider, expected_engine in [
+            ("openai", "auto"),
+            ("mistral", "auto"),
+            ("anthropic", "auto"),
+            ("gemini", "auto"),
+            ("deepseek", "auto"),
+            ("grok", "exa"),
+        ]:
+            with self.subTest(provider=provider):
+                payload = build_provider_payload(
+                    provider, question="dry run", system_prompt="system"
+                )["payload"]
+                tool = payload["tools"][0]
+                self.assertEqual(tool["type"], "openrouter:web_search")
+                self.assertEqual(tool["parameters"]["engine"], expected_engine)
+                # Eine Suchrunde im Normallauf; jede weitere kostet eine
+                # komplette Modellrunde extra.
+                self.assertEqual(tool["parameters"]["max_uses"], 1)
+                self.assertEqual(payload["max_tool_calls"], 2)
+
+    def test_deep_search_keeps_the_wider_search_budget(self):
+        payload = build_provider_payload(
+            "grok", question="dry run", system_prompt="system", deep_search=True
+        )["payload"]
+        self.assertEqual(payload["tools"][0]["parameters"]["max_uses"], 5)
+        self.assertEqual(payload["max_tool_calls"], 6)
+
     def test_gemini_models_are_available_to_admin(self):
         enforced = _server_enforced_models()["gemini"]
         self.assertEqual(enforced, [])

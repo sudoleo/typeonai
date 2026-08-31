@@ -19,7 +19,7 @@ def test_deepseek_payload_uses_openrouter_search_without_provider_pinning():
     assert built["api_model"] == f"deepseek/{cfg.DEEPSEEK_FLASH_MODEL}"
     assert payload["tools"] == [{
         "type": "openrouter:web_search",
-        "parameters": {"engine": "auto", "max_uses": 2},
+        "parameters": {"engine": "auto", "max_uses": 1},
     }]
     assert payload["provider"] == {"zdr": True}
     assert "order" not in payload["provider"]

@@ -44,6 +44,20 @@ _DEEP_SEARCH_MODEL_BY_PROVIDER = {
 }
 
 
+# Suchmaschine je Familie. "auto" laesst OpenRouter waehlen und trifft fuer
+# fuenf Familien die richtige Wahl. Grok ist die Ausnahme: dort landet "auto"
+# auf xAIs nativer Live-Suche, die `max_uses` und `max_results` schlicht
+# ignoriert. Gemessen am 2026-08-31, gleiche Frage, je zwei Laeufe:
+#
+#   grok, engine "auto"  ->  6-11 Quellen, ~66.000 Prompt-Tokens, ~0,10 $, 20 s TTFT
+#   grok, engine "exa"   ->     5 Quellen,   ~4.800 Prompt-Tokens, ~0,015 $, 4 s TTFT
+#
+# Gleiche Antwortlaenge, weniger Quellenflut, ein Viertel der Wartezeit und ein
+# Sechstel der Kosten. Fuer die anderen Familien bleibt "auto" richtig: bei
+# Gemini schaltet ein erzwungenes "native" die Grounding-Suche ganz ab.
+_SEARCH_ENGINE_BY_PROVIDER = {"grok": "exa"}
+
+
 class _ProviderHTTPStatusError(RuntimeError):
     """Content-free upstream status error for metrics and retry policy."""
 
@@ -181,10 +195,13 @@ def build_provider_payload(
         "provider": {"zdr": True},
     }
     if not benchmark_mode:
-        max_uses = 5 if deep_search else 2
+        max_uses = 5 if deep_search else 1
         payload["tools"] = [{
             "type": "openrouter:web_search",
-            "parameters": {"engine": "auto", "max_uses": max_uses},
+            "parameters": {
+                "engine": _SEARCH_ENGINE_BY_PROVIDER.get(provider_key, "auto"),
+                "max_uses": max_uses,
+            },
         }]
         payload["max_tool_calls"] = max_uses + 1
 

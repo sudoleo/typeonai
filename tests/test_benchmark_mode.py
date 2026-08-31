@@ -68,7 +68,7 @@ class BenchmarkModeTests(unittest.TestCase):
         self.assertEqual(request["payload"]["messages"][0]["content"], "system")
         self.assertEqual(
             request["payload"]["tools"],
-            [{"type": "openrouter:web_search", "parameters": {"engine": "auto", "max_uses": 2}}],
+            [{"type": "openrouter:web_search", "parameters": {"engine": "auto", "max_uses": 1}}],
         )
 
     def test_default_matches_normal_mode(self):
