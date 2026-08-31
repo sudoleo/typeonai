@@ -69,12 +69,10 @@ _SHARE_ID_RE = re.compile(r"^[A-Za-z0-9]{%d}$" % SHARE_ID_LENGTH)
 MAX_SLUG_CHARS = 60
 
 PROVIDER_ORDER = tuple(cfg.PROVIDER_LABEL_BY_ID.values())
-# Anzeige-Labels analog zu buildConsensusCitation() im Frontend. Ohne Eintrag
-# gilt der Familienname selbst.
+# Anzeige-Labels analog zu buildConsensusCitation() im Frontend -- dieselbe
+# Quelle wie dort: die Provider-Registry.
 PROVIDER_CITATION_LABELS = {
-    **{label: label for label in PROVIDER_ORDER},
-    "Anthropic": "Anthropic Claude",
-    "Gemini": "Google Gemini",
+    provider.label: provider.citation_label for provider in cfg.PROVIDERS.values()
 }
 # Provider-Logos analog zum Model-Picker auf /app (static/icons/chat_icons/).
 PROVIDER_ICONS = {

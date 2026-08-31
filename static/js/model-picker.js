@@ -56,6 +56,26 @@
     return window.App.modelPrefs.find(pref => pref.responseId === responseId) || null;
   }
 
+  // Ein Lauf vergleicht hoechstens so viele Familien, wie der Server erlaubt
+  // (cfg.MAX_RUN_FAMILIES). Mehr Familien duerfen konfiguriert sein: die
+  // Auswahl bleibt eine Auswahl, sie waechst nur nicht ueber das Limit.
+  function runFamilyCap() {
+    return Number(window.App.maxRunFamilies) > 0 ? Number(window.App.maxRunFamilies) : 6;
+  }
+
+  function selectedFamilyCount(exceptPref) {
+    return window.App.modelPrefs.filter(pref => (
+      pref !== exceptPref && document.getElementById(pref.checkId)?.checked
+    )).length;
+  }
+
+  function capBlocksInclusion(pref) {
+    return selectedFamilyCount(pref) >= runFamilyCap();
+  }
+
+  window.App.runFamilyCap = runFamilyCap;
+  window.App.capBlocksInclusion = capBlocksInclusion;
+
   // Provider, die der LAUFENDE Lauf bewusst ausgelassen hat (heute: DeepSeek,
   // solange Anhaenge mitgehen). Der Block gehoert dem Lauf, nicht dem Composer:
   // beim Senden wandern die Anhaenge an die Nachricht, der Composer ist wieder
@@ -140,10 +160,10 @@
       : prefOrResponseId;
     if (!pref) return;
 
+    const { persist = false, syncCheckbox = true, animate = persist } = options;
     const checkbox = document.getElementById(pref.checkId);
     const box = document.getElementById(pref.responseId);
     const label = document.querySelector(`label[for='${pref.checkId}']`);
-    const { persist = false, syncCheckbox = true, animate = persist } = options;
     // Eine ausdrueckliche Nutzeraktion (persist) ist staerker als der Block des
     // laufenden Laufs: wer das Modell selbst wieder anhakt, bekommt es zurueck.
     if (persist) runBlockedResponseIds.delete(pref.responseId);
@@ -154,7 +174,19 @@
     const attachmentBlocked = runBlockedResponseIds.has(pref.responseId)
       || (checkbox?.disabled
         && checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice");
-    const checked = attachmentBlocked ? false : !!isChecked;
+    let checked = attachmentBlocked ? false : !!isChecked;
+
+    // Die siebte Familie wird abgelehnt statt eine andere still abzuwaehlen.
+    // Gilt auch fuer die Wiederherstellung gespeicherter Auswahlen, damit ein
+    // alter localStorage-Stand das Limit nicht umgeht.
+    if (checked && capBlocksInclusion(pref)) {
+      checked = false;
+      if (persist) {
+        window.App.showPopup?.(
+          `A run compares up to ${runFamilyCap()} models. Leave one out to add ${pref.label}.`
+        );
+      }
+    }
 
     if (checkbox && syncCheckbox) {
       checkbox.checked = checked;
@@ -580,10 +612,13 @@
       "aria-label",
       (included ? "Exclude " : "Include ") + pref.label
     );
+    const capped = !included && capBlocksInclusion(pref);
     toggle.title = included
       ? pref.label + " answers this run — click to leave it out"
-      : pref.label + " is left out — click to include it";
-    toggle.disabled = !!checkbox?.disabled;
+      : (capped
+        ? `A run compares up to ${runFamilyCap()} models — leave one out to add ${pref.label}`
+        : pref.label + " is left out — click to include it");
+    toggle.disabled = !!checkbox?.disabled || capped;
     toggle.innerHTML = '<span class="model-picker-row-check" aria-hidden="true"></span>';
     toggle.addEventListener("click", event => {
       event.preventDefault();

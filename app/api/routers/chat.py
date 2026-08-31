@@ -1244,6 +1244,15 @@ def consensus(request: Request, data: dict = Body(...)):
             and answer.strip()
         )
     }
+    # Ein Lauf vergleicht hoechstens MAX_RUN_FAMILIES Modelle. Mehr Familien
+    # duerfen konfiguriert sein; der Lauf bleibt ein Sechs-Modell-Vergleich
+    # (Prompt-Laenge, Kosten, Lesbarkeit). Der Picker haelt dieselbe Grenze.
+    if len(included_answers) > cfg.MAX_RUN_FAMILIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A run compares at most {cfg.MAX_RUN_FAMILIES} model answers.",
+        )
+
     # Familien-Sicht derselben Antworten: die Engines und die Domaenen-
     # Pipeline sprechen Familien-IDs, Persistenz und Anzeige die Labels.
     included_by_provider = {

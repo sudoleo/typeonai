@@ -8,32 +8,19 @@
   const registry = window.App.runRegistry;
   const trackAppEvent = window.App.trackAppEvent || (() => {});
 
-  const PROVIDERS = [
-    {
-      provider: "OpenAI", endpoint: "/ask_openai", boxId: "openaiResponse",
-      checkboxId: "selectOpenAI", selectId: "openaiModelSelect", keyName: "openrouterKey"
-    },
-    {
-      provider: "Mistral", endpoint: "/ask_mistral", boxId: "mistralResponse",
-      checkboxId: "selectMistral", selectId: "mistralModelSelect", keyName: "openrouterKey"
-    },
-    {
-      provider: "Anthropic", endpoint: "/ask_claude", boxId: "claudeResponse",
-      checkboxId: "selectClaude", selectId: "claudeModelSelect", keyName: "openrouterKey"
-    },
-    {
-      provider: "Gemini", endpoint: "/ask_gemini", boxId: "geminiResponse",
-      checkboxId: "selectGemini", selectId: "geminiModelSelect", keyName: "openrouterKey"
-    },
-    {
-      provider: "DeepSeek", endpoint: "/ask_deepseek", boxId: "deepseekResponse",
-      checkboxId: "selectDeepSeek", selectId: "deepseekModelSelect", keyName: "openrouterKey"
-    },
-    {
-      provider: "Grok", endpoint: "/ask_grok", boxId: "grokResponse",
-      checkboxId: "selectGrok", selectId: "grokModelSelect", keyName: "openrouterKey"
-    }
-  ];
+  // Familien des Laufs: window.App.modelPrefs ist die eine Quelle (Server:
+  // cfg.PROVIDERS). Der eine OpenRouter-Key gilt fuer alle Familien.
+  function providerDefinitions() {
+    return (window.App.modelPrefs || []).map(pref => ({
+      provider: pref.key,
+      endpoint: pref.endpoint,
+      boxId: pref.responseId,
+      checkboxId: pref.checkId,
+      selectId: pref.selectId,
+      keyName: "openrouterKey",
+      handlesAttachments: pref.handlesAttachments !== false
+    }));
+  }
 
   function isAbortError(error) {
     return error?.name === "AbortError";
@@ -62,9 +49,10 @@
   }
 
   function selectedProviders(attachmentCount, deepSearch) {
-    return PROVIDERS.reduce((items, definition) => {
+    return providerDefinitions().reduce((items, definition) => {
       if (!document.getElementById(definition.checkboxId)?.checked) return items;
-      if (definition.provider === "DeepSeek" && attachmentCount > 0) return items;
+      // Familien, die keine Anhaenge lesen koennen, bleiben bei Anhaengen aussen vor.
+      if (attachmentCount > 0 && !definition.handlesAttachments) return items;
       const select = document.getElementById(definition.selectId);
       const modelId = String(select?.value || "").trim();
       if (!modelId) return items;

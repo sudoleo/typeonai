@@ -101,14 +101,9 @@
         // Differences-Calls). Fällt ohne Daten auf den Freitext-Pfad zurück.
         // =====================================================================
         (function () {
-          const MODEL_BOX_IDS = {
-            OpenAI: "openaiResponse",
-            Mistral: "mistralResponse",
-            Anthropic: "claudeResponse",
-            Gemini: "geminiResponse",
-            DeepSeek: "deepseekResponse",
-            Grok: "grokResponse"
-          };
+          const MODEL_BOX_IDS = Object.fromEntries(
+            (window.App.modelPrefs || []).map(pref => [pref.key, pref.responseId])
+          );
 
           function $(id) { return document.getElementById(id); }
 

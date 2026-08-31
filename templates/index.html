@@ -26,6 +26,8 @@
         data-deep-think-model="{{ deep_think_consensus_model | tojson | forceescape }}"
         data-consensus-presets="{{ consensus_presets | tojson | forceescape }}"
         data-default-consensus-preset="{{ default_consensus_preset | tojson | forceescape }}"
+        data-model-families="{{ model_families | tojson | forceescape }}"
+        data-max-run-families="{{ max_run_families }}"
         data-free-limit="{{ free_limit }}">
   {#
     Scripts and stylesheet come from static/js/bundles.json via
@@ -158,12 +160,11 @@
         <!-- DOM state only. The accessible visual controls live in the
              composer picker; these checkbox IDs remain the app contract. -->
         <div id="modelSelectionArea" hidden aria-hidden="true">
-          <label for="selectOpenAI"><input type="checkbox" id="selectOpenAI" checked>OpenAI</label>
-          <label for="selectMistral"><input type="checkbox" id="selectMistral" checked>Mistral</label>
-          <label for="selectClaude"><input type="checkbox" id="selectClaude" checked>Anthropic Claude</label>
-          <label for="selectGemini"><input type="checkbox" id="selectGemini" checked>Gemini</label>
-          <label for="selectDeepSeek"><input type="checkbox" id="selectDeepSeek" checked>DeepSeek</label>
-          <label for="selectGrok"><input type="checkbox" id="selectGrok" checked>Grok</label>
+          {#- Vorausgewaehlt sind die ersten max_run_families Familien: ein Lauf
+              bleibt ein Sechs-Modell-Vergleich, auch wenn mehr konfiguriert sind. -#}
+          {% for family in model_families %}
+          <label for="{{ family.checkboxId }}"><input type="checkbox" id="{{ family.checkboxId }}" {% if loop.index0 < max_run_families %}checked{% endif %}>{{ family.title }}</label>
+          {% endfor %}
         </div>
       </div>
 
@@ -594,7 +595,7 @@
                   <div id="agentModeAnswersRow" class="agent-mode-answers-row" hidden>
                     <button type="button" id="agentModeAnswersToggle" class="consensus-tab agent-mode-answers-toggle"
                       aria-expanded="false"
-                      aria-controls="openaiResponse mistralResponse claudeResponse geminiResponse deepseekResponse grokResponse">
+                      aria-controls="{{ model_families | map(attribute='responseId') | join(' ') }}">
                       <svg class="consensus-tab-chevron" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>
                       <span class="consensus-tab-label" data-short="Answers">Compare answers</span>
                       <span class="consensus-tab-count" id="consensusAnswersTabCount"></span>
@@ -674,135 +675,31 @@
         <div id="agentModeStatus" class="agent-mode-status">Ready for a grouped model run.</div>
       </div>
 
-      <div class="response-box" id="openaiResponse" data-model="OpenAI" data-short-label="OpenAI">
-        <h2 data-short-label="OpenAI">
-          <span class="title">ChatGPT
+      {% for family in model_families %}
+      {% set default_model = default_models[family.provider] %}
+      <div class="response-box" id="{{ family.responseId }}" data-model="{{ family.label }}" data-short-label="{{ family.shortLabel }}">
+        <h2 data-short-label="{{ family.shortLabel }}">
+          <span class="title">{{ family.title }}
             <small>
-              <img src="/static/icons/chat_icons/chatgpt.png" class="model-icon chatgpt-logo" alt="icon">
-              <span id="openaiModelText">{{ model_labels.get(default_models['openai'], default_models['openai']) }}</span>
+              <img src="{{ family.icon }}" class="model-icon{% if family.iconClass %} {{ family.iconClass }}{% endif %}" alt="{{ family.title }} icon">
+              <span id="{{ family.textId }}">{{ model_labels.get(default_model, default_model) }}</span>
             </small>
             <span class="model-picker-wrapper">
-              <select id="openaiModelSelect" class="model-picker">
-                {% for model in models['openai'] %}
+              <select id="{{ family.selectId }}" class="model-picker">
+                {% for model in models[family.provider] %}
                 {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['openai'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
+                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_model %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
                 {% endfor %}
               </select>
             </span>
           </span>
           <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="openaiResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
+            <button type="button" class="exclude-btn" data-exclude-target="{{ family.responseId }}" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
           </div>
         </h2>
         <div class="collapsible-content"></div>
       </div>
-
-      <div class="response-box" id="mistralResponse" data-model="Mistral" data-short-label="Mistral">
-        <h2 data-short-label="Mistral">
-          <span class="title">Mistral
-            <small><img src="/static/icons/chat_icons/mistral.png" class="model-icon" alt="icon"><span
-                id="mistralModelText">{{ model_labels.get(default_models['mistral'], default_models['mistral']) }}</span></small>
-            <span class="model-picker-wrapper">
-              <select id="mistralModelSelect" class="model-picker">
-                {% for model in models['mistral'] %}
-                {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['mistral'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="mistralResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
-          </div>
-        </h2>
-        <div class="collapsible-content"></div>
-      </div>
-
-      <div class="response-box" id="claudeResponse" data-model="Anthropic" data-short-label="Claude">
-        <h2 data-short-label="Claude">
-          <span class="title">Claude
-            <small><img src="/static/icons/chat_icons/claude.png" class="model-icon" alt="icon"><span
-                id="claudeModelText">{{ model_labels.get(default_models['anthropic'], default_models['anthropic']) }}</span></small>
-            <span class="model-picker-wrapper">
-              <select id="claudeModelSelect" class="model-picker">
-                {% for model in models['anthropic'] %}
-                {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['anthropic'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="claudeResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
-          </div>
-        </h2>
-        <div class="collapsible-content"></div>
-      </div>
-
-      <div class="response-box" id="geminiResponse" data-model="Gemini" data-short-label="Gemini">
-        <h2 data-short-label="Gemini">
-          <span class="title">Gemini
-            <small><img src="/static/icons/chat_icons/gemini-icon.png" class="model-icon" alt="icon"><span
-                id="geminiModelText">{{ model_labels.get(default_models['gemini'], default_models['gemini']) }}</span></small>
-            <span class="model-picker-wrapper">
-              <select id="geminiModelSelect" class="model-picker">
-                {% for model in models['gemini'] %}
-                {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['gemini'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="geminiResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
-          </div>
-        </h2>
-        <div class="collapsible-content"></div>
-      </div>
-
-      <div class="response-box" id="deepseekResponse" data-model="DeepSeek" data-short-label="DeepSeek">
-        <h2 data-short-label="DeepSeek">
-          <span class="title">DeepSeek
-            <small><img src="/static/icons/chat_icons/deepseek.png" class="model-icon" alt="icon"><span
-                id="deepseekModelText">{{ model_labels.get(default_models['deepseek'], default_models['deepseek']) }}</span></small>
-            <span class="model-picker-wrapper">
-              <select id="deepseekModelSelect" class="model-picker">
-                {% for model in models['deepseek'] %}
-                {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['deepseek'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="deepseekResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
-          </div>
-        </h2>
-        <div class="collapsible-content"></div>
-      </div>
-
-      <div class="response-box" id="grokResponse" data-model="Grok" data-short-label="Grok">
-        <h2 data-short-label="Grok">
-          <span class="title">Grok
-            <small>
-              <img src="/static/icons/chat_icons/grok.png" class="model-icon grok-logo" alt="Grok icon">
-              <span id="grokModelText">{{ model_labels.get(default_models['grok'], default_models['grok']) }}</span>
-            </small>
-            <span class="model-picker-wrapper">
-              <select id="grokModelSelect" class="model-picker">
-                {% for model in models['grok'] %}
-                {% set badge = model_badges.get(model, '') %}
-                <option value="{{ model }}" data-model-label="{{ model_labels.get(model, model) }}" data-model-badge="{{ badge }}" {% if model == default_models['grok'] %}selected{% endif %} {% if model in models['premium'] %}disabled class="premium-option"{% endif %}>{{ model_labels.get(model, model) }}{% if badge %} · {{ badge }}{% endif %}</option>
-                {% endfor %}
-              </select>
-            </span>
-          </span>
-          <div class="control-icons">
-            <button type="button" class="exclude-btn" data-exclude-target="grokResponse" title="Exclude answer" aria-label="Exclude answer">&#10005;</button>
-          </div>
-        </h2>
-        <div class="collapsible-content"></div>
-      </div>
+      {% endfor %}
     </div>
 
   {# app-init.js and app-dom-events.js moved into the deferred "app" group in

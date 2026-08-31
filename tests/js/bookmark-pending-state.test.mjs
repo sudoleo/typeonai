@@ -8,7 +8,7 @@ import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 function sessionHarness({ existing = [] } = {}) {
   const source = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
   const start = source.indexOf("window.App.bookmarkSession = {");
-  const end = source.indexOf("const BOOKMARK_MODEL_KEYS", start);
+  const end = source.indexOf("function bookmarkModelKeys(", start);
   const sessionSource = source.slice(start, end);
   const rendered = [];
   const ready = [];

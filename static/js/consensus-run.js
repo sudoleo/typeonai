@@ -27,6 +27,12 @@
   const streamSSERequest = window.streamSSERequest;
   const injectMarkdown = window.injectMarkdown;
 
+  // Namen aller konfigurierten Familien (Serververtrag), aus der einen
+  // Frontend-Quelle window.App.modelPrefs.
+  function familyKeys() {
+    return (window.App.modelPrefs || []).map(pref => pref.key);
+  }
+
   function isActiveConsensusRun(runId) {
     return consensusLifecycle.isActiveRun(runId);
   }
@@ -771,19 +777,16 @@
         usage_run_key: context.usage?.key || null,
         deep_search: context.config.deepSearch,
         question: context.question,
-        answer_openai: runAnswer(context, "OpenAI"),
-        answer_mistral: runAnswer(context, "Mistral"),
-        answer_claude: runAnswer(context, "Anthropic"),
-        answer_gemini: runAnswer(context, "Gemini"),
-        answer_deepseek: runAnswer(context, "DeepSeek"),
-        answer_grok: runAnswer(context, "Grok"),
+        answers: Object.fromEntries(
+          familyKeys().map(provider => [provider, runAnswer(context, provider)])
+        ),
         model_sources: modelSources,
         model_labels: modelLabels,
         consensus_model: context.config.consensusModel,
         bookmarkId: context.bookmark.id,
         previousQuestion: context.previousExchange?.question || "",
         previousTurn: context.previousExchange?.turn || null,
-        excluded_models: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+        excluded_models: familyKeys()
           .filter(provider => !context.config.providers.some(item => item.provider === provider)),
         openrouter_key: context.credentials?.openrouterKey || "",
         keepalive: true
@@ -1087,13 +1090,12 @@
     const consensus_model = replayRun?.consensusModel
       || document.getElementById("consensusModelDropdown").value;
 
-    // Hole die Antwort-Boxen
-    const openaiBox = document.getElementById("openaiResponse");
-    const mistralBox = document.getElementById("mistralResponse");
-    const claudeBox = document.getElementById("claudeResponse");
-    const geminiBox = document.getElementById("geminiResponse");
-    const deepseekBox = document.getElementById("deepseekResponse");
-    const grokBox = document.getElementById("grokResponse");
+    // Die Familien dieses Laufs mit ihrer Antwortbox. Eine Quelle
+    // (window.App.modelPrefs): Antworten, Quellen, Ausschluesse und Zitate
+    // werden daraus abgeleitet statt sechsmal einzeln aufgezaehlt.
+    const families = (window.App.modelPrefs || [])
+      .map(pref => ({ ...pref, box: document.getElementById(pref.responseId) }))
+      .filter(family => family.box);
 
     // Lies die Antworten (trim für überflüssige Leerzeichen)
     function isIncludedBox(box) {
@@ -1116,14 +1118,9 @@
       }
     }
 
-    const providerBoxes = {
-      OpenAI: openaiBox,
-      Mistral: mistralBox,
-      Anthropic: claudeBox,
-      Gemini: geminiBox,
-      DeepSeek: deepseekBox,
-      Grok: grokBox
-    };
+    const providerBoxes = Object.fromEntries(
+      families.map(family => [family.key, family.box])
+    );
 
     // Replay of a stored turn: the providers were never called, so every box
     // still shows the previous run. Repaint the ones the stored turn actually
@@ -1165,20 +1162,12 @@
     }
 
     // Abgewählte Modelle werden bewusst als leer gesendet.
-    const answer_openai = getIncludedAnswer(openaiBox);
-    const answer_mistral = getIncludedAnswer(mistralBox);
-    const answer_claude = getIncludedAnswer(claudeBox);
-    const answer_gemini = getIncludedAnswer(geminiBox);
-    const answer_deepseek = getIncludedAnswer(deepseekBox);
-    const answer_grok = getIncludedAnswer(grokBox);
-    const model_sources = {
-      OpenAI: getIncludedSources(openaiBox),
-      Mistral: getIncludedSources(mistralBox),
-      Anthropic: getIncludedSources(claudeBox),
-      Gemini: getIncludedSources(geminiBox),
-      DeepSeek: getIncludedSources(deepseekBox),
-      Grok: getIncludedSources(grokBox)
-    };
+    const answers = Object.fromEntries(
+      families.map(family => [family.key, getIncludedAnswer(family.box)])
+    );
+    const model_sources = Object.fromEntries(
+      families.map(family => [family.key, getIncludedSources(family.box)])
+    );
 
     // Überprüfe nur die Modelle, die nicht als "ausgeschlossen" markiert sind
     // UND nicht mit einem Fehler zurückkamen. Ein einzelner ausgefallener
@@ -1187,28 +1176,19 @@
     function isAnswerableBox(box) {
       return isIncludedBox(box) && box.dataset.responseError !== "true";
     }
-    const needOpenAI = isAnswerableBox(openaiBox);
-    const needGemini = isAnswerableBox(geminiBox);
-    const needMistral = isAnswerableBox(mistralBox);
-    const needClaude = isAnswerableBox(claudeBox);
-    const needDeepseek = isAnswerableBox(deepseekBox);
-    const needGrok = isAnswerableBox(grokBox);
-    const includedAnswerCount = [answer_openai, answer_mistral, answer_claude, answer_gemini, answer_deepseek, answer_grok]
-      .filter(Boolean).length;
-    const excludedModelCount = [openaiBox, mistralBox, claudeBox, geminiBox, deepseekBox, grokBox]
-      .filter(box => box?.classList.contains("excluded")).length;
+    // Eine erwartete, aber noch fehlende Antwort blockiert den Lauf; eine
+    // fehlgeschlagene nicht (isAnswerableBox schliesst Fehler aus).
+    const awaitedFamilies = families.filter(family => isAnswerableBox(family.box));
+    const missingAnswer = awaitedFamilies.some(family => !answers[family.key]);
+    const includedAnswerCount = Object.values(answers).filter(Boolean).length;
+    const excludedModelCount = families
+      .filter(family => family.box.classList.contains("excluded")).length;
 
     if (
       !question ||
       !consensus_model ||
       (!(replayPendingTurn || dispositionOnly) && (
-        includedAnswerCount < 2 ||
-        (needOpenAI && !answer_openai) ||
-        (needGemini && !answer_gemini) ||
-        (needMistral && !answer_mistral) ||
-        (needClaude && !answer_claude) ||
-        (needDeepseek && !answer_deepseek) ||
-        (needGrok && !answer_grok)
+        includedAnswerCount < 2 || missingAnswer
       ))
     ) {
       alert("Please provide at least two completed model answers before generating a consensus.");
@@ -1247,25 +1227,9 @@
     }
 
     // Die übrigen Parameter wie "excluded_models" werden wie bisher ermittelt
-    const excludedModels = [];
-    if (openaiBox.classList.contains("excluded")) {
-      excludedModels.push(openaiBox.getAttribute("data-model"));
-    }
-    if (mistralBox.classList.contains("excluded")) {
-      excludedModels.push(mistralBox.getAttribute("data-model"));
-    }
-    if (claudeBox.classList.contains("excluded")) {
-      excludedModels.push(claudeBox.getAttribute("data-model"));
-    }
-    if (geminiBox.classList.contains("excluded")) {
-      excludedModels.push(geminiBox.getAttribute("data-model"));
-    }
-    if (deepseekBox.classList.contains("excluded")) {
-      excludedModels.push(deepseekBox.getAttribute("data-model"));
-    }
-    if (grokBox.classList.contains("excluded")) {
-      excludedModels.push(grokBox.getAttribute("data-model"));
-    }
+    const excludedModels = families
+      .filter(family => family.box.classList.contains("excluded"))
+      .map(family => family.box.getAttribute("data-model"));
 
     // Hole API Keys aus localStorage
     const openrouterKey = localStorage.getItem("openrouterKey") || "";
@@ -1295,12 +1259,9 @@
       includedModelsDetailed.push(modelName ? `${label}: ${modelName}` : label);
     }
 
-    addModelForCitation("openaiResponse", "openaiModelSelect", "OpenAI");
-    addModelForCitation("mistralResponse", "mistralModelSelect", "Mistral");
-    addModelForCitation("claudeResponse", "claudeModelSelect", "Anthropic Claude");
-    addModelForCitation("geminiResponse", "geminiModelSelect", "Google Gemini");
-    addModelForCitation("deepseekResponse", "deepseekModelSelect", "DeepSeek");
-    addModelForCitation("grokResponse", "grokModelSelect", "Grok");
+    families.forEach(family => {
+      addModelForCitation(family.responseId, family.selectId, family.citationLabel);
+    });
 
     const consensusSelect = document.getElementById("consensusModelDropdown");
     const consensusModelValue = consensusSelect ? consensusSelect.value : "";
@@ -1335,10 +1296,7 @@
     const shareModelLabels = {};
     let streamedConsensusText = "";
     let completedConsensusText = "";
-    [["OpenAI", "openaiModelSelect"], ["Mistral", "mistralModelSelect"],
-     ["Anthropic", "claudeModelSelect"], ["Gemini", "geminiModelSelect"],
-     ["DeepSeek", "deepseekModelSelect"], ["Grok", "grokModelSelect"]
-    ].forEach(([provider, selectId]) => {
+    families.forEach(({ key: provider, selectId }) => {
       const select = document.getElementById(selectId);
       if (!select) return;
       const opt = select.options[select.selectedIndex];
@@ -1420,12 +1378,7 @@
           usage_run_key: usageRun?.key || null,
           deep_search: deepThink,
           question: question,
-          answer_openai: answer_openai,
-          answer_mistral: answer_mistral,
-          answer_claude: answer_claude,
-          answer_gemini: answer_gemini,
-          answer_deepseek: answer_deepseek,
-          answer_grok: answer_grok,
+          answers: answers,
           model_sources: model_sources,
           model_labels: shareModelLabels,
           consensus_model: consensus_model,
@@ -1582,14 +1535,8 @@
           model_answers: data.model_answers && typeof data.model_answers === "object"
             && Object.keys(data.model_answers).length
             ? data.model_answers
-            : Object.fromEntries([
-            ["OpenAI", answer_openai],
-            ["Mistral", answer_mistral],
-            ["Anthropic", answer_claude],
-            ["Gemini", answer_gemini],
-            ["DeepSeek", answer_deepseek],
-            ["Grok", answer_grok]
-          ].filter(([, answer]) => String(answer || "").trim()).map(([provider, answer]) => [
+            : Object.fromEntries(Object.entries(answers)
+            .filter(([, answer]) => String(answer || "").trim()).map(([provider, answer]) => [
             provider,
             {
               provider,

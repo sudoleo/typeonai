@@ -8,14 +8,14 @@
   const registry = window.App.runRegistry;
   if (!registry) return;
 
-  const PROVIDERS = [
-    { provider: "OpenAI", boxId: "openaiResponse", textId: "openaiModelText" },
-    { provider: "Mistral", boxId: "mistralResponse", textId: "mistralModelText" },
-    { provider: "Anthropic", boxId: "claudeResponse", textId: "claudeModelText" },
-    { provider: "Gemini", boxId: "geminiResponse", textId: "geminiModelText" },
-    { provider: "DeepSeek", boxId: "deepseekResponse", textId: "deepseekModelText" },
-    { provider: "Grok", boxId: "grokResponse", textId: "grokModelText" }
-  ];
+  // Familien aus der einen Frontend-Quelle (window.App.modelPrefs).
+  function providers() {
+    return (window.App.modelPrefs || []).map(pref => ({
+      provider: pref.key,
+      boxId: pref.responseId,
+      textId: pref.textId
+    }));
+  }
 
   let projectedRunId = null;
   let projectedPhase = null;
@@ -292,7 +292,7 @@
     window.App.setThreadQuestion?.(context.config?.agentMode === false ? "" : context.question);
     window.App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
     syncConversationProjection(context);
-    PROVIDERS.forEach(provider => renderModel(context, provider));
+    providers().forEach(provider => renderModel(context, provider));
     window.renderEvidenceSources?.(context.evidenceSources || []);
     renderConsensus(context);
     syncCompatibilityState(context);

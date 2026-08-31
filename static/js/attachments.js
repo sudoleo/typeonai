@@ -27,7 +27,22 @@
   // zurueck — der `accept`-Filter des Datei-Feldes ist weiterhin grosszuegiger.
   const ATTACH_ALLOWED_MIMES = ["application/pdf", DOCX_MIME, "text/plain", "image/png", "image/jpeg", "image/webp"];
   const ATTACH_TYPES_LABEL = "PDF, Word (.docx), TXT, MD, CSV, PNG, JPG, WebP";
-  const DEEPSEEK_ATTACHMENT_MESSAGE = "DeepSeek is paused for this question because its API cannot read attachments. Remove the files to use DeepSeek again.";
+  // Familien, deren API keine Anhaenge lesen kann (Serverangabe je Familie).
+  function attachmentBlockedFamilies() {
+    return (window.App?.modelPrefs || []).filter(pref => pref.handlesAttachments === false);
+  }
+
+  function attachmentBlockMessage(families) {
+    const names = families.map(pref => pref.label);
+    if (!names.length) return "";
+    const listed = names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    const verb = names.length === 1 ? "is" : "are";
+    const pronoun = names.length === 1 ? "its" : "their";
+    return `${listed} ${verb} paused for this question because ${pronoun} API cannot read `
+      + `attachments. Remove the files to use ${listed} again.`;
+  }
   window.pendingAttachments = [];
 
   (function initAttachments() {
@@ -42,7 +57,8 @@
 
     let pendingFileReads = 0;
     let dragDepth = 0;
-    let deepSeekSelectionBeforeAttachment = null;
+    // Auswahlzustand je blockierter Familie vor dem Anhang.
+    const selectionBeforeAttachment = new Map();
     // Waehrend des Abgebens beim Senden ist der Composer zwar leer, die Dateien
     // sind aber gerade RAUSGEGANGEN: der Lauf-Block bleibt dann bestehen.
     let detachingForSend = false;
@@ -53,63 +69,68 @@
       });
     }
 
-    function syncDeepSeekAttachmentCompatibility() {
-      const checkbox = document.getElementById("selectDeepSeek");
-      if (!checkbox) return;
-
+    function syncAttachmentCompatibility() {
+      const families = attachmentBlockedFamilies();
+      if (!families.length) return;
       const incompatible = hasSendableAttachments();
-      const label = document.querySelector("label[for='selectDeepSeek']");
-      const responseBox = document.getElementById("deepseekResponse");
-      const excludeButton = responseBox?.querySelector(".exclude-btn");
+      const message = attachmentBlockMessage(families);
 
-      if (incompatible) {
-        if (deepSeekSelectionBeforeAttachment === null) {
-          deepSeekSelectionBeforeAttachment = checkbox.checked;
+      families.forEach(family => {
+        const checkbox = document.getElementById(family.checkId);
+        if (!checkbox) return;
+        const label = document.querySelector(`label[for='${family.checkId}']`);
+        const responseBox = document.getElementById(family.responseId);
+        const excludeButton = responseBox?.querySelector(".exclude-btn");
+
+        if (incompatible) {
+          if (!selectionBeforeAttachment.has(family.checkId)) {
+            selectionBeforeAttachment.set(family.checkId, checkbox.checked);
+          }
+          if (checkbox.checked) {
+            window.App?.setModelSelectionState?.(family.responseId, false, {
+              persist: false,
+              syncCheckbox: true,
+              animate: true
+            });
+          }
+          checkbox.disabled = true;
+          checkbox.setAttribute("aria-describedby", "attachmentProviderNotice");
+          if (label) {
+            label.classList.add("is-attachment-incompatible");
+            label.title = message;
+          }
+          if (excludeButton) {
+            excludeButton.disabled = true;
+            excludeButton.title = message;
+            excludeButton.setAttribute("aria-label", message);
+          }
+          return;
         }
-        if (checkbox.checked) {
-          window.App?.setModelSelectionState?.("deepseekResponse", false, {
+
+        checkbox.disabled = false;
+        checkbox.removeAttribute("aria-describedby");
+        if (label) label.classList.remove("is-attachment-incompatible");
+        if (excludeButton) excludeButton.disabled = false;
+
+        // Der Composer ist leer, WEIL der Nutzer die Dateien entfernt hat: der
+        // naechste Lauf geht ohne Anhaenge raus, also faellt auch der Lauf-Block.
+        // Beim Senden (detachingForSend) ist der Composer ebenfalls leer, die
+        // Dateien sind aber gerade mit der Frage rausgegangen — dort bleibt der
+        // Block bis zum naechsten Senden stehen.
+        if (!detachingForSend) {
+          window.App?.setRunModelBlock?.(family.responseId, false);
+        }
+
+        if (selectionBeforeAttachment.has(family.checkId)) {
+          const shouldRestore = selectionBeforeAttachment.get(family.checkId);
+          selectionBeforeAttachment.delete(family.checkId);
+          window.App?.setModelSelectionState?.(family.responseId, shouldRestore, {
             persist: false,
             syncCheckbox: true,
             animate: true
           });
         }
-        checkbox.disabled = true;
-        checkbox.setAttribute("aria-describedby", "attachmentProviderNotice");
-        if (label) {
-          label.classList.add("is-attachment-incompatible");
-          label.title = DEEPSEEK_ATTACHMENT_MESSAGE;
-        }
-        if (excludeButton) {
-          excludeButton.disabled = true;
-          excludeButton.title = DEEPSEEK_ATTACHMENT_MESSAGE;
-          excludeButton.setAttribute("aria-label", DEEPSEEK_ATTACHMENT_MESSAGE);
-        }
-        return;
-      }
-
-      checkbox.disabled = false;
-      checkbox.removeAttribute("aria-describedby");
-      if (label) label.classList.remove("is-attachment-incompatible");
-      if (excludeButton) excludeButton.disabled = false;
-
-      // Der Composer ist leer, WEIL der Nutzer die Dateien entfernt hat: der
-      // naechste Lauf geht ohne Anhaenge raus, also faellt auch der Lauf-Block.
-      // Beim Senden (detachingForSend) ist der Composer ebenfalls leer, die
-      // Dateien sind aber gerade mit der Frage rausgegangen — dort bleibt der
-      // Block bis zum naechsten Senden stehen.
-      if (!detachingForSend) {
-        window.App?.setRunModelBlock?.("deepseekResponse", false);
-      }
-
-      if (deepSeekSelectionBeforeAttachment !== null) {
-        const shouldRestore = deepSeekSelectionBeforeAttachment;
-        deepSeekSelectionBeforeAttachment = null;
-        window.App?.setModelSelectionState?.("deepseekResponse", shouldRestore, {
-          persist: false,
-          syncCheckbox: true,
-          animate: true
-        });
-      }
+      });
     }
 
     function setMenuOpen(open) {
@@ -384,17 +405,18 @@
         bar.appendChild(chip);
       });
 
-      if (hasSendableAttachments()) {
+      const blockedFamilies = attachmentBlockedFamilies();
+      if (hasSendableAttachments() && blockedFamilies.length) {
         const notice = document.createElement("p");
         notice.id = "attachmentProviderNotice";
         notice.className = "attachment-provider-notice";
         notice.setAttribute("role", "status");
         notice.setAttribute("aria-live", "polite");
-        notice.textContent = DEEPSEEK_ATTACHMENT_MESSAGE;
+        notice.textContent = attachmentBlockMessage(blockedFamilies);
         bar.appendChild(notice);
       }
 
-      syncDeepSeekAttachmentCompatibility();
+      syncAttachmentCompatibility();
     }
 
     window.renderAttachmentChips = renderAttachmentChips;
@@ -602,7 +624,7 @@
     }
 
     window.addEventListener("pageshow", function () {
-      window.setTimeout(syncDeepSeekAttachmentCompatibility, 0);
+      window.setTimeout(syncAttachmentCompatibility, 0);
     });
   })();
 

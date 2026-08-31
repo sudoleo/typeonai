@@ -1368,11 +1368,16 @@ window.App.bookmarkSession = {
   }
 };
 
-const BOOKMARK_MODEL_KEYS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
+// Familien eines Bookmarks: dieselbe Quelle wie die App (window.App.modelPrefs,
+// gespeist aus cfg.PROVIDERS). Bookmarks aelterer Laeufe kennen nur die
+// Familien, die es damals gab -- fehlende Schluessel sind einfach leer.
+function bookmarkModelKeys() {
+  return (window.App?.modelPrefs || []).map(pref => pref.key);
+}
 
 function bookmarkModelAnswerCount(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object" ? bookmark.responses : {};
-  return BOOKMARK_MODEL_KEYS.filter(name => String(responses[name] || "").trim()).length;
+  return bookmarkModelKeys().filter(name => String(responses[name] || "").trim()).length;
 }
 
 // Ein Direktvergleich (Agent Mode aus) legt Modellantworten ab und nie einen
@@ -1863,14 +1868,13 @@ window.resolveCurrentShareResultId = async function () {
   return await requestBookmarkShareResult();
 };
 
-const BOOKMARK_MODEL_PRESENTATION = [
-  { provider: "OpenAI", textId: "openaiModelText", citationLabel: "OpenAI" },
-  { provider: "Mistral", textId: "mistralModelText", citationLabel: "Mistral" },
-  { provider: "Anthropic", textId: "claudeModelText", citationLabel: "Anthropic Claude" },
-  { provider: "Gemini", textId: "geminiModelText", citationLabel: "Google Gemini" },
-  { provider: "DeepSeek", textId: "deepseekModelText", citationLabel: "DeepSeek" },
-  { provider: "Grok", textId: "grokModelText", citationLabel: "Grok" }
-];
+function bookmarkModelPresentation() {
+  return (window.App?.modelPrefs || []).map(pref => ({
+    provider: pref.key,
+    textId: pref.textId,
+    citationLabel: pref.citationLabel || pref.key
+  }));
+}
 
 function applyBookmarkModelPresentation(bookmark) {
   const responses = bookmark?.responses && typeof bookmark.responses === "object"
@@ -1881,7 +1885,7 @@ function applyBookmarkModelPresentation(bookmark) {
     : {};
   const citationModels = [];
 
-  BOOKMARK_MODEL_PRESENTATION.forEach(({ provider, textId, citationLabel }) => {
+  bookmarkModelPresentation().forEach(({ provider, textId, citationLabel }) => {
     if (!String(responses[provider] || "").trim()) return;
 
     // model_labels is the immutable run provenance saved with the consensus.
@@ -1923,7 +1927,7 @@ function bookmarkFallbackTurn(bookmark) {
     : {};
   const sources = Array.isArray(bookmark?.sources) ? bookmark.sources : [];
   const modelAnswers = {};
-  BOOKMARK_MODEL_PRESENTATION.forEach(({ provider }) => {
+  bookmarkModelPresentation().forEach(({ provider }) => {
     const answer = String(responses[provider] || "").trim();
     if (!answer) return;
     modelAnswers[provider] = {
@@ -2158,12 +2162,9 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             }
         };
 
-        setModelContent("openaiResponse", bookmark.responses["OpenAI"]);
-        setModelContent("mistralResponse", bookmark.responses["Mistral"]);
-        setModelContent("claudeResponse", bookmark.responses["Anthropic"]);
-        setModelContent("geminiResponse", bookmark.responses["Gemini"]);
-        setModelContent("deepseekResponse", bookmark.responses["DeepSeek"]);
-        setModelContent("grokResponse", bookmark.responses["Grok"]);
+        (window.App?.modelPrefs || []).forEach(pref => {
+            setModelContent(pref.responseId, bookmark.responses[pref.key]);
+        });
 
         // --- Konsens Boxen ---
         // Strukturierten Zustand (Verdict, Karten, Badges) eines früheren Laufs
@@ -2188,7 +2189,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // exakt wie nach einer echten Query rendern – sofern das Bookmark die
         // strukturierten differences_data enthält. Sonst Freitext-Fallback.
         const differencesData = bookmark.responses["differences_data"];
-        const includedCount = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+        const includedCount = bookmarkModelKeys()
             .filter(name => (bookmark.responses[name] || "").trim()).length;
 
         let structuredRendered = false;

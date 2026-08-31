@@ -154,9 +154,49 @@ class ProviderConfig:
     # Modelle, die auch nach einem Admin-Override erlaubt bleiben muessen,
     # weil Presets/Aliasse/Deep-Think auf sie zeigen (base/pro implizit).
     required_models: frozenset[str] = frozenset()
+    # Praesentation. Die App zeigt eine Familie unter bis zu drei Namen; die
+    # DOM-IDs sind Vertrag mit CSS, JS und den E2E-Tests und leiten sich aus
+    # dom_key/short_label ab.
+    dom_key: str = ""        # ID-Stamm im DOM ("anthropic" -> "claude")
+    title: str = ""          # Ueberschrift der Antwortbox ("openai" -> "ChatGPT")
+    short_label: str = ""    # data-short-label, Chips, Checkbox-ID
+    icon: str = ""           # Datei unter static/icons/chat_icons/
+    icon_class: str = ""     # zusaetzliche CSS-Klasse am <img>
+    citation_label: str = "" # ausgeschriebener Name in Zitaten
+    # Produktregel: Familien, deren API mit Anhaengen nicht umgehen kann,
+    # werden fuer Fragen MIT Anhang stillgelegt statt sie ohne die Dateien
+    # antworten zu lassen. Bewusst je Familie gesetzt und nicht aus den
+    # Attachment-Support-Sets abgeleitet: Mistral bekommt PDF-Text ueber den
+    # Extraktions-Fallback und laeuft deshalb weiter mit.
+    accepts_attachments: bool = True
+
+    @property
+    def response_id(self) -> str:
+        return f"{self.dom_key}Response"
+
+    @property
+    def select_id(self) -> str:
+        return f"{self.dom_key}ModelSelect"
+
+    @property
+    def text_id(self) -> str:
+        return f"{self.dom_key}ModelText"
+
+    @property
+    def checkbox_id(self) -> str:
+        return f"select{self.short_label}"
+
+    @property
+    def ask_endpoint(self) -> str:
+        return f"/ask_{self.dom_key}"
 
 
-def _provider(key, label, prefix, base, pro, models, required=()):
+def _provider(key, label, prefix, base, pro, models, required=(),
+              dom_key="", title="", short_label="", icon="", icon_class="",
+              citation_label="", accepts_attachments=True):
+    dom_key = dom_key or key
+    title = title or label
+    short_label = short_label or title
     return ProviderConfig(
         key=key,
         label=label,
@@ -165,6 +205,13 @@ def _provider(key, label, prefix, base, pro, models, required=()):
         pro_model=pro,
         models=set(models),
         required_models=frozenset({base, pro, *required}),
+        dom_key=dom_key,
+        title=title,
+        short_label=short_label,
+        icon=icon or f"{key}.png",
+        icon_class=icon_class,
+        citation_label=citation_label or label,
+        accepts_attachments=accepts_attachments,
     )
 
 
@@ -180,6 +227,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL,
             },
             required=(OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL),
+            title="ChatGPT", short_label="OpenAI",
+            icon="chatgpt.png", icon_class="chatgpt-logo",
         ),
         _provider(
             "mistral", "Mistral", "mistralai/", DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL,
@@ -188,6 +237,8 @@ PROVIDERS: dict[str, ProviderConfig] = {
         _provider(
             "anthropic", "Anthropic", "anthropic/", DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL,
             {DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL},
+            dom_key="claude", title="Claude", icon="claude.png",
+            citation_label="Anthropic Claude",
         ),
         _provider(
             "gemini", "Gemini", "google/", DEFAULT_GEMINI_MODEL, GEMINI_PRO_MODEL,
@@ -198,10 +249,12 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 GEMINI_PRO_MODEL, "gemini-2.5-pro",
             },
             required=(GEMINI_36_FLASH_MODEL, GEMINI_35_FLASH_MODEL),
+            icon="gemini-icon.png", citation_label="Google Gemini",
         ),
         _provider(
             "deepseek", "DeepSeek", "deepseek/", DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_PRO_MODEL,
             {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL},
+            accepts_attachments=False,
         ),
         _provider(
             "grok", "Grok", "x-ai/", DEFAULT_GROK_MODEL, GROK_PRO_MODEL,
@@ -209,6 +262,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 GROK_NO_REASONING_MODEL, "grok-4.20", DEFAULT_GROK_MODEL,
                 GROK_PRO_MODEL,
             },
+            icon_class="grok-logo",
         ),
     )
 }
@@ -1039,6 +1093,37 @@ def apply_judge_families(overrides: dict | None) -> None:
 
 def get_judge_families() -> dict:
     return dict(JUDGE_FAMILY_BY_ENGINE)
+
+
+# Wie viele Antwortmodelle ein Lauf hoechstens umfassen darf. Mehr Familien
+# als das duerfen konfiguriert sein -- ein Lauf bleibt trotzdem ein
+# Sechs-Modell-Vergleich (Prompt-Laenge, Kosten, Lesbarkeit).
+MAX_RUN_FAMILIES = 6
+
+
+def get_model_families() -> list[dict]:
+    """Familien-Metadaten fuer /app: Template und Frontend teilen sich genau
+    diese Liste, damit Antwortbox, Picker und Sendepfad nie auseinanderlaufen."""
+    return [
+        {
+            "provider": provider.key,
+            "label": provider.label,
+            "title": provider.title,
+            "shortLabel": provider.short_label,
+            "citationLabel": provider.citation_label,
+            "icon": f"/static/icons/chat_icons/{provider.icon}",
+            "iconClass": provider.icon_class,
+            "domKey": provider.dom_key,
+            "checkboxId": provider.checkbox_id,
+            "selectId": provider.select_id,
+            "responseId": provider.response_id,
+            "textId": provider.text_id,
+            "endpoint": provider.ask_endpoint,
+            "deepThinkLabel": get_model_label(provider.pro_model),
+            "handlesAttachments": provider.accepts_attachments,
+        }
+        for provider in PROVIDERS.values()
+    ]
 
 
 def get_model_picker_metadata() -> dict[str, dict[str, str]]:

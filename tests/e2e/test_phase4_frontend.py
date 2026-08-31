@@ -774,14 +774,17 @@ def test_two_runs_keep_payloads_views_and_cancel_controllers_isolated(
             "question => window.__runGate.calls('consensus', question)", question_b
         )
         assert len(calls_a) == len(calls_b) == 1
+        # Die Antworten gehen als Familien-Mapping raus (Feld `answers`).
+        answers_a = calls_a[0]["body"]["answers"]
+        answers_b = calls_b[0]["body"]["answers"]
         assert calls_a[0]["body"]["question"] == question_a
-        assert question_a in calls_a[0]["body"]["answer_openai"]
-        assert question_a in calls_a[0]["body"]["answer_mistral"]
-        assert question_b not in calls_a[0]["body"]["answer_openai"]
+        assert question_a in answers_a["OpenAI"]
+        assert question_a in answers_a["Mistral"]
+        assert question_b not in answers_a["OpenAI"]
         assert calls_b[0]["body"]["question"] == question_b
-        assert question_b in calls_b[0]["body"]["answer_openai"]
-        assert question_b in calls_b[0]["body"]["answer_mistral"]
-        assert question_a not in calls_b[0]["body"]["answer_openai"]
+        assert question_b in answers_b["OpenAI"]
+        assert question_b in answers_b["Mistral"]
+        assert question_a not in answers_b["OpenAI"]
         assert [body["question"] for body in consensus_bookmark_bodies] == [question_b]
     finally:
         context.close()

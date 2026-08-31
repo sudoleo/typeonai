@@ -247,6 +247,8 @@ def read_root(request: Request):
         **{provider: cfg.get_ordered_models(provider) for provider in cfg.PROVIDERS},
         "premium": list(PREMIUM_MODELS)
     }
+    # Familien-Metadaten fuer Antwortboxen, Picker und Sendepfad.
+    model_families = cfg.get_model_families()
     model_metadata = cfg.get_model_picker_metadata()
     model_labels = {model_id: meta["label"] for model_id, meta in model_metadata.items()}
     model_badges = {model_id: meta["badge"] for model_id, meta in model_metadata.items() if meta["badge"]}
@@ -265,6 +267,8 @@ def read_root(request: Request):
         "free_limit": cfg.get_consensus_run_limit(False),
         "limits": cfg.get_limits_config(),
         "models": models,
+        "model_families": model_families,
+        "max_run_families": cfg.MAX_RUN_FAMILIES,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,

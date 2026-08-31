@@ -113,12 +113,7 @@
     // Dropdown-IDs definieren (Consensus und OpenAI)
     const dropdownIds = [
       "consensusModelDropdown",
-      "openaiModelSelect",
-      "mistralModelSelect",
-      "claudeModelSelect",
-      "geminiModelSelect",
-      "deepseekModelSelect",
-      "grokModelSelect"
+      ...(window.App?.modelPrefs || []).map(pref => pref.selectId)
     ];
 
     dropdownIds.forEach(id => {

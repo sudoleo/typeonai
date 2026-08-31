@@ -22,14 +22,11 @@
   }
 
   function getIncludedModelNamesForCitation() {
-    const map = [
-      { boxId: "openaiResponse", selectId: "openaiModelSelect", label: "OpenAI" },
-      { boxId: "mistralResponse", selectId: "mistralModelSelect", label: "Mistral" },
-      { boxId: "claudeResponse", selectId: "claudeModelSelect", label: "Anthropic Claude" },
-      { boxId: "geminiResponse", selectId: "geminiModelSelect", label: "Google Gemini" },
-      { boxId: "deepseekResponse", selectId: "deepseekModelSelect", label: "DeepSeek" },
-      { boxId: "grokResponse", selectId: "grokModelSelect", label: "Grok" }
-    ];
+    const map = (window.App.modelPrefs || []).map(pref => ({
+      boxId: pref.responseId,
+      selectId: pref.selectId,
+      label: pref.citationLabel
+    }));
 
     const names = [];
     map.forEach(({ boxId, selectId, label }) => {

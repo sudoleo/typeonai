@@ -107,8 +107,7 @@
         }
 
         function setSpinnersForActive() {
-          ["openaiResponse", "mistralResponse", "claudeResponse", "geminiResponse", "deepseekResponse", "grokResponse"]
-            .forEach(setSpinner);
+          (window.App.modelPrefs || []).forEach(pref => setSpinner(pref.responseId));
         }
 
         // Markdown-Rendering + SSE-Streaming-Helfer sind nach
@@ -498,31 +497,18 @@
             const select = document.getElementById(selectId);
             return getModelOptionLabel(select?.options[select.selectedIndex]) || select?.value || "";
           };
-          let openaiModelText = deepSearchActive ? deepThinkModelLabels.OpenAI : selectedModelLabel("openaiModelSelect");
-          let mistralModelText = deepSearchActive ? deepThinkModelLabels.Mistral : selectedModelLabel("mistralModelSelect");
-          let geminiModelText = deepSearchActive ? deepThinkModelLabels.Gemini : selectedModelLabel("geminiModelSelect");
-          let claudeModelText = deepSearchActive ? deepThinkModelLabels.Anthropic : selectedModelLabel("claudeModelSelect");
-          let deepseekModelText = deepSearchActive ? deepThinkModelLabels.DeepSeek : selectedModelLabel("deepseekModelSelect");
-          let grokModelText = deepSearchActive ? deepThinkModelLabels.Grok : selectedModelLabel("grokModelSelect");
-
           // Picker and Deep-Think controls configure the next run. Headings in
           // the selected result keep the model labels frozen at that run's
           // start, even when those controls change while it is in background.
           const visibleRun = window.App.runRegistry?.visible?.();
-          if (visibleRun) {
-            const labels = Object.fromEntries(
+          const runLabels = visibleRun
+            ? Object.fromEntries(
               (visibleRun.config?.providers || []).map(provider => [
                 provider.provider,
                 provider.modelLabel || provider.modelId || provider.provider
               ])
-            );
-            openaiModelText = labels.OpenAI || openaiModelText;
-            mistralModelText = labels.Mistral || mistralModelText;
-            geminiModelText = labels.Gemini || geminiModelText;
-            claudeModelText = labels.Anthropic || claudeModelText;
-            deepseekModelText = labels.DeepSeek || deepseekModelText;
-            grokModelText = labels.Grok || grokModelText;
-          }
+            )
+            : {};
 
           const setModelText = (id, txt) => {
             const el = document.getElementById(id);
@@ -531,12 +517,13 @@
               el.title = `Choose model: ${txt}`;
             }
           };
-          setModelText("openaiModelText", openaiModelText);
-          setModelText("mistralModelText", mistralModelText);
-          setModelText("geminiModelText", geminiModelText);
-          setModelText("claudeModelText", claudeModelText);
-          setModelText("deepseekModelText", deepseekModelText);
-          setModelText("grokModelText", grokModelText);
+          (window.App.modelPrefs || []).forEach(pref => {
+            const text = runLabels[pref.key]
+              || (deepSearchActive
+                ? (deepThinkModelLabels[pref.key] || selectedModelLabel(pref.selectId))
+                : selectedModelLabel(pref.selectId));
+            setModelText(pref.textId, text);
+          });
 
           if (typeof window.updateAgentModeUI === "function") {
             window.updateAgentModeUI();
@@ -771,34 +758,12 @@
         const deepthinkDisclaimer = document.getElementById("deepthinkDisclaimer");
         const consensusDropdown = document.getElementById("consensusModelDropdown");
 
-        // Checkboxen für die Modelle:
-        const openaiCheckbox = document.getElementById("selectOpenAI");
-        const mistralCheckbox = document.getElementById("selectMistral");
-        const claudeCheckbox = document.getElementById("selectClaude");
-        const geminiCheckbox = document.getElementById("selectGemini");
-        const deepseekCheckbox = document.getElementById("selectDeepSeek");
-        const grokCheckbox = document.getElementById("selectGrok");
-
         // Mapping: Response-Box → zugehörige Sidebar-Checkbox
         function getCheckboxForResponse(responseId) {
-          switch (responseId) {
-            case "openaiResponse": return openaiCheckbox;
-            case "mistralResponse": return mistralCheckbox;
-            case "claudeResponse": return claudeCheckbox;
-            case "geminiResponse": return geminiCheckbox;
-            case "deepseekResponse": return deepseekCheckbox;
-            case "grokResponse": return grokCheckbox;
-            default: return null;
-          }
+          const pref = (window.App.modelPrefs || [])
+            .find(item => item.responseId === responseId);
+          return pref ? document.getElementById(pref.checkId) : null;
         }
-
-        // Label-Container der Checkboxen:
-        const openaiLabel = document.querySelector("label[for='selectOpenAI']");
-        const mistralLabel = document.querySelector("label[for='selectMistral']");
-        const claudeLabel = document.querySelector("label[for='selectClaude']");
-        const deepseekLabel = document.querySelector("label[for='selectDeepSeek']");
-        const grokLabel = document.querySelector("label[for='selectGrok']");
-        const geminiLabel = document.querySelector("label[for='selectGemini']");
 
         // Funktion, um Response-Boxen komplett auszublenden oder einzublenden:
         function setResponseBoxDisplay(id, displayValue) {
@@ -1521,23 +1486,10 @@
         window.toggleModel = function (responseId, isChecked) {
           setModelSelectionState(responseId, isChecked, { persist: true, syncCheckbox: true });
         };
-        document.getElementById("selectOpenAI").addEventListener("change", function () {
-          toggleModel("openaiResponse", this.checked);
-        });
-        document.getElementById("selectMistral").addEventListener("change", function () {
-          toggleModel("mistralResponse", this.checked);
-        });
-        document.getElementById("selectClaude").addEventListener("change", function () {
-          toggleModel("claudeResponse", this.checked);
-        });
-        document.getElementById("selectGemini").addEventListener("change", function () {
-          toggleModel("geminiResponse", this.checked);
-        });
-        document.getElementById("selectDeepSeek").addEventListener("change", function () {
-          toggleModel("deepseekResponse", this.checked);
-        });
-        document.getElementById("selectGrok").addEventListener("change", function () {
-          toggleModel("grokResponse", this.checked);
+        (window.App.modelPrefs || []).forEach(pref => {
+          document.getElementById(pref.checkId)?.addEventListener("change", function () {
+            toggleModel(pref.responseId, this.checked);
+          });
         });
 
         // Modell-Dropdowns aktualisieren die angezeigten Namen und Tooltips
@@ -1549,23 +1501,10 @@
           el.title = `Choose model: ${label}`;
         }
 
-        document.getElementById("openaiModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "openaiModelText");
-        });
-        document.getElementById("mistralModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "mistralModelText");
-        });
-        document.getElementById("claudeModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "claudeModelText");
-        });
-        document.getElementById("geminiModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "geminiModelText");
-        });
-        document.getElementById("deepseekModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "deepseekModelText");
-        });
-        document.getElementById("grokModelSelect").addEventListener("change", function () {
-          syncVisibleModelName(this, "grokModelText");
+        (window.App.modelPrefs || []).forEach(pref => {
+          document.getElementById(pref.selectId)?.addEventListener("change", function () {
+            syncVisibleModelName(this, pref.textId);
+          });
         });
 
         // collapse model dropdown after selection to avoid lingering focus
@@ -1729,14 +1668,7 @@
             window.App.runRegistry?.clearVisible?.();
           }
           document.body.classList.remove("direct-comparison-active");
-          const boxIds = [
-            "openaiResponse",
-            "mistralResponse",
-            "claudeResponse",
-            "geminiResponse",
-            "deepseekResponse",
-            "grokResponse"
-          ];
+          const boxIds = (window.App.modelPrefs || []).map(pref => pref.responseId);
 
           // Konsens unterbinden und den rahmenlosen Bereich wieder ausblenden.
           window.hideConsensusOutput?.();

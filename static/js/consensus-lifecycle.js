@@ -67,14 +67,7 @@
         result?.status === "complete" && String(result.text || "").trim()
       )).length;
     }
-    const boxIds = [
-      "openaiResponse",
-      "mistralResponse",
-      "claudeResponse",
-      "geminiResponse",
-      "deepseekResponse",
-      "grokResponse"
-    ];
+    const boxIds = (window.App.modelPrefs || []).map(pref => pref.responseId);
 
     return boxIds.filter(id => {
       const box = document.getElementById(id);

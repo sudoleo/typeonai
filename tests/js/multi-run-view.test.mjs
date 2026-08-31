@@ -35,6 +35,16 @@ function boot() {
       before(window) {
         window.auth = { currentUser: user };
         window.App = {
+          // Familienliste der App (im Browser aus window.MODEL_FAMILIES,
+          // serverseitig cfg.PROVIDERS). run-view projiziert genau diese.
+          modelPrefs: [
+            ["OpenAI", "openai"], ["Mistral", "mistral"], ["Anthropic", "claude"],
+            ["Gemini", "gemini"], ["DeepSeek", "deepseek"], ["Grok", "grok"]
+          ].map(([key, dom]) => ({
+            key,
+            responseId: `${dom}Response`,
+            textId: `${dom}ModelText`
+          })),
           authState: {
             generation: 3,
             snapshot: () => ({ uid: user.uid, generation: 3 })

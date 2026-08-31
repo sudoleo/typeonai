@@ -2657,6 +2657,25 @@ Differences-Prompt bekommen die Antworten als Mapping Familie->Text
 damit unabhaengig von der Anzahl der Familien; `/consensus` nimmt sie als Feld
 `answers` entgegen und liest die alten `answer_<familie>`-Felder weiter.
 
+Frontend: `/app` bekommt die Familien als `data-model-families` in
+`#appBootstrapConfig` (Quelle `cfg.get_model_families()`); `app-bootstrap.js`
+legt sie auf `window.MODEL_FAMILIES`, `app-core.js` macht daraus
+`window.App.modelPrefs` -- die EINE Liste, aus der Antwortboxen (Jinja-Schleife
+in `index.html`), Sendepfad (`query-send.js`), Projektion (`run-view.js`),
+Fortschritt, Zitate, Bookmarks (`firebase.js`) und Anhang-Regel
+(`attachments.js`) ihre Familien ziehen. Die DOM-IDs bleiben Vertrag und
+werden aus `dom_key`/`short_label` gebildet (`anthropic` -> `claudeResponse`,
+`selectClaude`), die Namen aus `title`/`short_label`/`citation_label`.
+Eine neue Familie braucht damit nur einen Registry-Eintrag, ein Icon unter
+`static/icons/chat_icons/` und ihre `/ask_<dom_key>`-Route.
+
+Ein Lauf vergleicht hoechstens `cfg.MAX_RUN_FAMILIES` (6) Modelle, auch wenn
+mehr Familien konfiguriert sind: der Picker sperrt die naechste Familie
+sichtbar (`model-picker.js`, `capBlocksInclusion`), `/consensus` weist mehr
+Antworten mit 400 ab. Weniger als sechs bleibt wie bisher moeglich.
+`accepts_attachments=False` legt eine Familie fuer Fragen MIT Anhang stumm
+(heute nur DeepSeek); die Regel steht in der Registry, nicht im Frontend.
+
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `MODEL_LABEL_OVERRIDES`). In Produktion sind

@@ -18,6 +18,10 @@
   window.DEEP_THINK_CONSENSUS_MODEL = parse("deepThinkModel", "");
   window.CONSENSUS_PRESETS = parse("consensusPresets", []);
   window.DEFAULT_CONSENSUS_PRESET = parse("defaultConsensusPreset", "");
+  // Die eine Familienliste der App: Antwortboxen, Picker, Sendepfad und
+  // Fortschritt lesen ausschliesslich hieraus (Server = cfg.PROVIDERS).
+  window.MODEL_FAMILIES = parse("modelFamilies", []);
+  window.MAX_RUN_FAMILIES = Number(config?.dataset.maxRunFamilies || 6);
   window.FREE_LIMIT = Number(config?.dataset.freeLimit || 0);
 
   window.trackUmamiEvent = function (eventName, eventData = {}) {

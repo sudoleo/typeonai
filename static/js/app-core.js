@@ -22,14 +22,7 @@
   }
 
   function getSelectedModelCount() {
-    return [
-      "selectOpenAI",
-      "selectMistral",
-      "selectClaude",
-      "selectGemini",
-      "selectDeepSeek",
-      "selectGrok"
-    ].filter(id => document.getElementById(id)?.checked).length;
+    return modelPrefs.filter(pref => document.getElementById(pref.checkId)?.checked).length;
   }
 
   const DEFAULT_APP_TITLE = "Compare AI Answers | consens.io";
@@ -306,23 +299,37 @@
   });
 
   // Definition der Modelle und IDs (zentral, von mehreren Clustern genutzt).
-  const modelPrefs = [
-    { key: "OpenAI", provider: "openai", label: "OpenAI", checkId: "selectOpenAI", selectId: "openaiModelSelect", responseId: "openaiResponse", textId: "openaiModelText" },
-    { key: "Mistral", provider: "mistral", label: "Mistral", checkId: "selectMistral", selectId: "mistralModelSelect", responseId: "mistralResponse", textId: "mistralModelText" },
-    { key: "Anthropic", provider: "anthropic", label: "Claude", checkId: "selectClaude", selectId: "claudeModelSelect", responseId: "claudeResponse", textId: "claudeModelText" },
-    { key: "Gemini", provider: "gemini", label: "Gemini", checkId: "selectGemini", selectId: "geminiModelSelect", responseId: "geminiResponse", textId: "geminiModelText" },
-    { key: "DeepSeek", provider: "deepseek", label: "DeepSeek", checkId: "selectDeepSeek", selectId: "deepseekModelSelect", responseId: "deepseekResponse", textId: "deepseekModelText" },
-    { key: "Grok", provider: "grok", label: "Grok", checkId: "selectGrok", selectId: "grokModelSelect", responseId: "grokResponse", textId: "grokModelText" }
-  ];
+  // EINE Quelle: der Server liefert die Familien aus cfg.PROVIDERS in
+  // window.MODEL_FAMILIES; hier werden sie nur auf die im Frontend
+  // etablierten Feldnamen gebracht. Eine neue Familie erscheint damit
+  // ueberall, ohne dass eine dieser Listen nachgezogen werden muss.
+  const modelFamilies = Array.isArray(window.MODEL_FAMILIES) ? window.MODEL_FAMILIES : [];
+  const modelPrefs = modelFamilies.map(family => ({
+    key: family.label,
+    provider: family.provider,
+    label: family.title,
+    shortLabel: family.shortLabel,
+    citationLabel: family.citationLabel || family.label,
+    checkId: family.checkboxId,
+    selectId: family.selectId,
+    responseId: family.responseId,
+    textId: family.textId,
+    endpoint: family.endpoint,
+    handlesAttachments: family.handlesAttachments !== false
+  }));
 
-  const deepThinkModelLabels = {
-    OpenAI: "GPT-5.5",
-    Mistral: "mistral-medium-3-5",
-    Gemini: "gemini-3.1-pro-preview",
-    Anthropic: "claude-opus-4-8",
-    DeepSeek: "DeepSeek V4 Pro",
-    Grok: "grok-4.3"
-  };
+  // Hoechstzahl gleichzeitig laufender Familien (Serverregel, siehe
+  // cfg.MAX_RUN_FAMILIES): mehr Familien duerfen konfiguriert sein, ein Lauf
+  // bleibt trotzdem ein Sechs-Modell-Vergleich.
+  const maxRunFamilies = Number(window.MAX_RUN_FAMILIES) > 0
+    ? Number(window.MAX_RUN_FAMILIES)
+    : 6;
+
+  const deepThinkModelLabels = Object.fromEntries(
+    modelFamilies
+      .filter(family => family.deepThinkLabel)
+      .map(family => [family.label, family.deepThinkLabel])
+  );
 
   function getModelOptionLabel(option) {
     const explicitLabel = option?.dataset?.modelLabel;
@@ -482,6 +489,7 @@
 
   Object.assign(window.App, {
     modelPrefs,
+    maxRunFamilies,
     deepThinkModelLabels,
     getModelOptionLabel,
     getSelectedModelCount,
