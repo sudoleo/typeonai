@@ -119,9 +119,9 @@ def test_minimum_model_count_is_rechecked_after_attachment_filter_before_usage()
 
     assert filtered_check < usage_start
     assert "const providers = selectedProviders(attachments.length, deepSearch);" in query
-    # Der Anhang-Filter haengt an der Faehigkeit der Familie (Serverangabe),
-    # nicht mehr an einem Familiennamen im Frontend.
-    assert "attachmentCount > 0 && !definition.handlesAttachments" in query
+    # Der Anhang-Filter haengt am effektiven Modell (Serverangabe), nicht an
+    # einem fest codierten Familiennamen im Frontend.
+    assert "window.App.modelAcceptsAttachments(definition.pref, modelId, deepSearch)" in query
 
 
 def test_usage_snapshot_can_recover_pro_tier_after_status_failure():

@@ -70,6 +70,8 @@ class ExistingModelFlowTests(unittest.TestCase):
             "gemini": "google/",
             "deepseek": "deepseek/",
             "grok": "x-ai/",
+            "kimi": "moonshotai/",
+            "glm": "z-ai/",
         }
         for provider, model_ids in cfg._provider_allowed_sets().items():
             for model_id in model_ids:
@@ -148,7 +150,8 @@ class ExistingModelFlowTests(unittest.TestCase):
         presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
         self.assertEqual(set(presets), {"fast", "balanced", "thorough"})
         for preset in presets.values():
-            self.assertEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
+            self.assertEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
+            self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
             self.assertTrue(preset["consensus_model"])
         self.assertEqual(presets["balanced"]["models"]["openai"], cfg.OPENAI_LUNA_MODEL)
         self.assertEqual(presets["balanced"]["consensus_model"], cfg.OPENAI_LUNA_MODEL)
@@ -174,17 +177,23 @@ class ExistingModelFlowTests(unittest.TestCase):
             "preset_models": {
                 "balanced": {
                     **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"],
-                    "openai": "gpt-5.5",
+                    "answers": {
+                        **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"]["answers"],
+                        "openai": "gpt-5.5",
+                    },
                     "consensus": "OpenAI-Pro",
                 },
                 "thorough": {
                     **cfg._BASE_CONSENSUS_PRESET_MODELS["thorough"],
-                    "openai": "gpt-5.5",
+                    "answers": {
+                        **cfg._BASE_CONSENSUS_PRESET_MODELS["thorough"]["answers"],
+                        "openai": "gpt-5.5",
+                    },
                 },
             },
         })
         self.assertEqual(
-            normalized["preset_models"]["balanced"]["openai"],
+            normalized["preset_models"]["balanced"]["answers"]["openai"],
             cfg.OPENAI_LUNA_MODEL,
         )
         self.assertEqual(
@@ -195,9 +204,10 @@ class ExistingModelFlowTests(unittest.TestCase):
         # Fehlende Basis-Pro-Modelle werden nicht mehr heimlich in die
         # Providerlisten/DB eingefuegt. Legacy-Daten fallen auf bereits
         # konfigurierte Modelle zurueck.
-        for provider in cfg.DEFAULT_MODEL_BY_PROVIDER:
+        thorough_answers = normalized["preset_models"]["thorough"]["answers"]
+        for provider in thorough_answers:
             self.assertIn(
-                normalized["preset_models"]["thorough"][provider],
+                thorough_answers[provider],
                 normalized[provider],
             )
 
@@ -455,6 +465,11 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertIn('preset.models?.[pref.provider]', module)
         self.assertIn('preset.consensus_model', module)
         self.assertIn('preset.pro_only && window.isUserPro !== true', module)
+        self.assertIn(
+            'setModelSelectionState(pref, !included, { persist: true });\n'
+            '      markConsensusPresetCustom();',
+            module,
+        )
         self.assertIn('badge.textContent = "Pro"', module)
         self.assertIn('window.App.markConsensusPresetCustom', module)
 

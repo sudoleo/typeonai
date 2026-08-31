@@ -675,12 +675,20 @@ def _ordered_unique(items, drop=None, ensure=None) -> list:
 
 
 def normalize_models_document(data: dict) -> dict:
+    missing_provider_keys = [
+        provider for provider in PROVIDER_KEYS if provider not in (data or {})
+    ]
     normalized = dict(data or {})
     # Provider-Listen behalten ihre (Admin-)Reihenfolge bei. Alte IDs werden
     # migriert, entfernte/stillgelegte bei jedem Admin-Read/-Save bereinigt.
     for provider in PROVIDER_KEYS:
+        source_models = (
+            normalized.get(provider)
+            if provider in normalized
+            else cfg.get_ordered_models(provider)
+        )
         normalized[provider] = _ordered_unique(
-            cfg.canonical_model_ids(normalized.get(provider), provider),
+            cfg.canonical_model_ids(source_models, provider),
             drop=cfg.REMOVED_MODEL_IDS | cfg.PROVIDER_DEPRECATED_MODELS.get(provider, set()),
         )
 
@@ -695,6 +703,11 @@ def normalize_models_document(data: dict) -> dict:
     for deprecated in cfg.PROVIDER_DEPRECATED_MODELS.values():
         premium.difference_update(deprecated)
     premium.intersection_update(configured_models)
+    premium.update(
+        cfg.PROVIDERS[provider].pro_model
+        for provider in PROVIDER_KEYS
+        if cfg.PROVIDERS[provider].pro_model in set(normalized.get(provider) or [])
+    )
     normalized["premium"] = sorted(premium)
 
     # Free-Default je Provider: nur gueltig, wenn das Modell im Provider gelistet
@@ -761,8 +774,9 @@ def normalize_models_document(data: dict) -> dict:
     for provider in PROVIDER_KEYS:
         allowed_direct_consensus.update(normalized.get(provider) or [])
 
-    # Vollstaendige Model-Sets je Picker-Preset. Daily/Balanced bleiben auch bei
-    # Admin-Konfiguration Free-faehig; High Quality (ID: thorough) ist Pro-only.
+    # Je Preset genau die bis zu sechs tatsaechlich laufenden Familienmodelle.
+    # Das alte Schema mit einem Top-Level-Key je Provider wird beim Lesen
+    # akzeptiert und als ``answers``-Mapping zurueckgegeben.
     incoming_presets = normalized.get("preset_models")
     incoming_presets = incoming_presets if isinstance(incoming_presets, dict) else {}
     preset_definitions = {
@@ -773,32 +787,16 @@ def normalize_models_document(data: dict) -> dict:
         supplied = incoming_presets.get(preset_id)
         supplied = supplied if isinstance(supplied, dict) else {}
         pro_only = bool(preset_definitions[preset_id]["pro_only"])
-        clean = {}
-        for provider in PROVIDER_KEYS:
-            chosen = cfg.canonical_model_id(supplied.get(provider), provider)
-            deprecated = (
-                cfg.DEPRECATED_CONSENSUS_PRESET_MODELS
-                .get(preset_id, {})
-                .get(provider, set())
-            )
-            if chosen in deprecated:
-                chosen = ""
-            allowed = list(normalized.get(provider) or [])
-            if chosen not in allowed or (not pro_only and chosen in premium):
-                candidates = (
-                    cfg.canonical_model_id(base.get(provider), provider),
-                    clean_defaults.get(provider),
-                    *allowed,
-                )
-                chosen = next(
-                    (
-                        candidate for candidate in candidates
-                        if candidate in allowed
-                        and (pro_only or candidate not in premium)
-                    ),
-                    "",
-                )
-            clean[provider] = chosen
+        clean_answers = cfg._normalize_preset_answers(
+            preset_id,
+            supplied,
+            allowed_sets={
+                provider: set(normalized.get(provider) or [])
+                for provider in PROVIDER_KEYS
+            },
+            premium_models=premium,
+            defaults=clean_defaults,
+        )
 
         consensus_model = cfg.canonical_model_id(supplied.get("consensus"))
         consensus_valid = (
@@ -824,8 +822,10 @@ def normalize_models_document(data: dict) -> dict:
                 consensus_model = fallback
             else:
                 consensus_model = "Gemini"
-        clean["consensus"] = consensus_model
-        clean_presets[preset_id] = clean
+        clean_presets[preset_id] = {
+            "answers": clean_answers,
+            "consensus": consensus_model,
+        }
     normalized["preset_models"] = clean_presets
 
     consensus = [
@@ -839,6 +839,11 @@ def normalize_models_document(data: dict) -> dict:
             continue
         if model in cfg.CONSENSUS_ENGINE_ALIASES or model in allowed_direct_consensus:
             normalized_consensus.append(model)
+    for provider in missing_provider_keys:
+        label = cfg.PROVIDERS[provider].label
+        for alias in (label, f"{label}-Pro"):
+            if alias not in normalized_consensus:
+                normalized_consensus.append(alias)
     for preset in clean_presets.values():
         if preset["consensus"] not in normalized_consensus:
             normalized_consensus.append(preset["consensus"])
@@ -981,8 +986,8 @@ def _model_dependencies(data: dict) -> dict:
     for provider, model in (data.get("defaults") or {}).items():
         add(provider, model, "Free default")
     for preset_id, preset in (data.get("preset_models") or {}).items():
-        for provider in PROVIDER_KEYS:
-            add(provider, preset.get(provider), f"{preset_id} preset")
+        for provider, model in cfg._preset_answer_mapping(preset).items():
+            add(provider, model, f"{preset_id} preset")
     for tier, models in (data.get("watch_models") or {}).items():
         for provider, model in (models or {}).items():
             add(provider, model, f"{tier} Watch")
@@ -1043,6 +1048,8 @@ def _admin_meta(data: dict) -> dict:
         "chat_memory_defaults": dict(cfg._BASE_CHAT_MEMORY_MODEL_BY_PROVIDER),
         "judge_priority": list(cfg.JUDGE_FAMILY_PRIORITY),
         "preset_definitions": list(cfg.CONSENSUS_PRESET_DEFINITIONS),
+        "provider_keys": list(PROVIDER_KEYS),
+        "provider_labels": dict(cfg.PROVIDER_LABEL_BY_ID),
     }
 
 
@@ -1225,23 +1232,40 @@ def update_models(request: Request, data: dict = Body(...)):
             supplied = incoming_presets.get(preset_id)
             if not isinstance(supplied, dict):
                 raise HTTPException(status_code=400, detail=f"preset_models.{preset_id} must be a model mapping")
-            missing = [key for key in (*PROVIDER_KEYS, "consensus") if not supplied.get(key)]
-            if missing:
+            supplied_answers = supplied.get("answers")
+            expected_count = min(cfg.MAX_RUN_FAMILIES, len(PROVIDER_KEYS))
+            if not isinstance(supplied_answers, dict):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"preset_models.{preset_id} is missing: {', '.join(missing)}",
+                    detail=f"preset_models.{preset_id}.answers must be a provider mapping",
                 )
-            for key in (*PROVIDER_KEYS, "consensus"):
-                chosen = (
-                    cfg.canonical_model_id(supplied.get(key), key)
-                    if key in PROVIDER_KEYS
-                    else cfg.canonical_model_id(supplied.get(key))
+            if len(supplied_answers) != expected_count:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"preset_models.{preset_id}.answers must select exactly "
+                        f"{expected_count} model families"
+                    ),
                 )
-                if normalized["preset_models"][preset_id].get(key) != chosen:
+            normalized_answers = normalized["preset_models"][preset_id]["answers"]
+            if set(supplied_answers) != set(normalized_answers):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"preset_models.{preset_id}.answers contains an invalid or duplicate family",
+                )
+            for provider, raw_model in supplied_answers.items():
+                chosen = cfg.canonical_model_id(raw_model, provider)
+                if normalized_answers.get(provider) != chosen:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"preset_models.{preset_id}.{key} is invalid for this tier",
+                        detail=f"preset_models.{preset_id}.answers.{provider} is invalid for this tier",
                     )
+            chosen_consensus = cfg.canonical_model_id(supplied.get("consensus"))
+            if normalized["preset_models"][preset_id]["consensus"] != chosen_consensus:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"preset_models.{preset_id}.consensus is invalid for this tier",
+                )
         incoming_watch = data.get("watch_models")
         if not isinstance(incoming_watch, dict):
             raise HTTPException(status_code=400, detail="watch_models must contain free and pro mappings")

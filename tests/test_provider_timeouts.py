@@ -15,6 +15,7 @@ import pytest
 import requests
 
 from app.services.llm import engines, provider_runtime, streaming
+from app.core import config as cfg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 AUDITED_DIRS = [
@@ -23,7 +24,7 @@ AUDITED_DIRS = [
 ]
 
 
-PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok"]
+PROVIDERS = list(cfg.PROVIDERS)
 
 
 def _call_direct_provider(provider: str):

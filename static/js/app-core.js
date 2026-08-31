@@ -315,8 +315,23 @@
     responseId: family.responseId,
     textId: family.textId,
     endpoint: family.endpoint,
+    deepThinkModel: family.deepThinkModel,
+    attachmentModels: Array.isArray(family.attachmentModels)
+      ? family.attachmentModels.slice()
+      : (family.attachmentModels === null ? null : undefined),
     handlesAttachments: family.handlesAttachments !== false
   }));
+
+  function modelAcceptsAttachments(pref, modelId, deepThink = false) {
+    if (!pref) return false;
+    const allowed = pref.attachmentModels;
+    if (Array.isArray(allowed)) {
+      const effectiveModel = deepThink ? pref.deepThinkModel : modelId;
+      return allowed.includes(String(effectiveModel || ""));
+    }
+    if (allowed === null) return true;
+    return pref.handlesAttachments !== false;
+  }
 
   // Hoechstzahl gleichzeitig laufender Familien (Serverregel, siehe
   // cfg.MAX_RUN_FAMILIES): mehr Familien duerfen konfiguriert sein, ein Lauf
@@ -491,6 +506,7 @@
     modelPrefs,
     maxRunFamilies,
     deepThinkModelLabels,
+    modelAcceptsAttachments,
     getModelOptionLabel,
     getSelectedModelCount,
     setAppTitle,

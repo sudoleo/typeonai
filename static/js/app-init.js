@@ -534,6 +534,7 @@
         // Deep Search Toggle Text Update (bestehender Code)
         document.getElementById("deepSearchToggle").addEventListener("change", function () {
           updateDeepThinkText(true);
+          window.App.attachments?.refreshCompatibility?.();
           trackAppEvent("app_deep_think_changed", { enabled: this.checked });
         });
 
@@ -1313,6 +1314,7 @@
               if (window.App.runRegistry?.visible?.()) {
                 window.App.runRegistry.renderVisible();
               }
+              window.App.attachments?.refreshCompatibility?.();
             });
           }
         });

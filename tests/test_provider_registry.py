@@ -48,6 +48,8 @@ class RegistryCoverageTests(unittest.TestCase):
             ("gemini", cfg.ALLOWED_GEMINI_MODELS),
             ("deepseek", cfg.ALLOWED_DEEPSEEK_MODELS),
             ("grok", cfg.ALLOWED_GROK_MODELS),
+            ("kimi", cfg.ALLOWED_KIMI_MODELS),
+            ("glm", cfg.ALLOWED_GLM_MODELS),
         ):
             with self.subTest(provider=provider):
                 self.assertIs(alias, cfg.PROVIDERS[provider].models)
@@ -83,6 +85,19 @@ class RegistryCoverageTests(unittest.TestCase):
                     cfg.PROVIDERS[config.provider].openrouter_prefix
                 ))
 
+    def test_kimi_and_glm_request_and_attachment_policies_are_data(self):
+        self.assertEqual(
+            cfg.MODEL_CONFIGS[cfg.KIMI_BASE_MODEL].request_config,
+            {"reasoning": {"enabled": False}},
+        )
+        self.assertEqual(
+            cfg.MODEL_CONFIGS[cfg.GLM_PRO_MODEL].request_config,
+            {"reasoning": {"effort": "low"}},
+        )
+        self.assertTrue(cfg.MODEL_CONFIGS[cfg.GLM_BASE_MODEL].accepts_attachments)
+        self.assertFalse(cfg.MODEL_CONFIGS[cfg.GLM_PRO_MODEL].accepts_attachments)
+        self.assertFalse(cfg.MODEL_CONFIGS[cfg.DEEPSEEK_FLASH_MODEL].accepts_attachments)
+
 
 class ConsumerCoverageTests(unittest.TestCase):
     """Die Module rund um den Lauf ziehen ihre Familien aus der Registry."""
@@ -105,7 +120,7 @@ class ConsumerCoverageTests(unittest.TestCase):
         self.assertEqual(set(topics.PROVIDER_LABELS), set(cfg.PROVIDERS))
 
     def test_ask_endpoints_and_judge_vocabulary_cover_every_family(self):
-        from app.api.routers.chat import ASK_PROVIDERS
+        from app.api.routers.chat import ASK_PROVIDERS, router
         from app.services.llm.consensus_engine import (
             CANONICAL_MODEL_NAMES,
             normalize_model_name,
@@ -113,6 +128,15 @@ class ConsumerCoverageTests(unittest.TestCase):
         from app.services.llm.resolve_engine import PROVIDER_BY_LABEL
 
         self.assertEqual(set(ASK_PROVIDERS), set(cfg.PROVIDERS))
+        post_paths = {
+            route.path
+            for route in router.routes
+            if "POST" in getattr(route, "methods", set())
+        }
+        self.assertLessEqual(
+            {provider.ask_endpoint for provider in cfg.PROVIDERS.values()},
+            post_paths,
+        )
         self.assertEqual(
             set(PROVIDER_BY_LABEL), set(cfg.PROVIDER_LABEL_BY_ID.values())
         )

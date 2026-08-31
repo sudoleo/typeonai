@@ -18,7 +18,7 @@
       checkboxId: pref.checkId,
       selectId: pref.selectId,
       keyName: "openrouterKey",
-      handlesAttachments: pref.handlesAttachments !== false
+      pref
     }));
   }
 
@@ -51,11 +51,15 @@
   function selectedProviders(attachmentCount, deepSearch) {
     return providerDefinitions().reduce((items, definition) => {
       if (!document.getElementById(definition.checkboxId)?.checked) return items;
-      // Familien, die keine Anhaenge lesen koennen, bleiben bei Anhaengen aussen vor.
-      if (attachmentCount > 0 && !definition.handlesAttachments) return items;
       const select = document.getElementById(definition.selectId);
       const modelId = String(select?.value || "").trim();
       if (!modelId) return items;
+      // Die Faehigkeit gehoert zum effektiven Modell, nicht zur Familie:
+      // GLM 5.3 Flash ist multimodal, GLM 5.3 text-only.
+      const acceptsAttachments = typeof window.App.modelAcceptsAttachments === "function"
+        ? window.App.modelAcceptsAttachments(definition.pref, modelId, deepSearch)
+        : definition.pref.handlesAttachments !== false;
+      if (attachmentCount > 0 && !acceptsAttachments) return items;
       const deepLabel = window.App.deepThinkModelLabels?.[definition.provider];
       items.push({
         ...definition,

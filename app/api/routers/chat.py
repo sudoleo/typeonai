@@ -737,7 +737,7 @@ def _attachment_claim_payload(attachments: list[dict]) -> list[dict]:
     ]
 
 # ---------------------------------------------------------------------------
-# /ask_*-Endpoints: ein gemeinsamer Ablauf für sechs Produktfamilien; alle
+# /ask_*-Endpoints: ein gemeinsamer Ablauf fuer alle Registry-Familien; alle
 # Requests verwenden denselben OpenRouter-Transport und dasselbe Credential.
 # ---------------------------------------------------------------------------
 
@@ -886,6 +886,13 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         is_pro=is_pro_user,
     )
     attachments = parse_attachments(data, is_pro_user)
+    effective_model = cfg.PROVIDERS[provider.key].pro_model if deep_search else model
+    model_config = cfg.get_model_config(effective_model, provider.key)
+    if attachments and model_config and not model_config.accepts_attachments:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{model_config.label} cannot read attachments.",
+        )
     max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
 
     # Das nutzereigene Gedaechtnis. Es haengt an der Basisanweisung, NICHT im
@@ -1030,40 +1037,28 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     raise HTTPException(status_code=400, detail="No auth provided.")
 
 
-@router.post("/ask_openai")
-@limiter.limit("5/minute")
-def ask_openai_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["openai"], request, data)
+def _make_ask_endpoint(provider_key: str):
+    provider_config = cfg.PROVIDERS[provider_key]
+
+    def ask_provider_post(request: Request, data: dict = Body(...)):
+        return handle_ask(ASK_PROVIDERS[provider_key], request, data)
+
+    ask_provider_post.__name__ = f"ask_{provider_config.dom_key}_post"
+    ask_provider_post.__qualname__ = ask_provider_post.__name__
+    rate = "5/minute" if provider_key in {"openai", "mistral"} else "3/minute"
+    return limiter.limit(rate)(ask_provider_post)
 
 
-@router.post("/ask_mistral")
-@limiter.limit("5/minute")
-def ask_mistral_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["mistral"], request, data)
-
-
-@router.post("/ask_claude")
-@limiter.limit("3/minute")
-def ask_claude_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["anthropic"], request, data)
-
-
-@router.post("/ask_gemini")
-@limiter.limit("3/minute")
-def ask_gemini_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["gemini"], request, data)
-
-
-@router.post("/ask_deepseek")
-@limiter.limit("3/minute")
-def ask_deepseek_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["deepseek"], request, data)
-
-
-@router.post("/ask_grok")
-@limiter.limit("3/minute")
-def ask_grok_post(request: Request, data: dict = Body(...)):
-    return handle_ask(ASK_PROVIDERS["grok"], request, data)
+# Route, Handlername und Client-Endpoint kommen aus derselben Registry. Damit
+# braucht eine neue Familie keinen zusaetzlichen Copy-Paste-Wrapper mehr.
+for _provider_key, _provider_config in cfg.PROVIDERS.items():
+    _handler = _make_ask_endpoint(_provider_key)
+    globals()[_handler.__name__] = _handler
+    router.add_api_route(
+        _provider_config.ask_endpoint,
+        _handler,
+        methods=["POST"],
+    )
 
 
 @router.post("/prepare")

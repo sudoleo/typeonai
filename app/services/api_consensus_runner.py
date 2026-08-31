@@ -66,12 +66,13 @@ _retention_backfilled = False
 
 
 def build_server_model_plan(*, deep_think: bool, is_pro: bool) -> dict:
-    preset = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET])
+    preset = cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]
+    preset_answers = dict(preset["answers"])
     # Nur die Familien, die das Preset auch besetzt.
     providers = {
-        provider: preset[provider]
+        provider: preset_answers[provider]
         for provider in PROVIDER_ORDER
-        if provider in preset
+        if provider in preset_answers
     }
     if len(providers) < 2:
         raise ValueError("At least two API providers are required")
@@ -339,7 +340,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
     is_pro = bool(run.get("is_pro_at_acceptance"))
     plan = run.get("model_plan") or {}
     providers = dict(plan.get("providers") or {})
-    # Publisher runs use the same six providers as every other API run. The
+    # Publisher runs use the same six preset families as every other API run. The
     # persisted model_plan is the single source of truth for who answers, so a
     # run never drops a provider that its own plan still advertises.
     keys = resolve_developer_api_keys()

@@ -64,7 +64,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       den temporären Auth-Ausfall statt tote Aktionen zu zeigen.
 - [ ] Sidebar-Navigation: Models ist eine einzelne kompakte Zeile mit
       Providerzahl und öffnet den Run-Picker am Composer; sie klappt keine
-      sechs Providerzeilen auf. Der Custom-Picker nutzt Checkboxen statt
+      Providerzeilen auf. Der Custom-Picker nutzt Checkboxen statt
       Toggle-Switches und bleibt in Light/Dark vollständig deckend und lesbar.
       Bei offener Desktop-Sidebar bleibt das Eingabefeld in der Viewport-Mitte;
       mobil verschwindet die schwebende Brand vollständig.
@@ -105,8 +105,17 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       wieder aus.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
+- [ ] Der Custom-Picker listet alle acht Familien (inkl. Kimi und GLM); sind
+      sechs gewaehlt, ist die siebte sichtbar gesperrt. Eine Familie abwaehlen
+      gibt die gesperrten wieder frei, und jede Handauswahl schaltet die
+      Kopfzeile von Daily/Balanced/High Quality auf die Custom-Anzeige um.
 - [ ] Echter Bild-/PDF-Anhang pausiert DeepSeek mit sichtbarer Erklärung; nach
       Entfernen aller Anhänge wird die vorherige DeepSeek-Auswahl wiederhergestellt.
+- [ ] Die Anhang-Sperre haengt am effektiven MODELL, nicht an der Familie:
+      GLM 5.3 Flash bleibt mit Anhang waehlbar, GLM 5.3 wird pausiert, und ein
+      eingeschaltetes Deep Think pausiert GLM auch dann, wenn im Picker noch
+      Flash steht (Deep Think faehrt das Pro-Modell). Kimi bleibt in beiden
+      Faellen waehlbar.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 - [ ] „Ask about this“ auf einem markierten Abschnitt einer Antwort: das Zitat
       steht über dem Eingabefeld, der Fokus liegt im Feld, das × entfernt es
@@ -469,9 +478,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       normaler Text-Paste bleibt unverändert möglich.
 - [ ] PDF/DOCX/TXT/MD/CSV/PNG/JPG/WebP auf den Input ziehen → Drop-Hinweis
       erscheint und nach dem Ablegen wird der passende Datei-Chip angelegt.
-- [ ] Mit einem echten Anhang zeigt der Modell-Picker 5 statt 6 Modelle und
+- [ ] Mit einem echten Anhang zeigt der Modell-Picker ein Modell weniger und
       beim Senden entsteht kein `/ask_deepseek`-Request; nach Entfernen wird
-      die vorherige DeepSeek-Auswahl wiederhergestellt.
+      die vorherige DeepSeek-Auswahl wiederhergestellt. Dasselbe gilt fuer
+      `/ask_glm`, sobald GLM 5.3 das effektive Modell ist.
 - [ ] Bookmark-Attachments werden angezeigt.
 
 ## Auth / Usage / Tier

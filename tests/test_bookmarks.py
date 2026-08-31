@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import bookmarks as bookmarks_router
+from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import share_snapshots
@@ -356,6 +357,21 @@ def test_direct_comparison_model_save_accepts_full_evidence_budget():
     payload["sources"].append({"id": "overflow", "url": "https://overflow.example"})
     with pytest.raises(ValueError):
         bookmarks_router.BookmarkModelRequest.model_validate(payload)
+
+
+def test_direct_comparison_model_name_contract_follows_provider_registry():
+    base = {
+        "id_token": "token",
+        "question": "Compare",
+        "response": "Answer",
+        "mode": "Standard",
+    }
+    for model_name in cfg.PROVIDER_LABEL_BY_ID.values():
+        validated = bookmarks_router.BookmarkModelRequest.model_validate({
+            **base,
+            "modelName": model_name,
+        })
+        assert validated.modelName == model_name
 
 
 def test_followup_bookmark_keeps_complete_previous_turn_for_restore():

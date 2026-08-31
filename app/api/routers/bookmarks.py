@@ -38,6 +38,7 @@ BOOKMARK_PAGE_SIZE = 35
 BOOKMARK_PAGE_SIZE_MAX = 50
 BOOKMARK_ID_RE = re.compile(r"[A-Za-z0-9_]{1,100}")
 CHAT_ID_RE = re.compile(r"[0-9a-f]{32}")
+BookmarkModelName = Literal.__getitem__(tuple(cfg.PROVIDER_LABEL_BY_ID.values()))
 
 # Bookmark-Persistenz ist ein interner Fan-out des Produkt-Flows: Ein Lauf
 # schreibt je nach Preset bis zu sechs Modell-Snapshots plus einen
@@ -58,7 +59,7 @@ class BookmarkModelRequest(BaseModel):
     id_token: StrictStr = Field(min_length=1, max_length=20_000)
     question: StrictStr = Field(min_length=1, max_length=8_000)
     response: StrictStr = Field(min_length=1, max_length=40_000)
-    modelName: Literal["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"]
+    modelName: BookmarkModelName
     mode: Literal["Standard", "Deep Think"]
     bookmarkId: StrictStr | None = Field(default=None, max_length=100)
     previousQuestion: StrictStr = Field(default="", max_length=4_000)

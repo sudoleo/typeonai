@@ -51,7 +51,7 @@ TURN_STATUS_FAILED = "failed"
 PROVIDER_DOCUMENT_IDS = {
     label: provider for provider, label in cfg.PROVIDER_LABEL_BY_ID.items()
 }
-MAX_MODEL_ANSWERS = len(PROVIDER_DOCUMENT_IDS)
+MAX_MODEL_ANSWERS = cfg.MAX_RUN_FAMILIES
 FAILED_TURN_ERROR_CODES = frozenset({
     "consensus_failed",
     "cancelled",

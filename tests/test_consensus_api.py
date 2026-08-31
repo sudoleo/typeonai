@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 
 import main
+from app.core import config as cfg
 from app.api.routers import admin as admin_router
 from app.api.routers import api_v1
 from app.services import api_consensus_runner
@@ -337,10 +338,12 @@ def test_publisher_mode_requires_admin(monkeypatch):
     assert response.status_code == 403
 
 
-def test_server_model_plan_covers_every_provider():
+def test_server_model_plan_uses_exactly_the_configured_preset_models():
     plan = api_consensus_runner.build_server_model_plan(deep_think=False, is_pro=True)
 
-    assert set(plan["providers"]) == set(api_consensus_runner.PROVIDER_ORDER)
+    balanced = cfg.get_consensus_preset_models()["balanced"]["answers"]
+    assert plan["providers"] == balanced
+    assert len(plan["providers"]) == cfg.MAX_RUN_FAMILIES
     assert "deepseek" in plan["providers"]
 
 

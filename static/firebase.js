@@ -1967,10 +1967,9 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
 
   const currentTurn = turns[turns.length - 1];
   const responses = {
-    OpenAI: "", Mistral: "", Anthropic: "", Gemini: "", DeepSeek: "", Grok: "",
     consensus: currentTurn.consensus || "",
     differences: currentTurn.differences || "",
-    differences_data: currentTurn.differences_data || null
+    differences_data: currentTurn.differences_data || null,
   };
   const modelLabels = {};
   Object.entries(currentTurn.model_answers || {}).forEach(([provider, item]) => {

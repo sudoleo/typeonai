@@ -28,12 +28,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class ModelConfigurationTests(unittest.TestCase):
     def _valid_admin_payload(self):
         return {
-            "openai": list(cfg.ALLOWED_OPENAI_MODELS),
-            "mistral": list(cfg.ALLOWED_MISTRAL_MODELS),
-            "anthropic": list(cfg.ALLOWED_ANTHROPIC_MODELS),
-            "gemini": list(cfg.ALLOWED_GEMINI_MODELS),
-            "deepseek": list(cfg.ALLOWED_DEEPSEEK_MODELS),
-            "grok": list(cfg.ALLOWED_GROK_MODELS),
+            **{
+                provider.key: list(provider.models)
+                for provider in cfg.PROVIDERS.values()
+            },
             "premium": list(cfg.PREMIUM_MODELS),
             "consensus": list(cfg.ALLOWED_CONSENSUS_MODELS),
             "preset_models": cfg.get_consensus_preset_models(),
@@ -349,7 +347,14 @@ class ModelConfigurationTests(unittest.TestCase):
             "grok": [cfg.DEFAULT_GROK_MODEL],
             "premium": ["gpt-5.5", cfg.DEFAULT_GEMINI_MODEL],
         })
-        self.assertEqual(normalized["premium"], [cfg.DEFAULT_GEMINI_MODEL])
+        self.assertEqual(
+            normalized["premium"],
+            sorted({
+                cfg.DEFAULT_GEMINI_MODEL,
+                cfg.KIMI_PRO_MODEL,
+                cfg.GLM_PRO_MODEL,
+            }),
+        )
 
     def test_admin_dependencies_are_informative_not_server_enforced(self):
         normalized = normalize_models_document({
@@ -389,6 +394,21 @@ class ModelConfigurationTests(unittest.TestCase):
         )
         self.assertEqual(high["payload"]["reasoning"], {"effort": "high"})
 
+    def test_kimi_and_glm_payload_policies_are_applied(self):
+        kimi = build_provider_payload(
+            "kimi", question="q", system_prompt="s",
+            model_override=cfg.KIMI_BASE_MODEL, max_output_tokens=123,
+        )
+        glm = build_provider_payload(
+            "glm", question="q", system_prompt="s",
+            model_override=cfg.GLM_PRO_MODEL, max_output_tokens=123,
+        )
+
+        self.assertEqual(kimi["api_model"], "moonshotai/kimi-k2.6")
+        self.assertEqual(kimi["payload"]["reasoning"], {"enabled": False})
+        self.assertEqual(glm["api_model"], "z-ai/glm-5.3")
+        self.assertEqual(glm["payload"]["reasoning"], {"effort": "low"})
+
     def test_access_control_only_has_free_and_pro_models(self):
         validate_model(
             cfg.DEFAULT_OPENAI_MODEL, cfg.ALLOWED_OPENAI_MODELS, "OpenAI", is_pro=False
@@ -413,7 +433,8 @@ class ModelConfigurationTests(unittest.TestCase):
         presets = {preset["id"]: preset for preset in cfg.get_consensus_presets()}
         self.assertEqual(set(presets), {"fast", "balanced", "thorough"})
         for preset in presets.values():
-            self.assertEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
+            self.assertEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
+            self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
         self.assertFalse(presets["fast"]["pro_only"])
         self.assertTrue(presets["thorough"]["pro_only"])
 
@@ -428,13 +449,17 @@ class ModelConfigurationTests(unittest.TestCase):
             "preset_models": {
                 "balanced": {
                     **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"],
-                    "openai": "gpt-5.5",
+                    "answers": {
+                        **cfg._BASE_CONSENSUS_PRESET_MODELS["balanced"]["answers"],
+                        "openai": "gpt-5.5",
+                    },
                     "consensus": "OpenAI-Pro",
                 },
             },
         })
         self.assertEqual(
-            normalized["preset_models"]["balanced"]["openai"], cfg.OPENAI_LUNA_MODEL
+            normalized["preset_models"]["balanced"]["answers"]["openai"],
+            cfg.OPENAI_LUNA_MODEL,
         )
         self.assertEqual(
             normalized["preset_models"]["balanced"]["consensus"], cfg.OPENAI_LUNA_MODEL

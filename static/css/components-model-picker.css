@@ -16,7 +16,8 @@
 }
 
 .dark-mode .chatgpt-logo,
-.dark-mode .grok-logo {
+.dark-mode .grok-logo,
+.dark-mode .mono-logo {
   filter: invert(1) brightness(0.92);
 }
 

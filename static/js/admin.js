@@ -6,7 +6,7 @@ const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
 const shareAdminRequest = createAdminClient(auth);
 
-const providers = ['openai', 'mistral', 'anthropic', 'gemini', 'deepseek', 'grok'];
+let providers = [];
 const limitGroups = [
     {
         title: 'Run Usage Limits (UTC day)',
@@ -118,6 +118,7 @@ document.getElementById('tab-models').addEventListener('change', () => {
 // Meta-Helfer (Alias-Aufloesung, server-erzwungene Modelle)
 // ==============================
 function meta() { return globalModelsData.meta || {}; }
+function providerLabel(provider) { return (meta().provider_labels || {})[provider] || provider; }
 function dependencyReasons(provider, model) {
     return ((((meta().dependencies || {})[provider] || {})[model]) || []);
 }
@@ -179,7 +180,7 @@ function renderWatchModelConfig() {
     providers.forEach(provider => {
         const label = document.createElement('div');
         label.className = 'watch-model-provider';
-        label.textContent = provider;
+        label.textContent = providerLabel(provider);
         container.appendChild(label);
         ['free', 'pro'].forEach(tier => {
             const select = document.createElement('select');
@@ -301,10 +302,18 @@ function renderWatchEffectiveRun(container, configured, premium) {
 
 function currentPresetModels() {
     const result = {};
-    document.querySelectorAll('[data-preset-id][data-preset-slot]').forEach(select => {
+    document.querySelectorAll('[data-preset-id]').forEach(select => {
         const presetId = select.dataset.presetId;
-        if (!result[presetId]) result[presetId] = {};
-        if (select.value) result[presetId][select.dataset.presetSlot] = select.value;
+        if (!result[presetId]) result[presetId] = { answers: {} };
+        if (select.dataset.presetSlot === 'consensus') {
+            if (select.value) result[presetId].consensus = select.value;
+            return;
+        }
+        if (select.dataset.presetAnswerIndex === undefined || !select.value) return;
+        try {
+            const [provider, model] = JSON.parse(select.value);
+            if (provider && model) result[presetId].answers[provider] = model;
+        } catch (_) {}
     });
     return result;
 }
@@ -315,12 +324,12 @@ function isLockedConsensusModel(model) {
     return (globalModelsData.premium || []).includes(model);
 }
 
-function appendPresetOption(select, value, label, locked) {
+function appendPresetOption(select, value, label, locked, showValue = true) {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label || value;
-    if (option.textContent !== value) option.textContent += ` (${value})`;
-    const apiModel = apiModelFor(value);
+    if (showValue && option.textContent !== value) option.textContent += ` (${value})`;
+    const apiModel = showValue ? apiModelFor(value) : '';
     if (apiModel) option.textContent += ` → ${apiModel}`;
     // Daily/Balanced sind Free-faehig und duerfen keine Premium-Modelle
     // setzen. Sichtbar lassen statt ausblenden: sonst wirkt die Liste
@@ -342,6 +351,10 @@ function renderPresetModels() {
 
     (meta().preset_definitions || []).forEach(definition => {
         const configured = chosenNow[definition.id] || saved[definition.id] || {};
+        const configuredAnswers = configured.answers || Object.fromEntries(
+            providers.filter(provider => configured[provider]).map(provider => [provider, configured[provider]])
+        );
+        const answerEntries = Object.entries(configuredAnswers).slice(0, 6);
         const card = document.createElement('div');
         card.className = 'preset-model-card';
         const title = document.createElement('h4');
@@ -349,33 +362,50 @@ function renderPresetModels() {
         if (definition.pro_only) title.appendChild(chip('', 'Pro', 'This preset is available to Pro users only.'));
         card.appendChild(title);
 
-        [...providers, 'consensus'].forEach(slot => {
+        for (let index = 0; index < 6; index += 1) {
             const field = document.createElement('div');
             field.className = 'preset-model-field';
             const label = document.createElement('label');
-            label.textContent = slot;
+            label.textContent = `Answer ${index + 1}`;
             const select = document.createElement('select');
             select.dataset.presetId = definition.id;
-            select.dataset.presetSlot = slot;
-            select.setAttribute('aria-label', `${definition.label} ${slot} model`);
-
-            if (slot === 'consensus') {
-                consensusListValues().forEach(model => {
-                    appendPresetOption(select, model, consensusDescription(model),
-                        !definition.pro_only && isLockedConsensusModel(model));
+            select.dataset.presetAnswerIndex = String(index);
+            select.setAttribute('aria-label', `${definition.label} answer ${index + 1} model`);
+            providers.forEach(provider => {
+                currentProviderModels(provider).forEach(model => {
+                    appendPresetOption(
+                        select,
+                        JSON.stringify([provider, model]),
+                        `${providerLabel(provider)} · ${labelFor(model)}`,
+                        !definition.pro_only && premium.has(model),
+                        false,
+                    );
                 });
-            } else {
-                currentProviderModels(slot).forEach(model => {
-                    appendPresetOption(select, model, labelFor(model),
-                        !definition.pro_only && premium.has(model));
-                });
-            }
-            select.value = configured[slot] || '';
+            });
+            const selected = answerEntries[index];
+            select.value = selected ? JSON.stringify(selected) : '';
             select.addEventListener('change', markDirty);
             field.appendChild(label);
             field.appendChild(select);
             card.appendChild(field);
+        }
+
+        const consensusField = document.createElement('div');
+        consensusField.className = 'preset-model-field';
+        const consensusLabel = document.createElement('label');
+        consensusLabel.textContent = 'Consensus';
+        const consensusSelect = document.createElement('select');
+        consensusSelect.dataset.presetId = definition.id;
+        consensusSelect.dataset.presetSlot = 'consensus';
+        consensusSelect.setAttribute('aria-label', `${definition.label} consensus model`);
+        consensusListValues().forEach(model => {
+            appendPresetOption(consensusSelect, model, consensusDescription(model),
+                !definition.pro_only && isLockedConsensusModel(model));
         });
+        consensusSelect.value = configured.consensus || '';
+        consensusSelect.addEventListener('change', markDirty);
+        consensusField.append(consensusLabel, consensusSelect);
+        card.appendChild(consensusField);
         container.appendChild(card);
     });
 }
@@ -398,7 +428,7 @@ function renderUI() {
         section.className = 'admin-section';
 
         const title = document.createElement('h3');
-        title.textContent = p;
+        title.textContent = providerLabel(p);
         section.appendChild(title);
 
         const listContainer = document.createElement('div');
@@ -712,7 +742,7 @@ function renderConsensusAddSelect() {
 
     providers.forEach(p => {
         const group = document.createElement('optgroup');
-        group.label = p;
+        group.label = providerLabel(p);
         (currentProviderModels(p) || []).forEach(model => {
             if (!model || existing.has(model)) return;
             const opt = document.createElement('option');
@@ -852,7 +882,7 @@ function renderJudgeSelects() {
         row.className = 'judge-row';
 
         const label = document.createElement('label');
-        label.textContent = p;
+        label.textContent = providerLabel(p);
 
         const chosen = chosenNow[p] || saved[p] || judgeDefaults[p] || '';
         const chosenPro = chosenProNow[p] || savedPro[p] || proDefaults[p] || '';
@@ -894,7 +924,7 @@ function renderChatMemorySelects() {
         row.className = 'judge-fam-row';
 
         const label = document.createElement('label');
-        label.textContent = p;
+        label.textContent = providerLabel(p);
 
         const chosen = chosenNow[p] || saved[p] || defaults[p] || '';
         row.appendChild(label);
@@ -917,7 +947,7 @@ function renderJudgeFamilies() {
         row.className = 'judge-fam-row';
 
         const label = document.createElement('label');
-        label.textContent = `${engine} engine`;
+        label.textContent = `${providerLabel(engine)} engine`;
 
         const select = document.createElement('select');
         select.dataset.judgefamEngine = engine;
@@ -934,7 +964,7 @@ function renderJudgeFamilies() {
             if (judgeFamily === engine) return;
             const opt = document.createElement('option');
             opt.value = judgeFamily;
-            opt.textContent = judgeFamily;
+            opt.textContent = providerLabel(judgeFamily);
             if (judgeFamily === chosen) opt.selected = true;
             select.appendChild(opt);
         });
@@ -1076,6 +1106,9 @@ async function fetchModels(idToken) {
             throw new Error('Failed to fetch models. Admin access required.');
         }
         globalModelsData = await response.json();
+        providers = Array.isArray(meta().provider_keys)
+            ? meta().provider_keys.slice()
+            : [];
         renderUI();
         clearDirty();
     } catch (err) {
@@ -1172,9 +1205,9 @@ async function saveModels() {
     }
     for (const definition of (meta().preset_definitions || [])) {
         const configured = data.preset_models[definition.id] || {};
-        const missing = [...providers, 'consensus'].filter(key => !configured[key]);
-        if (missing.length) {
-            setStatus(`${definition.label} preset is missing: ${missing.join(', ')}.`, true);
+        const answers = configured.answers || {};
+        if (Object.keys(answers).length !== 6 || !configured.consensus) {
+            setStatus(`${definition.label} must select six different model families and one consensus engine.`, true);
             return;
         }
     }
@@ -1757,7 +1790,7 @@ function renderTopicModelPlan(providerModels) {
         toggle.type = 'checkbox';
         toggle.checked = !!chosen;
         toggle.setAttribute('aria-label', `Run ${provider}`);
-        toggleLabel.append(toggle, document.createTextNode(PROVIDER_LABELS[provider] || provider));
+        toggleLabel.append(toggle, document.createTextNode(providerLabel(provider)));
         const select = document.createElement('select');
         const options = models.length ? models : (chosen ? [chosen] : []);
         options.forEach(model => {
@@ -1776,11 +1809,6 @@ function renderTopicModelPlan(providerModels) {
         container.appendChild(row);
     });
 }
-
-const PROVIDER_LABELS = {
-    openai: 'OpenAI', mistral: 'Mistral', anthropic: 'Anthropic',
-    gemini: 'Gemini', deepseek: 'DeepSeek', grok: 'Grok'
-};
 
 function fillAdminTopic(topic, runs) {
     selectedTopicDetail = topic;

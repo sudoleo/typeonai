@@ -51,6 +51,10 @@ def auth_patches(uid="uid-ask-tests", is_pro=False):
 
 
 AUTH_HEADER = {"Authorization": "Bearer test-token"}
+PNG_ATTACHMENT = {
+    "name": "pixel.png",
+    "data": "iVBORw0KGgoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+}
 
 
 def test_no_auth_error_is_uniform_across_model_families():
@@ -103,6 +107,40 @@ def test_deep_search_is_pro_only():
         )
     assert response.status_code == 403
     assert "Pro users" in response.json()["detail"]
+
+
+def test_glm_attachment_support_depends_on_the_effective_model():
+    client = make_client()
+    p1, p2 = auth_patches(is_pro=True)
+    with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
+        flash = client.post(
+            "/ask_glm",
+            headers=AUTH_HEADER,
+            json={
+                "question": "describe it",
+                "model": cfg.GLM_BASE_MODEL,
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
+                "attachments": [PNG_ATTACHMENT],
+            },
+        )
+        pro = client.post(
+            "/ask_glm",
+            headers=AUTH_HEADER,
+            json={
+                "question": "describe it",
+                "model": cfg.GLM_BASE_MODEL,
+                "deep_search": True,
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
+                "attachments": [PNG_ATTACHMENT],
+            },
+        )
+
+    assert flash.status_code == 200
+    assert pro.status_code == 400
+    assert pro.json()["detail"] == "GLM 5.3 cannot read attachments."
+    assert run.call_count == 1
 
 
 def test_megabyte_style_one_word_question_is_rejected_before_provider_work():

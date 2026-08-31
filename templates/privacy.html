@@ -122,8 +122,9 @@
         <p>
           All model requests are sent first to OpenRouter (OpenRouter, Inc., USA), which routes them to the model
           providers selected for the query: OpenAI (USA), Anthropic (USA), Google (USA), Mistral AI (France), xAI
-          (USA), and DeepSeek (People's Republic of China). The six model families and their labels remain visible
-          in the app.
+          (USA), DeepSeek (People's Republic of China), Moonshot AI/Kimi (Singapore and affiliated operations in
+          China), and Z.ai/GLM (Singapore and affiliated operations in China). The selected model families and their
+          labels remain visible in the app; each run compares no more than six of them.
         </p>
         <p>
           consens.io marks every OpenRouter request as Zero Data Retention (ZDR). OpenRouter does not log prompt or
@@ -132,9 +133,10 @@
           order to generate its answer. We do not enable provider pinning.
         </p>
         <p>
-          <strong>Note on DeepSeek:</strong> if you select DeepSeek, or use a fixed six-family Consensus API run,
-          OpenRouter may transmit the request to a DeepSeek endpoint for processing. This can involve processing in
-          China, a country without an EU adequacy decision. Do not submit content that must not be processed there.
+          <strong>Note on providers connected to China:</strong> if you select DeepSeek, Kimi, or GLM, or use a
+          server-selected Consensus API run containing one of those families, OpenRouter may transmit the request to
+          an eligible endpoint of that provider. This can involve processing in China, a country without an EU
+          adequacy decision. Do not submit content that must not be processed there.
           See also the <a href="/terms">Terms of Use</a>.
         </p>
         <p class="subtle">
@@ -243,11 +245,11 @@
             in section 5.</li>
         </ul>
         <p>
-          Processing may occur outside the EU/EEA, in particular in the USA and, if a DeepSeek endpoint handles a
-          selected model or fixed Consensus API run, in China. For transfers to
+          Processing may occur outside the EU/EEA, in particular in the USA, Singapore and, if a DeepSeek, Moonshot
+          AI or Z.ai endpoint handles a selected model or server-selected Consensus API run, in China. For transfers to
           the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
           Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
-          DeepSeek, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
+          those providers, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
         </p>
       </section>
 
@@ -312,7 +314,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 18 July 2026" %}
+  {% set public_footer_note = "Last updated: 31 August 2026" %}
   {% include "partials/public_footer.html" %}
 
   <script>

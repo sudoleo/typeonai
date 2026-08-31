@@ -89,7 +89,9 @@ def normalize_attachment_meta(raw) -> list[dict]:
 
 # Provider, die Bilder bzw. PDFs nativ als Content-Block verarbeiten können.
 # Alle anderen erhalten einen Text-Fallback (PDF-Extraktion bzw. Hinweis).
-PROVIDER_IMAGE_SUPPORT = {"openai", "anthropic", "gemini", "grok"}
+PROVIDER_IMAGE_SUPPORT = {
+    "openai", "anthropic", "gemini", "grok", "kimi", "glm"
+}
 PROVIDER_PDF_SUPPORT = {"openai", "anthropic", "gemini"}
 
 _DOCX_ALLOWED_EXACT = {"[Content_Types].xml"}

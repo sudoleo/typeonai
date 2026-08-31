@@ -16,6 +16,7 @@ from app.services.llm.citations import coerce_text
 from app.services.llm.credentials import openrouter_api_key
 from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
+    _merge_nested_config,
     _raise_provider_http_status,
     openrouter_headers,
 )
@@ -129,6 +130,12 @@ def _resolve_engine(engine_model: str) -> tuple[str, str, str] | None:
     return config.provider, config.api_model, model_ref
 
 
+def _engine_request_config(provider: str, api_model: str, model_ref: str) -> dict:
+    internal_id = model_ref if model_ref in cfg.MODEL_CONFIGS else str(api_model).split("/", 1)[-1]
+    model_config = cfg.get_model_config(internal_id, provider)
+    return dict(model_config.request_config or {}) if model_config else {}
+
+
 def _call_engine_text(
     provider: str,
     api_model: str,
@@ -167,8 +174,10 @@ def _call_engine_text(
     response_format = _structured_response_format(json_mode, json_schema)
     if response_format is not None:
         payload["response_format"] = response_format
+    request_config = _engine_request_config(provider, api_model, model_ref)
     if effort:
-        payload["reasoning"] = {"effort": effort}
+        request_config.setdefault("reasoning", {"effort": effort})
+    _merge_nested_config(payload, request_config)
     response = requests.post(
         OPENROUTER_CHAT_COMPLETIONS_URL,
         json=payload,
@@ -252,6 +261,9 @@ def _stream_engine_text(
         raise _InvalidEngineError("OpenRouter credential is missing")
     temperature = _effective_temperature(provider, api_model, temperature)
     response_format = _structured_response_format(json_mode, json_schema)
+    request_config = _engine_request_config(provider, api_model, model_ref)
+    if effort:
+        request_config.setdefault("reasoning", {"effort": effort})
     yield from stream_chat_completion_text(
         api_key=api_key,
         model=api_model,
@@ -262,7 +274,7 @@ def _stream_engine_text(
         max_tokens=int(max_tokens),
         temperature=temperature,
         response_format=response_format,
-        reasoning_effort=effort,
+        request_config=request_config,
     )
 
 
@@ -346,7 +358,7 @@ def _model_answer_items(answers, excluded_models) -> list[tuple[str, str]]:
     items = []
     for key, answer in (answers or {}).items():
         name = cfg.PROVIDER_LABEL_BY_ID.get(str(key).lower(), str(key))
-        if not answer or normalize_model_name(name) in excluded:
+        if not isinstance(answer, str) or not answer.strip() or normalize_model_name(name) in excluded:
             continue
         items.append((name, answer))
     return items

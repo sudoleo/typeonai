@@ -27,9 +27,16 @@
   // zurueck — der `accept`-Filter des Datei-Feldes ist weiterhin grosszuegiger.
   const ATTACH_ALLOWED_MIMES = ["application/pdf", DOCX_MIME, "text/plain", "image/png", "image/jpeg", "image/webp"];
   const ATTACH_TYPES_LABEL = "PDF, Word (.docx), TXT, MD, CSV, PNG, JPG, WebP";
-  // Familien, deren API keine Anhaenge lesen kann (Serverangabe je Familie).
+  // Familien, deren aktuell effektives Modell keine Anhaenge lesen kann.
   function attachmentBlockedFamilies() {
-    return (window.App?.modelPrefs || []).filter(pref => pref.handlesAttachments === false);
+    const deepThink = document.getElementById("deepSearchToggle")?.checked === true;
+    return (window.App?.modelPrefs || []).filter(pref => {
+      const model = document.getElementById(pref.selectId)?.value;
+      const accepts = typeof window.App?.modelAcceptsAttachments === "function"
+        ? window.App.modelAcceptsAttachments(pref, model, deepThink)
+        : pref.handlesAttachments !== false;
+      return !accepts;
+    });
   }
 
   function attachmentBlockMessage(families) {
@@ -71,18 +78,18 @@
 
     function syncAttachmentCompatibility() {
       const families = attachmentBlockedFamilies();
-      if (!families.length) return;
+      const blockedIds = new Set(families.map(family => family.checkId));
       const incompatible = hasSendableAttachments();
       const message = attachmentBlockMessage(families);
 
-      families.forEach(family => {
+      (window.App?.modelPrefs || []).forEach(family => {
         const checkbox = document.getElementById(family.checkId);
         if (!checkbox) return;
         const label = document.querySelector(`label[for='${family.checkId}']`);
         const responseBox = document.getElementById(family.responseId);
         const excludeButton = responseBox?.querySelector(".exclude-btn");
 
-        if (incompatible) {
+        if (incompatible && blockedIds.has(family.checkId)) {
           if (!selectionBeforeAttachment.has(family.checkId)) {
             selectionBeforeAttachment.set(family.checkId, checkbox.checked);
           }
@@ -107,8 +114,10 @@
           return;
         }
 
-        checkbox.disabled = false;
-        checkbox.removeAttribute("aria-describedby");
+        if (checkbox.getAttribute("aria-describedby") === "attachmentProviderNotice") {
+          checkbox.disabled = false;
+          checkbox.removeAttribute("aria-describedby");
+        }
         if (label) label.classList.remove("is-attachment-incompatible");
         if (excludeButton) excludeButton.disabled = false;
 
@@ -424,7 +433,8 @@
     window.App.attachments = {
       detachForMessage: detachForMessage,
       messageMeta: messageMeta,
-      renderMessageAttachments: renderMessageAttachments
+      renderMessageAttachments: renderMessageAttachments,
+      refreshCompatibility: syncAttachmentCompatibility
     };
 
     window.clearPendingAttachments = function () {

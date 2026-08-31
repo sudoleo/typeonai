@@ -2046,10 +2046,9 @@ def test_consensus_presets_apply_full_model_sets_and_gate_thorough(app_page):
           const fast = consensus._customModelPicker.menu.querySelector('[data-preset="fast"]');
           fast.click();
           const configured = window.CONSENSUS_PRESETS.find(preset => preset.id === "fast");
-          const actual = Object.fromEntries(window.App.modelPrefs.map(pref => [
-            pref.provider,
-            document.getElementById(pref.selectId).value,
-          ]));
+          const actual = Object.fromEntries(window.App.modelPrefs
+            .filter(pref => document.getElementById(pref.checkId).checked)
+            .map(pref => [pref.provider, document.getElementById(pref.selectId).value]));
 
           consensus._customModelPicker.displayButton.click();
           const thorough = consensus._customModelPicker.menu.querySelector('[data-preset="thorough"]');

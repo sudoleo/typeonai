@@ -25,6 +25,7 @@ from app.services.llm.engines import (
     OPENROUTER_CHAT_COMPLETIONS_URL,
     _error,
     _log_model_selection,
+    _merge_nested_config,
     _raise_provider_http_status,
     build_provider_payload,
     openrouter_headers,
@@ -305,6 +306,7 @@ def stream_chat_completion_text(
     temperature: float | None = None,
     response_format: dict | None = None,
     reasoning_effort: str | None = None,
+    request_config: dict | None = None,
 ) -> Iterator[StreamEvent]:
     """Stream text for Consensus/Differences through the same transport."""
     payload = {
@@ -319,6 +321,7 @@ def stream_chat_completion_text(
         payload["response_format"] = response_format
     if reasoning_effort is not None:
         payload["reasoning"] = {"effort": reasoning_effort}
+    _merge_nested_config(payload, request_config)
     for event in _iter_openrouter_chunks(api_key=api_key, payload=payload):
         if event.get("type") in {"delta", "reasoning"}:
             yield event

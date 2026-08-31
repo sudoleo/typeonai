@@ -12,10 +12,10 @@
           data-firebase-messaging-sender-id="{{ firebase_messaging_sender_id | e }}"
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
-<link rel="stylesheet" href="/static/style.css?v=20260826-flat2">
+<link rel="stylesheet" href="/static/style.css?v=20260831-kimiglm1">
     <link rel="stylesheet" href="/static/css/admin.css?v=20260825-watcheffective1">
 
-    <script type="module" src="/static/js/admin.js?v=20260826-slugalias1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260831-modelsets1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -69,7 +69,7 @@
             <div class="admin-section">
                 <h3>Preset Model Sets</h3>
                 <p class="section-hint">
-                    Each preset selects all six answer models and the final Consensus engine together.
+                    Each preset selects exactly six answer models from the available families and the final Consensus engine.
                     Daily and Balanced accept Free-tier models only; High Quality is always Pro-only.
                 </p>
                 <div id="presetModelsContainer" class="preset-model-cards">
@@ -213,8 +213,8 @@
                 <h3>Consensus API keys</h3>
                 <p class="section-hint">
                     Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and run limits. All v1 runs use all six providers, including mandatory
-                    DeepSeek processing in China; the Scheduled Publisher is no exception.
+                    UID's tier and run limits. All v1 runs use the six server-selected Balanced-preset
+                    families, including DeepSeek processing in China; the Scheduled Publisher is no exception.
                     Run content expires after 30 days.
                     Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
                     into a secret manager.

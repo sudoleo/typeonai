@@ -837,7 +837,9 @@ def test_complete_turn_atomically_persists_six_separate_answer_documents(chat_ap
     assert completed["agreement_score"] == 83
     assert completed["included_models"] == list(PROVIDERS)
     assert set(completed["model_answers"]) == set(PROVIDERS)
-    assert set(stored_answers) == set(chat_store.PROVIDER_DOCUMENT_IDS.values())
+    assert set(stored_answers) == {
+        chat_store.PROVIDER_DOCUMENT_IDS[provider] for provider in PROVIDERS
+    }
     assert all(
         set(answer) == {
             "schema_version", "provider", "model_label", "answer", "sources",
@@ -1123,9 +1125,9 @@ def test_turn_detail_is_owner_scoped_whitelisted_and_reads_six_known_docs(chat_a
     assert foreign_turn.json() == unknown_turn.json() == foreign_chat.json() == malformed.json()
     answer_reads = [path for path in database.read_log if "model_answers" in path]
     assert len(answer_reads) == 6
-    assert {path[-1] for path in answer_reads} == set(
-        chat_store.PROVIDER_DOCUMENT_IDS.values()
-    )
+    assert {path[-1] for path in answer_reads} == {
+        chat_store.PROVIDER_DOCUMENT_IDS[provider] for provider in PROVIDERS
+    }
 
 
 def test_turn_list_stays_compact_after_completion_and_failure(chat_api):

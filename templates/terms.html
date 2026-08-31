@@ -51,11 +51,12 @@
           <strong>This is the most important thing to understand about consens.io:</strong> when you send a query,
           your prompt and any attachments are transmitted through OpenRouter to the AI providers behind the models
           you select. Depending on your selection, these are OpenAI (USA), Anthropic (USA), Google (USA), Mistral AI
-          (France), xAI (USA), and <strong>DeepSeek (People's Republic of China)</strong>. consens.io requires
+          (France), xAI (USA), <strong>DeepSeek (People's Republic of China)</strong>, Moonshot AI/Kimi (Singapore
+          and affiliated operations in China), and Z.ai/GLM (Singapore and affiliated operations in China). consens.io requires
           OpenRouter Zero Data Retention for every request: OpenRouter does not log prompt or response content, does
           not use it for training, and routes only to eligible non-retaining endpoints. Each underlying provider processes your content under its
           own terms and privacy policy, and this may include processing outside the EU/EEA, including in countries
-          without an EU adequacy decision, such as China when you use DeepSeek models.
+          without an EU adequacy decision, such as China when you use DeepSeek, Kimi, or GLM models.
         </p>
         <p>
           By using consens.io and selecting models, you instruct us to transmit your content through OpenRouter to
@@ -108,7 +109,7 @@
           <li>Usage is subject to quotas and rate limits that we may change at any time, because every run causes real costs at the model providers. Quotas may reset, for example when the server restarts.</li>
           <li>Features labelled "Pro" or similar are simply the more expensive runs. They are enabled manually for individual accounts, cannot currently be purchased, and no feature or quota constitutes a promised entitlement.</li>
           <li>If you store your own OpenRouter API key, it is saved in your browser and transmitted through our server to OpenRouter with each request. OpenRouter then routes requests to the selected underlying model provider. You are responsible for the costs and the security of your key, and should review the applicable OpenRouter and provider terms.</li>
-          <li>Administrator-issued Consensus API runs use a fixed server-selected comparison across OpenAI, Mistral, Anthropic, Google, xAI, and DeepSeek through OpenRouter with ZDR required. A DeepSeek endpoint may process API-run content in China and cannot be deselected for these fixed runs; this includes the admin-controlled Scheduled Publisher and its Watch runs. Do not submit content through API runs if it must not be processed there.</li>
+          <li>Administrator-issued Consensus API runs use a fixed server-selected comparison of up to six configured model families through OpenRouter with ZDR required. Depending on the active preset, this can include DeepSeek, Moonshot AI/Kimi, or Z.ai/GLM; an eligible endpoint may process API-run content in China and cannot be deselected for these fixed runs. This includes the admin-controlled Scheduled Publisher and its Watch runs. Do not submit content through API runs if it must not be processed there.</li>
           <li>Consensus API questions and results are stored for asynchronous retrieval and idempotency for no more than 30 days after acceptance. A client may delete a completed run earlier; deleting a run does not undo processing already performed by model providers.</li>
         </ul>
       </section>
@@ -197,7 +198,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 12 June 2026" %}
+  {% set public_footer_note = "Last updated: 31 August 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>

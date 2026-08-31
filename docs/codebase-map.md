@@ -18,9 +18,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 - **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
   SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
-- **LLM-Modelle**: sechs feste Produktfamilien (OpenAI, Mistral, Anthropic,
-  Gemini, DeepSeek, Grok), alle über einen OpenRouter-Chat-Completions-Transport
-  mit ZDR. Provider-Label-Konvention: Claude = `Anthropic`.
+- **LLM-Modelle**: acht Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
+  DeepSeek, Grok, Kimi, GLM), alle über einen OpenRouter-Chat-Completions-
+  Transport mit ZDR. Ein Lauf wählt davon höchstens sechs. Provider-Label-
+  Konvention: Claude = `Anthropic`.
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
   `static/js/`, überwiegend als klassische `<script defer>`-Tags. `window.App`
@@ -78,7 +79,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache), `/feedback`, `/vote`, `/check_keys` (nur verifizierte Logins zum Testen eigener Keys). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
-| `chat.py` | Kern-LLM-Flow: `/prepare`, `/ask_openai` `/ask_mistral` `/ask_claude` `/ask_gemini` `/ask_deepseek` `/ask_grok`, `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Die sechs `/ask_*`-Endpoints sind dünne Wrapper um `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`, die Rate-Limits bleiben als Literal am Endpoint. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
+| `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
 | `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Firebase-Mailbox-Setup-Pfad. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig. |
@@ -288,8 +289,8 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
 - **`model-picker.js`** — Modellauswahl/Custom-Picker, Default-Modelle, localStorage-
   Persistenz (`restoreModelSelections`). Der Consensus-Picker hat seit 2026-07-18
   eine Preset-Ebene (Daily/Balanced/High Quality + Custom): Presets kommen aus
-  `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set alle
-  sechs Antwortmodelle plus Consensus-Engine. High Quality (interne ID
+  `window.CONSENSUS_PRESETS` und setzen als zusammenhaengendes Model-Set genau
+  sechs aus den Registry-Familien gewählte Antwortmodelle plus Consensus-Engine. High Quality (interne ID
   `thorough`) ist Pro-only und zeigt
   ein Pro-Badge; eine manuelle Antwort- oder Consensus-Modellwahl wechselt zu
   Custom. Die nativen Selects werden dabei OHNE change-Event gesetzt (Muster
@@ -301,7 +302,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   "custom"; die volle Modell-Liste bleibt bewusst ohne Beschreibungen.
   **Seit 2026-07-27 ist „Custom" die ganze Aufstellung eines Laufs**, nicht
   mehr nur die Engine-Liste: `state.view` kennt `presets` → `custom`
-  (Uebersicht: sechs Provider-Zeilen mit Ein-/Ausschluss-Toggle + aktuellem
+  (Uebersicht: alle Registry-Familien mit Ein-/Ausschluss-Toggle + aktuellem
   Modell, darunter die Consensus-Engine) → `provider:<key>` bzw. `engine`
   (die jeweilige Modell-Liste, mit Rueckweg). Die Auswahl feuert `change` auf
   dem ZIEL-Select, damit `app-init.js` wie bisher `pref_select_*` speichert
@@ -392,7 +393,7 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   `shell.css`, `components-modals.css`, `app-init.js`, `firebase.js`) — Models
   und Bookmarks sind Sidebar-Abschnitte mit integrierten Icons. Models bleibt
   eine einzelne kompakte Zeile mit Providerzahl; Klick öffnet den bestehenden
-  Run-Picker am Composer, statt sechs Providerzeilen in der Navigation
+  Run-Picker am Composer, statt die Providerzeilen in der Navigation
   aufzuklappen. Die Provider-Inklusion im Custom-Picker nutzt klare
   Checkboxen statt Toggle-Switches. Die Chat-Suche belegt keine
   permanente Zeile mehr, sondern ersetzt bei Hover/Fokus den Bookmarks-Titel
@@ -1872,8 +1873,8 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Consensus-Engine aus demselben Preset und für Deep Think stattdessen
   `DEEP_THINK_CONSENSUS_MODEL`. Kosten, Limits, Modelle oder Modellanzahl sind
   keine Request-Felder.
-- API-v1-Runs verwenden bewusst immer alle sechs Provider einschließlich
-  DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Das gilt seit
+- API-v1-Runs verwenden bewusst immer die sechs Familien des Balanced-Presets,
+  einschließlich DeepSeek; für API-Kunden gibt es keinen Provider-Opt-out. Das gilt seit
   2026-08-25 auch für den admin-only Scheduled Publisher: sein typisierter
   Header `X-Consensus-Publisher: true` markiert nur noch die Herkunft (Lineage,
   Idempotenz, Kapazität) und verändert den Modellplan nicht mehr. Der frühere
@@ -2648,7 +2649,8 @@ Basiswerte, `MODEL_ORDER_BY_PROVIDER`, der Firestore-Load samt Backfill sowie
 Picker. Die `ALLOWED_*_MODELS`-Namen bleiben Aliasse auf DASSELBE Set-Objekt der
 Registry (der Firestore-Load mutiert in place). Familienspezifische Hygiene
 steht in `PROVIDER_MODEL_MIGRATIONS`/`PROVIDER_DEPRECATED_MODELS`, Reasoning-
-Varianten als Daten in `MODEL_REQUEST_CONFIG`. Bewusst abweichende
+Varianten als Daten in `MODEL_REQUEST_CONFIG`: Kimi K2.6/K3 senden
+`reasoning.enabled=false`, GLM 5.3 Flash/5.3 `reasoning.effort=low`. Bewusst abweichende
 Reihenfolgen (`_CONSENSUS_ALIAS_ORDER`, `watch_scheduler._WATCH_ENGINE_PREFERENCE`)
 haengen unbekannte Familien hinten an, statt sie zu verlieren;
 `tests/test_provider_registry.py` haelt das fest. Consensus- und
@@ -2666,15 +2668,17 @@ Fortschritt, Zitate, Bookmarks (`firebase.js`) und Anhang-Regel
 (`attachments.js`) ihre Familien ziehen. Die DOM-IDs bleiben Vertrag und
 werden aus `dom_key`/`short_label` gebildet (`anthropic` -> `claudeResponse`,
 `selectClaude`), die Namen aus `title`/`short_label`/`citation_label`.
-Eine neue Familie braucht damit nur einen Registry-Eintrag, ein Icon unter
-`static/icons/chat_icons/` und ihre `/ask_<dom_key>`-Route.
+Eine neue Familie braucht damit nur einen Registry-Eintrag und ein Icon unter
+`static/icons/chat_icons/`; `/ask_<dom_key>` wird aus der Registry registriert.
 
 Ein Lauf vergleicht hoechstens `cfg.MAX_RUN_FAMILIES` (6) Modelle, auch wenn
 mehr Familien konfiguriert sind: der Picker sperrt die naechste Familie
 sichtbar (`model-picker.js`, `capBlocksInclusion`), `/consensus` weist mehr
 Antworten mit 400 ab. Weniger als sechs bleibt wie bisher moeglich.
-`accepts_attachments=False` legt eine Familie fuer Fragen MIT Anhang stumm
-(heute nur DeepSeek); die Regel steht in der Registry, nicht im Frontend.
+`attachment_models` legt die Fähigkeit pro Modell fest (`None` = alle, leeres
+Set = keines). DeepSeek bleibt mit Anhang stumm; bei GLM kann 5.3 Flash Anhänge
+lesen, während das effektive Deep-Think-Modell GLM 5.3 text-only ist. Frontend
+und Backend prüfen deshalb das tatsächlich gewählte/eingesetzte Modell.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
@@ -2683,9 +2687,10 @@ Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
 `app_config/models` autoritativ. Ebenfalls in `config.py`: die festen
 Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
 für ein fehlendes/noch nicht migriertes Dokument.
-Firestore `preset_models` ueberschreibt pro Daily/Balanced/High Quality (ID:
-`thorough`) die sechs
-Antwortmodelle plus Consensus-Engine; Daily/Balanced bleiben Free-faehig und
+Firestore `preset_models` speichert pro Daily/Balanced/High Quality (ID:
+`thorough`) unter `answers` genau sechs unterschiedliche Familienmodelle plus
+`consensus`; das alte Top-Level-Provider-Schema wird beim Laden migriert.
+Daily/Balanced bleiben Free-faehig und
 High Quality bleibt unabhaengig von der Konfiguration Pro-only. Grok-Alt-Aliasse
 (u. a. 4.1 Fast) werden beim Laden auf explizite interne Grok-4.3-Varianten
 migriert: `grok-4.3-no-reasoning` sendet API-Modell `grok-4.3` mit
@@ -3207,10 +3212,11 @@ ersten Check statt eines leeren Consensus-Panels.
   Run verwenden und bindet dessen Hash-Metadaten vor dem LLM-Call einmalig an
   genau einen Chat/Turn; diese Bindung verändert keine Usage-Zähler.
 - **Own-Key-Vertrag:** Die App bietet genau ein optionales `openrouterKey`-Feld in
-  `localStorage`. Im Own-Key-Modus senden die sechs `/ask_*`-Flows,
+  `localStorage`. Im Own-Key-Modus senden alle Registry-`/ask_*`-Flows,
   `/consensus` und `/resolve` ausschließlich `openrouter_key`; `/prepare` trägt
-  weiterhin keine Provider-Key-Felder. Die sechs
-  Modell-/Antwortboxen und ihre Endpoints bleiben unverändert.
+  weiterhin keine Provider-Key-Felder. Die Modell-/Antwortboxen folgen der
+  Registry; die historischen Endpoint-Namen
+  bleiben unverändert.
 - **Datenminimierung ist Designentscheidung**: keine IP-/User-Agent-Speicherung,
   keine Datei-Bytes in Firestore. Nicht „aus Versehen" mitloggen.
 

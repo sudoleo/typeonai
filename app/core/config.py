@@ -18,6 +18,7 @@ class ModelConfig:
     is_free: bool = True
     is_pro: bool = False
     is_low_reasoning: bool = False
+    accepts_attachments: bool = True
     request_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
@@ -130,6 +131,10 @@ DEFAULT_GROK_MODEL = "grok-4.20-non-reasoning"
 # auskommt.
 OPENAI_PRO_MODEL = "gpt-5.5"
 GROK_PRO_MODEL = "grok-4.3"
+KIMI_BASE_MODEL = "kimi-k2.6"
+KIMI_PRO_MODEL = "kimi-k3"
+GLM_BASE_MODEL = "glm-5.3-flash"
+GLM_PRO_MODEL = "glm-5.3"
 
 # ---------------------------------------------------------------------------
 # Provider-Registry: die eine Quelle fuer alles, was je Modellfamilie gilt.
@@ -163,12 +168,17 @@ class ProviderConfig:
     icon: str = ""           # Datei unter static/icons/chat_icons/
     icon_class: str = ""     # zusaetzliche CSS-Klasse am <img>
     citation_label: str = "" # ausgeschriebener Name in Zitaten
-    # Produktregel: Familien, deren API mit Anhaengen nicht umgehen kann,
-    # werden fuer Fragen MIT Anhang stillgelegt statt sie ohne die Dateien
-    # antworten zu lassen. Bewusst je Familie gesetzt und nicht aus den
-    # Attachment-Support-Sets abgeleitet: Mistral bekommt PDF-Text ueber den
-    # Extraktions-Fallback und laeuft deshalb weiter mit.
-    accepts_attachments: bool = True
+    # Produktregel auf Modellebene: None = alle Modelle koennen Anhaenge
+    # verarbeiten (nativ oder ueber Text-Fallback), leeres Set = keines. Das
+    # ist bewusst feiner als Provider-Support: GLM 5.3 Flash ist multimodal,
+    # GLM 5.3 dagegen text-only.
+    attachment_models: frozenset[str] | None = None
+
+    def model_accepts_attachments(self, model_id: str | None) -> bool:
+        return (
+            self.attachment_models is None
+            or str(model_id or "") in self.attachment_models
+        )
 
     @property
     def response_id(self) -> str:
@@ -193,7 +203,7 @@ class ProviderConfig:
 
 def _provider(key, label, prefix, base, pro, models, required=(),
               dom_key="", title="", short_label="", icon="", icon_class="",
-              citation_label="", accepts_attachments=True):
+              citation_label="", attachment_models=None):
     dom_key = dom_key or key
     title = title or label
     short_label = short_label or title
@@ -211,7 +221,9 @@ def _provider(key, label, prefix, base, pro, models, required=(),
         icon=icon or f"{key}.png",
         icon_class=icon_class,
         citation_label=citation_label or label,
-        accepts_attachments=accepts_attachments,
+        attachment_models=(
+            None if attachment_models is None else frozenset(attachment_models)
+        ),
     )
 
 
@@ -254,7 +266,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         _provider(
             "deepseek", "DeepSeek", "deepseek/", DEFAULT_DEEPSEEK_MODEL, DEEPSEEK_PRO_MODEL,
             {DEEPSEEK_FLASH_MODEL, DEEPSEEK_PRO_MODEL},
-            accepts_attachments=False,
+            attachment_models=(),
         ),
         _provider(
             "grok", "Grok", "x-ai/", DEFAULT_GROK_MODEL, GROK_PRO_MODEL,
@@ -263,6 +275,17 @@ PROVIDERS: dict[str, ProviderConfig] = {
                 GROK_PRO_MODEL,
             },
             icon_class="grok-logo",
+        ),
+        _provider(
+            "kimi", "Kimi", "moonshotai/", KIMI_BASE_MODEL, KIMI_PRO_MODEL,
+            {KIMI_BASE_MODEL, KIMI_PRO_MODEL},
+            icon="kimi.svg", icon_class="mono-logo", citation_label="Moonshot AI Kimi",
+        ),
+        _provider(
+            "glm", "GLM", "z-ai/", GLM_BASE_MODEL, GLM_PRO_MODEL,
+            {GLM_BASE_MODEL, GLM_PRO_MODEL},
+            icon="zai.svg", icon_class="mono-logo", citation_label="Z.ai GLM",
+            attachment_models=(GLM_BASE_MODEL,),
         ),
     )
 }
@@ -346,7 +369,9 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 
 # Anzeige-Reihenfolge der Familien-Aliasse im Consensus-Picker. Familien ohne
 # Eintrag haengen in Registry-Reihenfolge hinten an.
-_CONSENSUS_ALIAS_ORDER = ["grok", "openai", "anthropic", "mistral", "gemini", "deepseek"]
+_CONSENSUS_ALIAS_ORDER = [
+    "grok", "openai", "anthropic", "mistral", "gemini", "deepseek", "kimi", "glm"
+]
 
 
 def _consensus_alias_providers() -> list[ProviderConfig]:
@@ -398,30 +423,36 @@ CONSENSUS_PRESET_DEFINITIONS = [
 
 _BASE_CONSENSUS_PRESET_MODELS = {
     "fast": {
-        "openai": OPENAI_LUNA_MODEL,
-        "mistral": DEFAULT_MISTRAL_MODEL,
-        "anthropic": DEFAULT_ANTHROPIC_MODEL,
-        "gemini": DEFAULT_GEMINI_MODEL,
-        "deepseek": DEEPSEEK_FLASH_MODEL,
-        "grok": GROK_FAST_MODEL,
+        "answers": {
+            "openai": OPENAI_LUNA_MODEL,
+            "mistral": DEFAULT_MISTRAL_MODEL,
+            "anthropic": DEFAULT_ANTHROPIC_MODEL,
+            "gemini": DEFAULT_GEMINI_MODEL,
+            "deepseek": DEEPSEEK_FLASH_MODEL,
+            "grok": GROK_FAST_MODEL,
+        },
         "consensus": "Gemini",
     },
     "balanced": {
-        "openai": OPENAI_LUNA_MODEL,
-        "mistral": DEFAULT_MISTRAL_MODEL,
-        "anthropic": DEFAULT_ANTHROPIC_MODEL,
-        "gemini": DEFAULT_GEMINI_MODEL,
-        "deepseek": DEEPSEEK_FLASH_MODEL,
-        "grok": DEFAULT_GROK_MODEL,
+        "answers": {
+            "openai": OPENAI_LUNA_MODEL,
+            "mistral": DEFAULT_MISTRAL_MODEL,
+            "anthropic": DEFAULT_ANTHROPIC_MODEL,
+            "gemini": DEFAULT_GEMINI_MODEL,
+            "deepseek": DEEPSEEK_FLASH_MODEL,
+            "grok": DEFAULT_GROK_MODEL,
+        },
         "consensus": OPENAI_LUNA_MODEL,
     },
     "thorough": {
-        "openai": OPENAI_SOL_MODEL,
-        "mistral": MISTRAL_PRO_MODEL,
-        "anthropic": ANTHROPIC_PRO_MODEL,
-        "gemini": GEMINI_PRO_MODEL,
-        "deepseek": DEEPSEEK_PRO_MODEL,
-        "grok": "grok-4.3",
+        "answers": {
+            "openai": OPENAI_SOL_MODEL,
+            "mistral": MISTRAL_PRO_MODEL,
+            "anthropic": ANTHROPIC_PRO_MODEL,
+            "gemini": GEMINI_PRO_MODEL,
+            "deepseek": DEEPSEEK_PRO_MODEL,
+            "grok": "grok-4.3",
+        },
         "consensus": "Gemini-Pro",
     },
 }
@@ -432,7 +463,10 @@ DEPRECATED_CONSENSUS_PRESET_MODELS = {
     "thorough": {"openai": {"gpt-5.5"}},
 }
 CONSENSUS_PRESET_MODELS = {
-    preset_id: dict(models)
+    preset_id: {
+        "answers": dict(models["answers"]),
+        "consensus": models["consensus"],
+    }
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
 DEFAULT_CONSENSUS_PRESET = "balanced"
@@ -475,7 +509,13 @@ CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 # erste andere Familie; die gemeinsame OpenRouter-Verfügbarkeit wird davor geprüft.
 # Gemini/OpenAI remain the preferred independent judges. Mistral is a working
 # emergency fallback, but intentionally comes after every other family.
-JUDGE_FAMILY_PRIORITY = ["gemini", "openai", "deepseek", "grok", "anthropic", "mistral"]
+_JUDGE_FAMILY_PRIORITY_BASE = [
+    "gemini", "openai", "deepseek", "grok", "anthropic", "mistral"
+]
+JUDGE_FAMILY_PRIORITY = [
+    *_JUDGE_FAMILY_PRIORITY_BASE,
+    *(provider for provider in PROVIDERS if provider not in _JUDGE_FAMILY_PRIORITY_BASE),
+]
 
 # Optionales Admin-Mapping Engine-Familie -> bevorzugte Judge-Familie
 # (Firestore-Feld "judge_families"). Fehlt ein Eintrag, greift
@@ -494,6 +534,8 @@ ALLOWED_ANTHROPIC_MODELS = PROVIDERS["anthropic"].models
 ALLOWED_GEMINI_MODELS = PROVIDERS["gemini"].models
 ALLOWED_DEEPSEEK_MODELS = PROVIDERS["deepseek"].models
 ALLOWED_GROK_MODELS = PROVIDERS["grok"].models
+ALLOWED_KIMI_MODELS = PROVIDERS["kimi"].models
+ALLOWED_GLM_MODELS = PROVIDERS["glm"].models
 
 MISTRAL_REASONING_MODELS = {
     DEFAULT_MISTRAL_MODEL,
@@ -654,6 +696,10 @@ MODEL_LABEL_OVERRIDES = {
     "grok-4.3": "Grok 4.3 · Reasoning",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4 Pro",
+    KIMI_BASE_MODEL: "Kimi K2.6",
+    KIMI_PRO_MODEL: "Kimi K3",
+    GLM_BASE_MODEL: "GLM 5.3 Flash",
+    GLM_PRO_MODEL: "GLM 5.3",
 }
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
@@ -663,6 +709,10 @@ MODEL_CONFIGS: dict[str, ModelConfig] = {}
 MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     GROK_NO_REASONING_MODEL: {"reasoning": {"effort": "none"}},
     GROK_PRO_MODEL: {"reasoning": {"effort": "high"}},
+    KIMI_BASE_MODEL: {"reasoning": {"enabled": False}},
+    KIMI_PRO_MODEL: {"reasoning": {"enabled": False}},
+    GLM_BASE_MODEL: {"reasoning": {"effort": "low"}},
+    GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
 }
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
@@ -710,6 +760,8 @@ def _fallback_label(model_id: str) -> str:
         "gemini": "Gemini",
         "deepseek": "DeepSeek",
         "grok": "Grok",
+        "kimi": "Kimi",
+        "glm": "GLM",
     }
     if family not in family_labels:
         return raw
@@ -768,6 +820,7 @@ def rebuild_model_configs():
                 label=_fallback_label(model_id),
                 is_free=model_id not in PREMIUM_MODELS,
                 is_pro=model_id in PREMIUM_MODELS,
+                accepts_attachments=PROVIDERS[provider].model_accepts_attachments(model_id),
                 request_config=dict(MODEL_REQUEST_CONFIG.get(model_id, {})),
             )
 
@@ -800,6 +853,10 @@ def get_model_config(model_id: str | None, provider: str | None = None) -> Model
         label=_fallback_label(model_id),
         is_free=model_id not in PREMIUM_MODELS,
         is_pro=model_id in PREMIUM_MODELS,
+        accepts_attachments=(
+            PROVIDERS[provider].model_accepts_attachments(model_id)
+            if provider in PROVIDERS else True
+        ),
     )
 
 
@@ -859,21 +916,91 @@ def get_consensus_presets() -> list[dict]:
     return [
         {
             **preset,
-            "models": {
-                provider: CONSENSUS_PRESET_MODELS[preset["id"]][provider]
-                for provider in DEFAULT_MODEL_BY_PROVIDER
-            },
+            "models": dict(CONSENSUS_PRESET_MODELS[preset["id"]]["answers"]),
             "consensus_model": CONSENSUS_PRESET_MODELS[preset["id"]]["consensus"],
         }
         for preset in CONSENSUS_PRESET_DEFINITIONS
     ]
 
 
-def get_consensus_preset_models() -> dict[str, dict[str, str]]:
+def get_consensus_preset_models() -> dict[str, dict]:
     return {
-        preset_id: dict(models)
+        preset_id: {
+            "answers": dict(models["answers"]),
+            "consensus": models["consensus"],
+        }
         for preset_id, models in CONSENSUS_PRESET_MODELS.items()
     }
+
+
+def _preset_answer_mapping(value) -> dict:
+    """Liest das neue ``answers``-Mapping und das alte Provider-Key-Schema.
+
+    Altbestand hatte je Registry-Familie einen Top-Level-Key. Seit mehr als
+    sechs Familien existieren, speichert ein Preset nur noch die hoechstens
+    sechs tatsaechlich gewaehlten Familien unter ``answers``.
+    """
+    supplied = value if isinstance(value, dict) else {}
+    nested = supplied.get("answers")
+    if isinstance(nested, dict):
+        return nested
+    return {
+        provider: supplied.get(provider)
+        for provider in PROVIDERS
+        if supplied.get(provider)
+    }
+
+
+def _normalize_preset_answers(
+    preset_id: str,
+    supplied,
+    *,
+    allowed_sets: dict[str, set] | None = None,
+    premium_models: set[str] | None = None,
+    defaults: dict[str, str] | None = None,
+) -> dict[str, str]:
+    allowed_sets = allowed_sets or _provider_allowed_sets()
+    premium_models = PREMIUM_MODELS if premium_models is None else premium_models
+    defaults = FREE_DEFAULT_MODEL_BY_PROVIDER if defaults is None else defaults
+    definitions = {preset["id"]: preset for preset in CONSENSUS_PRESET_DEFINITIONS}
+    pro_only = bool(definitions[preset_id]["pro_only"])
+    base_answers = _BASE_CONSENSUS_PRESET_MODELS[preset_id]["answers"]
+    supplied_answers = _preset_answer_mapping(supplied)
+    provider_order = list(dict.fromkeys([
+        *supplied_answers,
+        *base_answers,
+        *PROVIDERS,
+    ]))
+    target_count = min(MAX_RUN_FAMILIES, len(PROVIDERS))
+    clean: dict[str, str] = {}
+    for provider in provider_order:
+        if provider not in PROVIDERS or len(clean) >= target_count:
+            continue
+        chosen = canonical_model_id(supplied_answers.get(provider), provider)
+        deprecated = (
+            DEPRECATED_CONSENSUS_PRESET_MODELS
+            .get(preset_id, {})
+            .get(provider, set())
+        )
+        if chosen in deprecated:
+            chosen = ""
+        allowed = set(allowed_sets.get(provider, set()))
+        if chosen not in allowed or (not pro_only and chosen in premium_models):
+            candidates = (
+                canonical_model_id(base_answers.get(provider), provider),
+                defaults.get(provider),
+                DEFAULT_MODEL_BY_PROVIDER.get(provider),
+                *get_ordered_models(provider),
+                *sorted(allowed),
+            )
+            chosen = next((
+                candidate for candidate in candidates
+                if candidate in allowed
+                and (pro_only or candidate not in premium_models)
+            ), "")
+        if chosen:
+            clean[provider] = chosen
+    return clean
 
 
 def apply_consensus_preset_models(config: dict | None) -> None:
@@ -881,40 +1008,13 @@ def apply_consensus_preset_models(config: dict | None) -> None:
     keine Pro-Modelle enthalten; High Quality (ID: thorough) ist durch
     die Produktdefinition Pro-gated und darf die Premium-Modelle nutzen."""
     incoming = config if isinstance(config, dict) else {}
-    allowed_sets = _provider_allowed_sets()
     definitions = {preset["id"]: preset for preset in CONSENSUS_PRESET_DEFINITIONS}
 
     for preset_id, base in _BASE_CONSENSUS_PRESET_MODELS.items():
         supplied = incoming.get(preset_id)
         supplied = supplied if isinstance(supplied, dict) else {}
         pro_only = bool(definitions[preset_id]["pro_only"])
-        clean = {}
-        for provider in DEFAULT_MODEL_BY_PROVIDER:
-            chosen = canonical_model_id(supplied.get(provider), provider)
-            deprecated = (
-                DEPRECATED_CONSENSUS_PRESET_MODELS
-                .get(preset_id, {})
-                .get(provider, set())
-            )
-            if chosen in deprecated:
-                chosen = ""
-            allowed = allowed_sets.get(provider, set())
-            if chosen not in allowed or (not pro_only and chosen in PREMIUM_MODELS):
-                fallback_candidates = [
-                    canonical_model_id(base.get(provider), provider),
-                    FREE_DEFAULT_MODEL_BY_PROVIDER.get(provider),
-                    DEFAULT_MODEL_BY_PROVIDER.get(provider),
-                    *get_ordered_models(provider),
-                ]
-                chosen = next(
-                    (
-                        candidate for candidate in fallback_candidates
-                        if candidate in allowed
-                        and (pro_only or candidate not in PREMIUM_MODELS)
-                    ),
-                    "",
-                )
-            clean[provider] = chosen
+        clean_answers = _normalize_preset_answers(preset_id, supplied)
 
         consensus = canonical_model_id(supplied.get("consensus"))
         consensus_config = get_consensus_model_config(consensus)
@@ -924,9 +1024,11 @@ def apply_consensus_preset_models(config: dict | None) -> None:
             consensus = "Gemini"
         if not get_consensus_model_config(consensus):
             consensus = "Gemini"
-        clean["consensus"] = consensus
         CONSENSUS_PRESET_MODELS[preset_id].clear()
-        CONSENSUS_PRESET_MODELS[preset_id].update(clean)
+        CONSENSUS_PRESET_MODELS[preset_id].update({
+            "answers": clean_answers,
+            "consensus": consensus,
+        })
 
 
 def normalize_consensus_models(models) -> list[str]:
@@ -1119,8 +1221,18 @@ def get_model_families() -> list[dict]:
             "responseId": provider.response_id,
             "textId": provider.text_id,
             "endpoint": provider.ask_endpoint,
+            "deepThinkModel": provider.pro_model,
             "deepThinkLabel": get_model_label(provider.pro_model),
-            "handlesAttachments": provider.accepts_attachments,
+            # None = alle Modelle; eine Liste = nur diese Modelle. Das alte
+            # Boolean bleibt additiv fuer noch gecachte Browser erhalten.
+            "attachmentModels": (
+                None
+                if provider.attachment_models is None
+                else sorted(provider.attachment_models)
+            ),
+            "handlesAttachments": provider.model_accepts_attachments(
+                provider.base_model
+            ),
         }
         for provider in PROVIDERS.values()
     ]
@@ -1418,7 +1530,7 @@ def _capture_runtime_config() -> dict:
         },
         "premium": set(PREMIUM_MODELS),
         "consensus": list(ALLOWED_CONSENSUS_MODELS),
-        "presets": {key: dict(value) for key, value in CONSENSUS_PRESET_MODELS.items()},
+        "presets": get_consensus_preset_models(),
         "deep_think": DEEP_THINK_CONSENSUS_MODEL,
         "judges": dict(DIFFERENCES_JUDGE_MODEL_BY_PROVIDER),
         "pro_judges": dict(PRO_JUDGE_MODEL_BY_PROVIDER),
@@ -1444,7 +1556,13 @@ def _restore_runtime_config(state: dict) -> None:
     ALLOWED_CONSENSUS_MODELS.extend(state["consensus"])
     CONSENSUS_PRESET_MODELS.clear()
     CONSENSUS_PRESET_MODELS.update(
-        {key: dict(value) for key, value in state["presets"].items()}
+        {
+            key: {
+                "answers": dict(value["answers"]),
+                "consensus": value["consensus"],
+            }
+            for key, value in state["presets"].items()
+        }
     )
     DEEP_THINK_CONSENSUS_MODEL = state["deep_think"]
     for target, key in (
@@ -1487,6 +1605,9 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
         doc = doc_ref.get(timeout=5.0, retry=None)
         if doc.exists:
             data = doc.to_dict()
+            new_provider_keys = [
+                provider for provider in PROVIDERS if provider not in data
+            ]
             
             # Modellliste je Familie: Firestore ist autoritativ, danach
             # Migration alter IDs und Abzug der stillgelegten.
@@ -1509,6 +1630,13 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 for deprecated in PROVIDER_DEPRECATED_MODELS.values():
                     PREMIUM_MODELS.difference_update(deprecated)
                 PREMIUM_MODELS.intersection_update(_all_allowed_models())
+                # Der <Familie>-Pro-Alias ist ein harter Produktvertrag. Bei
+                # neuen Registry-Familien kennt ein altes Firestore-Dokument
+                # deren Pro-Modell noch nicht; es darf dadurch nicht Free sein.
+                PREMIUM_MODELS.update(
+                    provider.pro_model for provider in PROVIDERS.values()
+                    if provider.pro_model in provider.models
+                )
             ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
 
@@ -1535,6 +1663,11 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             else:
                 ALLOWED_CONSENSUS_MODELS.clear()
                 ALLOWED_CONSENSUS_MODELS.extend(normalize_consensus_models(DEFAULT_CONSENSUS_MODELS))
+            for provider_key in new_provider_keys:
+                label = PROVIDERS[provider_key].label
+                for alias in (label, f"{label}-Pro"):
+                    if alias not in ALLOWED_CONSENSUS_MODELS:
+                        ALLOWED_CONSENSUS_MODELS.append(alias)
 
             # Admin-gepflegte Picker-Reihenfolge (aus den geordneten Provider-Listen)
             # und Free-Default je Provider uebernehmen.
@@ -1569,6 +1702,32 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 doc_ref.set(
                     {"watch_consensus_models": normalized_watch_consensus}, merge=True,
                     timeout=5.0, retry=None,
+                )
+            schema_backfill = {
+                provider.key: sorted(provider.models)
+                for provider in PROVIDERS.values()
+                if provider.key not in data
+            }
+            normalized_presets = get_consensus_preset_models()
+            if data.get("preset_models") != normalized_presets:
+                schema_backfill["preset_models"] = normalized_presets
+            normalized_runtime_fields = {
+                "premium": sorted(PREMIUM_MODELS),
+                "consensus": list(ALLOWED_CONSENSUS_MODELS),
+                "defaults": dict(FREE_DEFAULT_MODEL_BY_PROVIDER),
+                "judge_models": get_judge_models(),
+                "judge_models_pro": get_pro_judge_models(),
+                "chat_memory_models": get_chat_memory_models(),
+            }
+            for field_name, normalized_value in normalized_runtime_fields.items():
+                current_value = data.get(field_name)
+                if field_name == "premium":
+                    current_value = sorted(current_value or [])
+                if current_value != normalized_value:
+                    schema_backfill[field_name] = normalized_value
+            if schema_backfill and persist_backfill:
+                doc_ref.set(
+                    schema_backfill, merge=True, timeout=5.0, retry=None,
                 )
             # Update ALL_ALLOWED_MODELS
             ALL_ALLOWED_MODELS = _all_allowed_models()

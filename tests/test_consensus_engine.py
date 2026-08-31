@@ -9,6 +9,7 @@ from app.services.llm.consensus_engine import (
     CONSENSUS_TEMPERATURE,
     _build_consensus_prompt,
     _effective_temperature,
+    _engine_request_config,
     query_consensus,
     stream_consensus,
 )
@@ -156,6 +157,16 @@ class OpenRouterTemperatureTests(unittest.TestCase):
         self.assertIsNone(_effective_temperature("openai", "openai/o3-mini", 0.3))
         self.assertEqual(_effective_temperature("openai", "openai/gpt-4o", 0.3), 0.3)
         self.assertIsNone(_effective_temperature("gemini", "google/gemini-3.1-pro-preview", 0.3))
+
+    def test_engine_aliases_keep_model_specific_reasoning_policies(self):
+        self.assertEqual(
+            _engine_request_config("kimi", "moonshotai/kimi-k2.6", "moonshotai/kimi-k2.6"),
+            {"reasoning": {"enabled": False}},
+        )
+        self.assertEqual(
+            _engine_request_config("glm", "z-ai/glm-5.3", "z-ai/glm-5.3"),
+            {"reasoning": {"effort": "low"}},
+        )
 
 
 class QueryConsensusFallbackTests(unittest.TestCase):

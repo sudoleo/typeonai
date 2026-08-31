@@ -332,8 +332,11 @@
     );
     if (!consensusOption) return null;
 
-    for (const pref of window.App.modelPrefs) {
-      const model = preset.models?.[pref.provider];
+    const configured = Object.entries(preset.models || {});
+    if (configured.length < 2 || configured.length > runFamilyCap()) return null;
+    for (const [provider, model] of configured) {
+      const pref = window.App.modelPrefs.find(entry => entry.provider === provider);
+      if (!pref) return null;
       const providerSelect = document.getElementById(pref.selectId);
       const option = Array.from(providerSelect?.options || []).find(opt =>
         opt.value === model && !opt.disabled
@@ -350,10 +353,27 @@
     const value = resolveConsensusPresetValue(select, presetId);
     if (!value) return null;
     const preset = getConsensusPresets().find(entry => entry.id === presetId);
+    // Erst Platz schaffen, dann die bis zu sechs Preset-Familien setzen. So
+    // kann ein altes Custom-Setup mit sechs anderen Familien den Cap nicht
+    // waehrend der Umschaltung blockieren.
     window.App.modelPrefs.forEach(pref => {
+      setModelSelectionState(pref, false, {
+        persist: false,
+        syncCheckbox: true,
+        animate: false
+      });
+    });
+    window.App.modelPrefs.forEach(pref => {
+      const model = preset.models?.[pref.provider];
+      if (!model) return;
       const providerSelect = document.getElementById(pref.selectId);
       const labelText = document.getElementById(pref.textId);
-      setPickerToValue(providerSelect, labelText, preset.models?.[pref.provider]);
+      setPickerToValue(providerSelect, labelText, model);
+      setModelSelectionState(pref, true, {
+        persist: false,
+        syncCheckbox: true,
+        animate: false
+      });
     });
     select.value = value;
     window.syncCustomModelPickers?.();
@@ -625,6 +645,7 @@
       event.stopPropagation();
       if (toggle.disabled) return;
       setModelSelectionState(pref, !included, { persist: true });
+      markConsensusPresetCustom();
       renderCustomModelPicker(select);
     });
 

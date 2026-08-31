@@ -110,9 +110,9 @@ def test_a_run_never_compares_more_than_the_configured_cap(consensus_api):
     client, _ = consensus_api
     answers = {
         provider: f"answer {index}"
-        for index, provider in enumerate(cfg.PROVIDERS)
+        for index, provider in enumerate(list(cfg.PROVIDERS)[:cfg.MAX_RUN_FAMILIES])
     }
-    assert len(answers) <= cfg.MAX_RUN_FAMILIES
+    assert len(answers) == cfg.MAX_RUN_FAMILIES
 
     response = client.post("/consensus", headers=AUTH, json=_payload(answers=answers))
     assert response.status_code == 200
