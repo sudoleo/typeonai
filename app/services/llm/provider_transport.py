@@ -48,10 +48,13 @@ def query_provider(
     model: str,
     question: str,
     keys: dict,
-    is_pro: bool,
+    tier,
     deep_think: bool = False,
 ):
-    """Call one provider using the shared server-side transport contract."""
+    """Call one provider using the shared server-side transport contract.
+
+    `tier` ist die Kontostufe des Laufs; ein Bool bleibt erlaubt (True -> Pro).
+    """
     label = PROVIDER_LABELS[provider]
     if mock_llm_enabled():
         return mock_ask_result(label, question)
@@ -59,7 +62,7 @@ def query_provider(
         "system_prompt": get_system_prompt(),
         "deep_search": bool(deep_think),
         "model_override": model,
-        "max_output_tokens": cfg.get_output_token_limit(is_pro, bool(deep_think)),
+        "max_output_tokens": cfg.get_output_token_limit(tier, bool(deep_think)),
         "attachments": [],
     }
     return query_model(
@@ -75,7 +78,7 @@ def fan_out_provider_answers(
     question: str,
     provider_models: dict[str, str],
     keys: dict,
-    is_pro: bool,
+    tier,
     deep_think: bool,
     provider_order: Iterable[str] = PROVIDER_ORDER,
     provider_call: Callable = query_provider,
@@ -94,7 +97,7 @@ def fan_out_provider_answers(
                 provider_models[provider],
                 question,
                 keys,
-                is_pro,
+                tier,
                 deep_think,
             )
             return raw, (time.monotonic() - started) * 1000, None

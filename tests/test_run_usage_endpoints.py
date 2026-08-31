@@ -28,8 +28,8 @@ def run_api(monkeypatch):
     monkeypatch.setattr(users_router, "run_usage_repository", repository)
     monkeypatch.setattr(chat_router, "verify_user_token", lambda token: UID)
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kwargs: UID)
-    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: False)
-    monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "free")
+    monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def fake_run_ask(provider, **kwargs):
@@ -225,7 +225,7 @@ def test_exhausted_firestore_contention_returns_structured_503(run_api, monkeypa
 
 def test_deep_think_counts_once_total_and_once_in_deep_quota(run_api, monkeypatch):
     client, repository = run_api
-    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: True)
+    monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "pro")
     key = "deep-think-run"
 
     assert _prepare(client, key, deep=True).status_code == 200

@@ -8,7 +8,8 @@ from fastapi.responses import HTMLResponse
 from app.core import config as cfg
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
-from app.core.security import extract_id_token, is_user_pro, verify_user_token
+from app.core.entitlements import entitlements_for
+from app.core.security import extract_id_token, get_user_tier, verify_user_token
 from app.core.site import SITE_URL
 from app.services import mailer, telegram_watch, watch_brief, watch_followers, watch_service
 
@@ -57,7 +58,7 @@ def create_watch(request: Request, data: dict = Body(...)):
             run_weekday=data.get("run_weekday", ""),
             run_time=data.get("run_time", ""),
             timezone_name=data.get("timezone", ""),
-            is_pro=is_user_pro(uid),
+            tier=get_user_tier(uid),
             result_id=data.get("result_id"),
             share_id=data.get("share_id"),
             question=data.get("question"),
@@ -76,19 +77,22 @@ def my_watches(request: Request):
     uid = _uid(request, {})
     try:
         watches = watch_service.list_watches(uid, include_history=True)
-        is_pro = is_user_pro(uid)
+        tier = get_user_tier(uid)
         active_count = sum(1 for watch in watches if watch.get("status") == "active")
-        active_limit = cfg.get_watch_active_limit(is_pro)
+        active_limit = cfg.get_watch_active_limit(tier)
         return {
             "status": "success",
             "watches": watches,
             "limits": {
-                "plan": "pro" if is_pro else "free",
+                # "plan" traegt jetzt die volle Stufe (free/plus/pro). Aeltere
+                # Clients vergleichen nur gegen "pro" und behandeln plus damit
+                # wie free - richtig herum, aber siehe watch.js.
+                "plan": entitlements_for(tier).tier,
                 "active_count": active_count,
                 "active_limit": active_limit,
                 "remaining": max(0, active_limit - active_count),
                 "paused_count": len(watches) - active_count,
-                "daily_available": cfg.is_watch_daily_allowed(is_pro),
+                "daily_available": cfg.is_watch_daily_allowed(tier),
             },
         }
     except Exception as exc:
@@ -104,7 +108,7 @@ def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
     if changes.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
         raise HTTPException(status_code=409, detail="Connect Telegram before enabling it for a watch.")
     try:
-        watch = watch_service.update_watch(uid, watch_id, changes, is_user_pro(uid))
+        watch = watch_service.update_watch(uid, watch_id, changes, get_user_tier(uid))
     except watch_service.WatchError as exc:
         _raise(exc)
     except Exception as exc:

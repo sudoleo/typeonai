@@ -11,6 +11,7 @@ from typing import Callable, TypeVar
 from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
+from app.core.entitlements import entitlements_for, normalize_tier
 from app.services import persistence_guard
 
 
@@ -73,7 +74,7 @@ class FirestoreApiRunRepository:
         idempotency_key: str,
         request_payload: dict,
         model_plan: dict,
-        is_pro: bool,
+        tier,
     ) -> tuple[dict, bool]:
         key_hash = idempotency_hash(idempotency_key)
         payload_hash = request_hash(request_payload)
@@ -113,7 +114,11 @@ class FirestoreApiRunRepository:
                 "status": "accepted",
                 "request": dict(request_payload),
                 "model_plan": dict(model_plan),
-                "is_pro_at_acceptance": bool(is_pro),
+                # Beide Felder: is_pro_at_acceptance bleibt fuer bestehende
+                # Dokumente und die Modell-/Deep-Think-Frage, tier_at_acceptance
+                # traegt die volle Stufe (Kontingent).
+                "is_pro_at_acceptance": entitlements_for(tier).is_pro,
+                "tier_at_acceptance": normalize_tier(tier),
                 "accepted_at": now,
                 "created_at": now,
                 "updated_at": now,

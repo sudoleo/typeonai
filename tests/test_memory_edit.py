@@ -122,7 +122,7 @@ def test_replace_is_revision_checked_and_undo_restores_exact_content(repository)
         UID,
         client_request_id=request_id,
         fingerprint=fingerprint,
-        is_pro=False,
+        tier="free",
         config=config(),
         now=NOW,
     )
@@ -169,7 +169,7 @@ def test_non_unique_target_is_never_overwritten(repository):
         UID,
         client_request_id="request-00000002",
         fingerprint="a" * 64,
-        is_pro=False,
+        tier="free",
         config=config(),
         now=NOW,
     )
@@ -199,7 +199,7 @@ def test_same_client_request_never_calls_provider_twice(repository):
 
     service = memory_edit.MemoryEditService(repository, provider=provider)
     payload = dict(
-        is_pro=False,
+        tier="free",
         client_request_id="request-00000003",
         source_kind="consensus",
         selected_text="You work at Firma X.",
@@ -226,7 +226,7 @@ def test_remember_intent_appends_when_no_related_entry_exists(repository):
     service = memory_edit.MemoryEditService(repository, provider=provider)
     result = service.edit(
         UID,
-        is_pro=False,
+        tier="free",
         client_request_id="request-add-0001",
         source_kind="model_answer",
         selected_text="You live in Berlin.",
@@ -254,7 +254,7 @@ def test_remember_intent_replaces_one_unique_conflicting_passage(repository):
     )
     result = service.edit(
         UID,
-        is_pro=False,
+        tier="free",
         client_request_id="request-add-0002",
         source_kind="consensus",
         selected_text="You work at Firma Y.",
@@ -282,7 +282,7 @@ def test_remember_intent_rejects_delete_patch(repository):
     with pytest.raises(memory_edit.MemoryEditError) as exc:
         service.edit(
             UID,
-            is_pro=False,
+            tier="free",
             client_request_id="request-add-0003",
             source_kind="consensus",
             selected_text="You work at Firma Y.",
@@ -300,7 +300,7 @@ def test_smallest_replace_preserves_unrelated_details(repository):
         UID,
         client_request_id="request-merge-0001",
         fingerprint="7" * 64,
-        is_pro=False,
+        tier="free",
         config=config(),
         now=NOW,
     )
@@ -330,7 +330,7 @@ def test_persistent_daily_budget_is_shared_by_repository_instances(repository):
         UID,
         client_request_id="request-00000004",
         fingerprint="b" * 64,
-        is_pro=False,
+        tier="free",
         config=limited,
         now=NOW,
     )
@@ -339,7 +339,7 @@ def test_persistent_daily_budget_is_shared_by_repository_instances(repository):
             UID,
             client_request_id="request-00000005",
             fingerprint="c" * 64,
-            is_pro=False,
+            tier="free",
             config=limited,
             now=NOW + timedelta(seconds=46),
         )
@@ -354,7 +354,7 @@ def test_over_plan_memory_is_not_truncated_or_charged_by_ai_edit(repository):
             UID,
             client_request_id="request-over-plan",
             fingerprint="9" * 64,
-            is_pro=False,
+            tier="free",
             config=config(),
             now=NOW,
         )
@@ -425,7 +425,7 @@ def test_one_in_flight_edit_and_global_budget_are_persistent(repository):
         UID,
         client_request_id="request-00000006",
         fingerprint="d" * 64,
-        is_pro=False,
+        tier="free",
         config=config(),
         now=NOW,
     )
@@ -434,7 +434,7 @@ def test_one_in_flight_edit_and_global_budget_are_persistent(repository):
             UID,
             client_request_id="request-00000007",
             fingerprint="e" * 64,
-            is_pro=False,
+            tier="free",
             config=config(),
             now=NOW + timedelta(seconds=1),
         )
@@ -446,7 +446,7 @@ def test_one_in_flight_edit_and_global_budget_are_persistent(repository):
             other_uid,
             client_request_id="request-00000008",
             fingerprint="f" * 64,
-            is_pro=False,
+            tier="free",
             config=config(memory_global_calls_daily=1),
             now=NOW + timedelta(seconds=1),
         )
@@ -468,7 +468,7 @@ def test_edit_endpoint_applies_explicit_feedback_without_confirmation(monkeypatc
 
     limiter.reset()
     monkeypatch.setattr(users_router, "verify_user_token", lambda token: UID)
-    monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(users_router, "memory_edit_service", StubService())
     app = FastAPI()
     app.state.limiter = limiter

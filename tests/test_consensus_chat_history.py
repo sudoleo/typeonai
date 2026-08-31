@@ -103,7 +103,7 @@ def chat_consensus_api(monkeypatch):
     store = RecordingStore()
     monkeypatch.setattr(chat_router, "chat_store", store)
     monkeypatch.setattr(chat_router, "verify_user_token", lambda token: UID)
-    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(chat_router, "query_consensus", lambda *args, **kwargs: "Consensus")
     monkeypatch.setattr(
         chat_router,
@@ -933,7 +933,7 @@ def test_premium_engine_stays_pro_only_with_developer_keys(chat_consensus_api):
 
 def test_pro_user_may_use_a_premium_engine_with_own_keys(chat_consensus_api):
     client, store, monkeypatch = chat_consensus_api
-    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: True)
+    monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "pro")
 
     response = client.post(
         "/consensus",

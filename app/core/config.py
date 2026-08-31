@@ -6,6 +6,13 @@ from dataclasses import dataclass, field
 from typing import Any
 from dotenv import load_dotenv
 
+from app.core.entitlements import (
+    TIER_FREE,
+    TIER_PLUS,
+    TIER_PRO,
+    normalize_tier,
+)
+
 load_dotenv()
 
 
@@ -27,14 +34,20 @@ DEFAULT_LIMITS = {
     # Deep Think fuehrt zusaetzlich ein separates Teilkontingent.
     # Drei Runs erlaubten einen Test, keine Gewohnheit — seit 2026-08-04 zwoelf.
     "free_consensus_run_limit": 12,
+    # Plus laeuft auf denselben guenstigen Modellen wie Free und darf deshalb
+    # das groesste Kontingent haben - mehr als Pro, dessen Runs ein Vielfaches
+    # kosten koennen.
+    "plus_consensus_run_limit": 750,
     "pro_consensus_run_limit": 500,
     "free_deep_think_run_limit": 0,
     "pro_deep_think_run_limit": 50,
     "free_max_words": 500,
+    "plus_max_words": 500,
     "pro_max_words": 500,
     "free_deep_search_max_words": 0,
     "pro_deep_search_max_words": 1000,
     "free_max_tokens": 4096,
+    "plus_max_tokens": 4096,
     "pro_max_tokens": 4096,
     "free_deep_search_max_tokens": 0,
     "pro_deep_search_max_tokens": 8192,
@@ -64,12 +77,16 @@ DEFAULT_LIMITS = {
     "share_question_min_chars": 15,
     "share_question_max_chars": 300,
     "watch_free_active_limit": 1,
+    "watch_plus_active_limit": 3,
     "watch_pro_active_limit": 5,
     "watch_max_runs_per_day": 50,
     # 1 = taegliches Intervall bleibt Pro vorbehalten, 0 = auch Free darf
     # taeglich pruefen lassen (Boolean als 0/1, damit es ins numerische
     # Admin-Limits-Raster passt).
     "watch_daily_interval_requires_pro": 1,
+    # 1 = Plus darf das taegliche Intervall auch dann, wenn es fuer Free
+    # gesperrt ist. Greift nur, solange die Zeile darueber 1 ist.
+    "watch_plus_daily_interval_allowed": 1,
 }
 
 # Persistente Admin-Konfiguration fuer explizite User-Memory-Edits. Diese
@@ -79,8 +96,10 @@ DEFAULT_MEMORY_EDIT_CONFIG = {
     "memory_edit_enabled": True,
     "memory_edit_model": "gpt-5.6-luna",
     "memory_free_chars": 12_000,
+    "memory_plus_chars": 18_000,
     "memory_pro_chars": 24_000,
     "memory_free_ai_edits_daily": 5,
+    "memory_plus_ai_edits_daily": 15,
     "memory_pro_ai_edits_daily": 30,
     "memory_ai_edits_per_minute": 5,
     "memory_edit_input_chars": 500,
@@ -1395,8 +1414,11 @@ def apply_watch_models(config: dict | None) -> None:
         WATCH_MODELS_BY_TIER[tier].update(clean)
 
 
-def get_watch_models(is_pro: bool) -> dict[str, str]:
-    return dict(WATCH_MODELS_BY_TIER["pro" if is_pro else "free"])
+def get_watch_models(tier) -> dict[str, str]:
+    """Watch-Modelle der Stufe. Plus faehrt bewusst die Free-Modelle: es
+    bekommt mehr Watches, aber keine teureren Laeufe."""
+    key = TIER_PRO if normalize_tier(tier) == TIER_PRO else TIER_FREE
+    return dict(WATCH_MODELS_BY_TIER[key])
 
 
 def apply_watch_consensus_models(config: dict | None) -> None:
@@ -1412,8 +1434,9 @@ def apply_watch_consensus_models(config: dict | None) -> None:
         WATCH_CONSENSUS_MODELS_BY_TIER[tier] = chosen
 
 
-def get_watch_consensus_model(is_pro: bool) -> str:
-    return WATCH_CONSENSUS_MODELS_BY_TIER["pro" if is_pro else "free"]
+def get_watch_consensus_model(tier) -> str:
+    key = TIER_PRO if normalize_tier(tier) == TIER_PRO else TIER_FREE
+    return WATCH_CONSENSUS_MODELS_BY_TIER[key]
 
 
 rebuild_model_configs()
@@ -1467,8 +1490,10 @@ def get_limits_config() -> dict:
 
 _MEMORY_EDIT_INTEGER_RANGES = {
     "memory_free_chars": (1_000, 12_000),
+    "memory_plus_chars": (1_000, 24_000),
     "memory_pro_chars": (1_000, 24_000),
     "memory_free_ai_edits_daily": (0, 100),
+    "memory_plus_ai_edits_daily": (0, 500),
     "memory_pro_ai_edits_daily": (0, 500),
     "memory_ai_edits_per_minute": (1, 20),
     "memory_edit_input_chars": (50, 2_000),
@@ -1498,6 +1523,13 @@ def normalize_memory_edit_config(value=None) -> dict:
             result[key] = parsed
     if result["memory_pro_chars"] < result["memory_free_chars"]:
         result["memory_pro_chars"] = DEFAULT_MEMORY_EDIT_CONFIG["memory_pro_chars"]
+    # Plus liegt zwischen Free und Pro. Ein Admin-Wert, der aus dieser Spanne
+    # faellt, wuerde die Stufenordnung umdrehen - dann gilt wieder der Default.
+    if not (result["memory_free_chars"] <= result["memory_plus_chars"] <= result["memory_pro_chars"]):
+        result["memory_plus_chars"] = min(
+            max(DEFAULT_MEMORY_EDIT_CONFIG["memory_plus_chars"], result["memory_free_chars"]),
+            result["memory_pro_chars"],
+        )
     return result
 
 
@@ -1510,27 +1542,76 @@ def get_memory_edit_config() -> dict:
     return dict(MEMORY_EDIT_CONFIG)
 
 
-def get_memory_char_limit(is_pro: bool) -> int:
-    key = "memory_pro_chars" if is_pro else "memory_free_chars"
-    return int(MEMORY_EDIT_CONFIG[key])
+# --- Tier-abhaengige Limits ------------------------------------------------
+# Die Getter hiessen frueher alle ``is_pro: bool``. Sie heissen jetzt ``tier``
+# und nehmen weiterhin einen Bool entgegen (True -> Pro, False -> Free), damit
+# bestehende Aufrufer und Tests unveraendert funktionieren; normalize_tier
+# uebersetzt beides auf "free"/"plus"/"pro".
 
 
-def get_consensus_run_limit(is_pro: bool) -> int:
-    key = "pro_consensus_run_limit" if is_pro else "free_consensus_run_limit"
+def _tier_limit(tier, keys: dict[str, str]) -> int:
+    """Limit fuer die Stufe.
+
+    Fehlt der Schluessel der Stufe - im Mapping oder in LIMITS selbst -, gilt
+    der Free-Wert. Nie der Pro-Wert: eine Luecke in der Konfiguration darf
+    hoechstens Komfort kosten, nie Geld.
+    """
+    key = keys.get(normalize_tier(tier))
+    if key is None or key not in LIMITS:
+        key = keys[TIER_FREE]
     return LIMITS[key]
 
 
-def get_deep_think_run_limit(is_pro: bool) -> int:
-    key = "pro_deep_think_run_limit" if is_pro else "free_deep_think_run_limit"
-    return LIMITS[key]
+def get_memory_char_limit(tier) -> int:
+    keys = {
+        TIER_FREE: "memory_free_chars",
+        TIER_PLUS: "memory_plus_chars",
+        TIER_PRO: "memory_pro_chars",
+    }
+    resolved = normalize_tier(tier)
+    return int(MEMORY_EDIT_CONFIG[keys[resolved]])
 
 
-def get_word_limit(is_pro: bool, deep_search: bool = False) -> int:
+def get_memory_ai_edit_limit(tier) -> int:
+    keys = {
+        TIER_FREE: "memory_free_ai_edits_daily",
+        TIER_PLUS: "memory_plus_ai_edits_daily",
+        TIER_PRO: "memory_pro_ai_edits_daily",
+    }
+    resolved = normalize_tier(tier)
+    return int(MEMORY_EDIT_CONFIG[keys[resolved]])
+
+
+def get_consensus_run_limit(tier) -> int:
+    return _tier_limit(tier, {
+        TIER_FREE: "free_consensus_run_limit",
+        TIER_PLUS: "plus_consensus_run_limit",
+        TIER_PRO: "pro_consensus_run_limit",
+    })
+
+
+def get_deep_think_run_limit(tier) -> int:
+    """Deep Think faehrt Frontier-Modelle und bleibt deshalb Pro vorbehalten.
+    Plus bekommt hier bewusst kein eigenes Admin-Feld: ein Kontingent, das die
+    Capability-Pruefung ohnehin blockiert, waere ein toter Schalter."""
+    if normalize_tier(tier) == TIER_PRO:
+        return LIMITS["pro_deep_think_run_limit"]
+    return LIMITS["free_deep_think_run_limit"]
+
+
+def get_word_limit(tier, deep_search: bool = False) -> int:
     if deep_search:
-        key = "pro_deep_search_max_words" if is_pro else "free_deep_search_max_words"
-    else:
-        key = "pro_max_words" if is_pro else "free_max_words"
-    return LIMITS[key]
+        # Deep Search gibt es nur mit Pro; alle anderen Stufen sehen das
+        # Free-Limit (in der Regel 0).
+        return _tier_limit(tier, {
+            TIER_FREE: "free_deep_search_max_words",
+            TIER_PRO: "pro_deep_search_max_words",
+        })
+    return _tier_limit(tier, {
+        TIER_FREE: "free_max_words",
+        TIER_PLUS: "plus_max_words",
+        TIER_PRO: "pro_max_words",
+    })
 
 
 def get_consensus_answer_char_limit() -> int:
@@ -1549,9 +1630,12 @@ def get_followup_consensus_char_limit() -> int:
     return LIMITS["followup_max_consensus_chars"]
 
 
-def get_watch_active_limit(is_pro: bool) -> int:
-    key = "watch_pro_active_limit" if is_pro else "watch_free_active_limit"
-    return max(0, int(LIMITS[key]))
+def get_watch_active_limit(tier) -> int:
+    return max(0, _tier_limit(tier, {
+        TIER_FREE: "watch_free_active_limit",
+        TIER_PLUS: "watch_plus_active_limit",
+        TIER_PRO: "watch_pro_active_limit",
+    }))
 
 
 def get_watch_max_runs_per_day() -> int:
@@ -1562,16 +1646,30 @@ def watch_daily_requires_pro() -> bool:
     return int(LIMITS["watch_daily_interval_requires_pro"]) != 0
 
 
-def is_watch_daily_allowed(is_pro: bool) -> bool:
-    return bool(is_pro) or not watch_daily_requires_pro()
+def watch_plus_daily_allowed() -> bool:
+    return int(LIMITS["watch_plus_daily_interval_allowed"]) != 0
 
 
-def get_output_token_limit(is_pro: bool, deep_search: bool = False) -> int:
+def is_watch_daily_allowed(tier) -> bool:
+    resolved = normalize_tier(tier)
+    if resolved == TIER_PRO:
+        return True
+    if not watch_daily_requires_pro():
+        return True
+    return resolved == TIER_PLUS and watch_plus_daily_allowed()
+
+
+def get_output_token_limit(tier, deep_search: bool = False) -> int:
     if deep_search:
-        key = "pro_deep_search_max_tokens" if is_pro else "free_deep_search_max_tokens"
-    else:
-        key = "pro_max_tokens" if is_pro else "free_max_tokens"
-    return LIMITS[key]
+        return _tier_limit(tier, {
+            TIER_FREE: "free_deep_search_max_tokens",
+            TIER_PRO: "pro_deep_search_max_tokens",
+        })
+    return _tier_limit(tier, {
+        TIER_FREE: "free_max_tokens",
+        TIER_PLUS: "plus_max_tokens",
+        TIER_PRO: "pro_max_tokens",
+    })
 
 
 def _capture_runtime_config() -> dict:

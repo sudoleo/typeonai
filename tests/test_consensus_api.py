@@ -76,7 +76,7 @@ def setup_api(monkeypatch):
     monkeypatch.setattr(api_v1, "ensure_api_account_active", lambda uid: None)
     monkeypatch.setattr(api_v1, "enforce_uid_rate_limit", lambda *args: None)
     monkeypatch.setattr(api_v1, "api_run_repository", repo)
-    monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(api_v1, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(
         api_v1,
         "build_server_model_plan",
@@ -863,7 +863,7 @@ def test_admin_api_configures_weekly_watch_with_free_provider_tier(monkeypatch):
         api_v1, "api_account_cleanup", SimpleNamespace(ensure_active=lambda uid: None)
     )
     monkeypatch.setattr(api_v1, "is_user_admin", lambda uid: True)
-    monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: True)
+    monkeypatch.setattr(api_v1, "get_user_tier", lambda uid: "pro")
     monkeypatch.setattr(api_v1.publisher_config, "get_config", lambda: dict(config))
     monkeypatch.setattr(
         api_v1.watch_service,
@@ -907,7 +907,7 @@ def test_publisher_watch_capacity_returns_successful_skip(monkeypatch):
         "max_active_publisher_watches": 12,
     })
     monkeypatch.setattr(api_v1.watch_service, "publisher_watch_counts", lambda: {"active": 12, "paused": 3})
-    monkeypatch.setattr(api_v1, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(api_v1, "get_user_tier", lambda uid: "free")
 
     def reject_at_transaction_boundary(*args, **kwargs):
         assert kwargs["publisher_active_limit"] == 12

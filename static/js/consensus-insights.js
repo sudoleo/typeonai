@@ -1928,7 +1928,7 @@
               if (!authIsCurrent()) return;
               if (!response.ok) {
                 const detail = data?.detail && typeof data.detail === "object" ? data.detail : null;
-                if (detail?.error_code === "pro_required") {
+                if (detail?.error_code === "pro_required" || detail?.error_code === "plus_required") {
                   // Tier-Status war veraltet: Button in den Teaser-Zustand
                   // zurücksetzen und das Pro-Modal zeigen.
                   button.disabled = false;
@@ -2102,15 +2102,17 @@
             // die Kosten-Erklaerung), Pro-Nutzer die gleiche klare Kennzeichnung.
             const chip = document.createElement("span");
             chip.className = "pro-badge diff-resolve-pro-chip";
-            chip.textContent = "Pro";
+            // Resolve laeuft auf dem Standard-Judge und ist deshalb ab Plus
+            // frei; das Chip nennt die niedrigste Stufe, die es freischaltet.
+            chip.textContent = "Plus";
             btn.appendChild(chip);
-            if (!window.isUserPro) {
+            if (!window.isUserPlus) {
               btn.classList.add("is-pro-locked");
               btn.title = "Off by default: a Resolve round is a second full round of model calls";
             }
 
             btn.addEventListener("click", function () {
-              if (!window.isUserPro) {
+              if (!window.isUserPlus) {
                 showResolveProTeaser();
                 return;
               }

@@ -13,9 +13,9 @@
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="/static/js/admin-config.js?v=20260811-phase6"></script>
 <link rel="stylesheet" href="/static/style.css?v=20260831-kimiglm1">
-    <link rel="stylesheet" href="/static/css/admin.css?v=20260831-reasoning1">
+    <link rel="stylesheet" href="/static/css/admin.css?v=20260901-plustier1">
 
-    <script type="module" src="/static/js/admin.js?v=20260831-reasoning1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260901-plustier1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -37,6 +37,7 @@
             <button type="button" data-tab="models" role="tab">Models</button>
             <button type="button" data-tab="consensus" role="tab">Consensus &amp; Deep Think</button>
             <button type="button" data-tab="limits" role="tab">Limits</button>
+            <button type="button" data-tab="accounts" role="tab">Accounts</button>
             <button type="button" data-tab="api" role="tab">API</button>
             <button type="button" data-tab="shares" role="tab">Shared Pages</button>
             <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
@@ -161,10 +162,60 @@
 
         <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
             <p class="section-hint section-hint-compact">
-                Request, input, and token limits for Free and Pro users. Limits apply after the daily reset.
+                Request, input, and token limits per account tier. Limits apply after the daily reset.
+                <strong>Plus</strong> runs on the same models as Free, so its run quota is deliberately the
+                largest one; Deep Think stays Pro-only and has no Plus field.
             </p>
             <div id="limitsContainer" class="limits-grid">
                 <!-- Populated by JavaScript -->
+            </div>
+        </section>
+
+        <section id="tab-accounts" class="admin-tab-panel" role="tabpanel" hidden>
+            <div class="admin-section">
+                <h3>Account tier</h3>
+                <p class="section-hint">
+                    <strong>Free</strong> — base models, small daily quota.
+                    <strong>Plus</strong> — exactly the Free model choice and no Deep Think, but attachments,
+                    Resolve rounds and the largest run quota. Give this to testers: they cannot trigger a
+                    frontier-model cost.
+                    <strong>Pro</strong> — everything, including frontier models and Deep Think.
+                    A change takes effect immediately; every change is written to an audit log.
+                </p>
+                <div class="api-key-form">
+                    <div class="api-key-field">
+                        <label for="accountTierIdentifier">Firebase UID or email</label>
+                        <input id="accountTierIdentifier" type="text" maxlength="320" autocomplete="off" spellcheck="false" placeholder="UID or name@example.com">
+                    </div>
+                    <div class="api-key-field">
+                        <label for="accountTierSelect">Tier</label>
+                        <select id="accountTierSelect">
+                            <option value="free">Free</option>
+                            <option value="plus">Plus</option>
+                            <option value="pro">Pro</option>
+                        </select>
+                    </div>
+                    <div class="api-key-field">
+                        <label for="accountTierNote">Note (optional)</label>
+                        <input id="accountTierNote" type="text" maxlength="300" autocomplete="off" placeholder="Asked by email for attachments, 2026-08-31">
+                    </div>
+                    <button id="lookupAccountTierBtn" type="button" class="admin-btn secondary">Look up</button>
+                    <button id="saveAccountTierBtn" type="button" class="admin-btn">Set tier</button>
+                    <span id="accountTierStatus" class="admin-status-text" role="status"></span>
+                </div>
+                <div id="accountTierDetail" class="account-tier-detail" hidden></div>
+            </div>
+
+            <div class="admin-section">
+                <h3>Accounts above Free</h3>
+                <p class="section-hint">Every account currently tagged Plus or Pro, plus the most recent tier changes.</p>
+                <div class="publisher-config-actions">
+                    <button id="reloadAccountTiersBtn" type="button" class="admin-btn secondary">Reload</button>
+                    <span id="accountTiersStatus" class="admin-status-text" role="status"></span>
+                </div>
+                <div id="accountTiersContainer"></div>
+                <h4 class="account-tier-subhead">Recent changes</h4>
+                <div id="accountTierChangesContainer"></div>
             </div>
         </section>
 

@@ -51,13 +51,13 @@ def make_attachment(name="file.png", raw=PNG_BYTES):
 
 class ParseAttachmentsTests(unittest.TestCase):
     def test_no_attachments_returns_empty_list(self):
-        self.assertEqual(parse_attachments({}, is_pro=False), [])
-        self.assertEqual(parse_attachments({"attachments": []}, is_pro=True), [])
+        self.assertEqual(parse_attachments({}, attachments_allowed=False), [])
+        self.assertEqual(parse_attachments({"attachments": []}, attachments_allowed=True), [])
 
-    def test_attachments_require_pro(self):
+    def test_attachments_are_refused_below_plus(self):
         data = {"attachments": [make_attachment()]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=False)
+            parse_attachments(data, attachments_allowed=False)
         self.assertEqual(ctx.exception.status_code, 403)
 
     def test_valid_types_are_sniffed_from_magic_bytes(self):
@@ -72,7 +72,7 @@ class ParseAttachmentsTests(unittest.TestCase):
         for name, raw, expected_mime in cases:
             with self.subTest(name=name):
                 parsed = parse_attachments(
-                    {"attachments": [make_attachment(name, raw)]}, is_pro=True
+                    {"attachments": [make_attachment(name, raw)]}, attachments_allowed=True
                 )
                 self.assertEqual(parsed[0]["mime"], expected_mime)
                 self.assertEqual(parsed[0]["raw"], raw)
@@ -80,7 +80,7 @@ class ParseAttachmentsTests(unittest.TestCase):
     def test_unsupported_type_is_rejected_even_with_image_extension(self):
         data = {"attachments": [make_attachment("evil.png", b"MZ\x90\x00" + b"\x00" * 32)]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_generic_zip_is_not_accepted_as_docx(self):
@@ -89,7 +89,7 @@ class ParseAttachmentsTests(unittest.TestCase):
             archive.writestr("other.xml", "<x/>")
         data = {"attachments": [make_attachment("fake.docx", buffer.getvalue())]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_docx_text_extraction_joins_paragraphs(self):
@@ -101,14 +101,14 @@ class ParseAttachmentsTests(unittest.TestCase):
     def test_invalid_base64_is_rejected(self):
         data = {"attachments": [{"name": "x.png", "data": "not base64!!"}]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_size_limit_is_enforced(self):
         big = b"\x89PNG\r\n\x1a\n" + b"\x00" * MAX_ATTACHMENT_BYTES
         data = {"attachments": [make_attachment("big.png", big)]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_encoded_size_limit_is_checked_before_base64_decode(self):
@@ -119,7 +119,7 @@ class ParseAttachmentsTests(unittest.TestCase):
         }
         with patch("app.services.llm.attachments.base64.b64decode") as decode:
             with self.assertRaises(HTTPException) as ctx:
-                parse_attachments(data, is_pro=True)
+                parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
         decode.assert_not_called()
 
@@ -130,7 +130,7 @@ class ParseAttachmentsTests(unittest.TestCase):
         data = {"attachments": [make_attachment("bomb.docx", buffer.getvalue())]}
 
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
 
         self.assertEqual(ctx.exception.status_code, 400)
         self.assertIn("safe Word document", ctx.exception.detail)
@@ -143,25 +143,25 @@ class ParseAttachmentsTests(unittest.TestCase):
         data = {"attachments": [make_attachment("unsafe.docx", buffer.getvalue())]}
 
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
 
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_attachment_count_limit_is_enforced(self):
         data = {"attachments": [make_attachment() for _ in range(MAX_ATTACHMENTS + 1)]}
         with self.assertRaises(HTTPException) as ctx:
-            parse_attachments(data, is_pro=True)
+            parse_attachments(data, attachments_allowed=True)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_data_url_prefix_is_tolerated(self):
         data = {"attachments": [{"name": "x.png", "data": "data:image/png;base64," + b64(PNG_BYTES)}]}
-        parsed = parse_attachments(data, is_pro=True)
+        parsed = parse_attachments(data, attachments_allowed=True)
         self.assertEqual(parsed[0]["mime"], "image/png")
 
 
 class AttachmentPayloadTests(unittest.TestCase):
     def parsed(self, raw, name):
-        return parse_attachments({"attachments": [make_attachment(name, raw)]}, is_pro=True)
+        return parse_attachments({"attachments": [make_attachment(name, raw)]}, attachments_allowed=True)
 
     def test_openai_image_becomes_openrouter_image_url_block(self):
         request = build_provider_payload(

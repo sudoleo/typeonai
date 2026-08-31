@@ -14,11 +14,12 @@ from google.api_core.exceptions import Aborted as FirestoreAborted
 
 from app.core.rate_limit import limiter
 from app.core.observability import record_metric, safe_exception, safe_traceback
+from app.core.entitlements import TIER_FREE, entitlements_for
 from app.core.security import (
     TierStatusUnavailable,
     db_firestore,
     extract_id_token,
-    is_user_pro,
+    get_user_tier,
     verify_user_token,
 )
 import app.core.config as cfg
@@ -110,10 +111,10 @@ user_memory_repository = FirestoreUserMemoryRepository(db_firestore)
 _CHAT_DOCUMENT_ID_RE = re.compile(r"[0-9a-f]{32}")
 
 
-def get_run_usage_limits(is_pro: bool) -> UsageLimits:
+def get_run_usage_limits(tier) -> UsageLimits:
     return UsageLimits(
-        total=cfg.get_consensus_run_limit(is_pro),
-        deep_think=cfg.get_deep_think_run_limit(is_pro),
+        total=cfg.get_consensus_run_limit(tier),
+        deep_think=cfg.get_deep_think_run_limit(tier),
     )
 
 
@@ -148,13 +149,17 @@ def usage_run_fingerprint(
     return canonical_request_fingerprint(fingerprint_input)
 
 
-def usage_response_fields(snapshot, is_pro: bool) -> dict:
+def usage_response_fields(snapshot, tier) -> dict:
+    entitlements = entitlements_for(tier)
     return {
         "free_usage_remaining": snapshot.total.remaining,
         "deep_remaining": snapshot.deep_think.remaining,
         "limit": snapshot.total.limit,
         "deep_limit": snapshot.deep_think.limit,
-        "is_pro_user": is_pro,
+        # is_pro_user bleibt das Modell-/Deep-Think-Flag (Plus -> False);
+        # "tier" ist die vollstaendige Stufe fuer die UI.
+        "is_pro_user": entitlements.is_pro,
+        "tier": entitlements.tier,
     }
 
 
@@ -162,7 +167,7 @@ def reserve_usage_run(
     uid: str,
     data: dict,
     *,
-    is_pro: bool,
+    tier,
     deep_think: bool,
     purpose: Optional[str] = None,
 ):
@@ -173,7 +178,7 @@ def reserve_usage_run(
             uid,
             key,
             kind,
-            get_run_usage_limits(is_pro),
+            get_run_usage_limits(tier),
             request_fingerprint=usage_run_fingerprint(
                 data,
                 question=str(data.get("question") or "").strip(),
@@ -182,7 +187,7 @@ def reserve_usage_run(
             ),
         )
     except UsageLimitExceeded as exc:
-        detail = usage_response_fields(exc.snapshot, is_pro)
+        detail = usage_response_fields(exc.snapshot, tier)
         detail.update(
             {
                 "error": (
@@ -223,7 +228,7 @@ def reserve_usage_run(
     return key, result
 
 
-def consume_usage_run(uid: str, key: str, *, is_pro: bool):
+def consume_usage_run(uid: str, key: str):
     try:
         return run_usage_repository.consume(uid, key)
     except UsageTransitionError as exc:
@@ -711,7 +716,7 @@ def _resolve_authoritative_chat_context(
         raise HTTPException(status_code=503, detail="Chat context unavailable") from exc
 
 
-def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool):
+def validate_question_word_limit(question: str, tier, deep_search: bool):
     question = validate_text_size(
         question,
         label="Question",
@@ -720,7 +725,7 @@ def validate_question_word_limit(question: str, is_pro: bool, deep_search: bool)
         required=True,
     )
 
-    max_words_limit = cfg.get_word_limit(is_pro, deep_search)
+    max_words_limit = cfg.get_word_limit(tier, deep_search)
     if count_words(question) > max_words_limit:
         raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words_limit}.")
     return question
@@ -858,7 +863,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     api_key = str(data.get("openrouter_key") or "").strip()
     model = data.get("model")
 
-    is_pro_user = False
+    tier = TIER_FREE
+    entitlements = entitlements_for(tier)
     uid = None
 
     if id_token:
@@ -867,25 +873,30 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         except Exception as exc:
             raise HTTPException(status_code=401, detail="Authentication failed")
         try:
-            is_pro_user = is_user_pro(uid)
+            tier = get_user_tier(uid)
         except TierStatusUnavailable:
             raise HTTPException(
                 status_code=503,
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
+        entitlements = entitlements_for(tier)
+
+    # is_pro_user heisst weiterhin "darf Frontier-Modelle und Deep Think".
+    # Plus ist hier False und faehrt damit exakt die Free-Modellauswahl.
+    is_pro_user = entitlements.is_pro
 
     # Deep Think ist strikt Pro-only.
-    if deep_search and not is_pro_user:
+    if deep_search and not entitlements.deep_think:
         raise HTTPException(status_code=403, detail="Deep Think is exclusively available for Pro users.")
 
-    question = validate_question_word_limit(question, is_pro_user, deep_search)
+    question = validate_question_word_limit(question, tier, deep_search)
     validate_model(
         model,
         provider.allowed_models,
         provider.label,
         is_pro=is_pro_user,
     )
-    attachments = parse_attachments(data, is_pro_user)
+    attachments = parse_attachments(data, attachments_allowed=entitlements.attachments)
     effective_model = cfg.PROVIDERS[provider.key].pro_model if deep_search else model
     model_config = cfg.get_model_config(effective_model, provider.key)
     if attachments and model_config and not model_config.accepts_attachments:
@@ -893,7 +904,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             status_code=400,
             detail=f"{model_config.label} cannot read attachments.",
         )
-    max_tokens = cfg.get_output_token_limit(is_pro_user, deep_search)
+    max_tokens = cfg.get_output_token_limit(tier, deep_search)
 
     # Das nutzereigene Gedaechtnis. Es haengt an der Basisanweisung, NICHT im
     # Datenteil: es ist eine stehende Praeferenz des Nutzers, kein
@@ -907,7 +918,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
         memory_text = user_memory.load_profile_text(
             user_memory_repository,
             uid,
-            max_notes_chars=cfg.get_memory_char_limit(is_pro_user),
+            max_notes_chars=cfg.get_memory_char_limit(tier),
         )
         if memory_text:
             system_prompt = user_memory.build_user_memory_system_prompt(
@@ -981,6 +992,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 "free_usage_remaining": "Unlimited",
                 "deep_remaining": "Unlimited",
                 "is_pro_user": is_pro_user,
+                "tier": tier,
                 "key_used": "User API Key",
             },
         )
@@ -992,9 +1004,9 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             raise HTTPException(status_code=500, detail="Server error: API key missing")
 
         usage_key, _ = reserve_usage_run(
-            uid, data, is_pro=is_pro_user, deep_think=deep_search
+            uid, data, tier=tier, deep_think=deep_search
         )
-        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro_user)
+        usage_result = consume_usage_run(uid, usage_key)
         claim_usage_operation(
             uid,
             usage_key,
@@ -1025,7 +1037,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             max_tokens=max_tokens,
             attachments=attachments,
             extras={
-                **usage_response_fields(usage_result.snapshot, is_pro_user),
+                **usage_response_fields(usage_result.snapshot, tier),
                 "usage_run_status": usage_result.status.value,
                 "key_used": "Developer API Key",
             },
@@ -1080,13 +1092,14 @@ def prepare(request: Request, data: dict = Body(...)):
     try:
         uid = verify_user_token(id_token)
         try:
-            is_pro = is_user_pro(uid)
+            tier = get_user_tier(uid)
         except TierStatusUnavailable:
             raise HTTPException(
                 status_code=503,
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
-        if deep_think and not is_pro:
+        entitlements = entitlements_for(tier)
+        if deep_think and not entitlements.deep_think:
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -1104,7 +1117,7 @@ def prepare(request: Request, data: dict = Body(...)):
     # er erst in den /ask_*-Endpoints (handle_ask), sonst stuende er doppelt im
     # System-Prompt. Ein Tier-Gate gibt es nicht mehr.
 
-    validate_question_word_limit(question, is_pro, deep_think)
+    validate_question_word_limit(question, tier, deep_think)
     raw_system_prompt = validate_client_system_prompt(data.get("system_prompt"))
     if not raw_system_prompt or not str(raw_system_prompt).strip():
         base_system_prompt = get_system_prompt()
@@ -1120,7 +1133,7 @@ def prepare(request: Request, data: dict = Body(...)):
     }
     if not use_own_keys:
         usage_key, _ = reserve_usage_run(
-            uid, data, is_pro=is_pro, deep_think=deep_think
+            uid, data, tier=tier, deep_think=deep_think
         )
         # Den Slot sofort mitverbrauchen. Der anschliessende parallele
         # /ask_*-Fan-out ruft zwar weiterhin reserve+consume, trifft danach aber
@@ -1133,8 +1146,8 @@ def prepare(request: Request, data: dict = Body(...)):
         # Reserve+Consume pro Lauf, hier und seriell statt 6x parallel. Der
         # Consume im Fan-out bleibt als Selbstheilung erhalten (falls /prepare
         # nur reservieren, aber nicht konsumieren konnte).
-        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
-        response.update(usage_response_fields(usage_result.snapshot, is_pro))
+        usage_result = consume_usage_run(uid, usage_key)
+        response.update(usage_response_fields(usage_result.snapshot, tier))
         response["usage_run_status"] = usage_result.status.value
     return response
 
@@ -1150,8 +1163,10 @@ def consensus(request: Request, data: dict = Body(...)):
     consensus_model = data.get("consensus_model")
     stream_requested = parse_boolean_flag(data.get("stream", False))
     uid = None
+    tier = TIER_FREE
+    entitlements = entitlements_for(tier)
     is_pro = False
-    
+
     # 1. Auth & Usage Check
     if not id_token:
         raise HTTPException(
@@ -1164,12 +1179,15 @@ def consensus(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
-        is_pro = is_user_pro(uid)  # WICHTIG: Pro-Status prüfen
+        tier = get_user_tier(uid)  # WICHTIG: Kontostufe prüfen
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503,
             detail="Account tier is temporarily unavailable. Please retry.",
         ) from None
+    entitlements = entitlements_for(tier)
+    # is_pro bleibt das Modell-/Deep-Think-Flag; Plus ist hier False.
+    is_pro = entitlements.is_pro
 
     # A completed turn is owner-bound stored history, not a new engine run.
     # Resolve it before current model/tier/credential checks so a later plan or
@@ -1319,9 +1337,9 @@ def consensus(request: Request, data: dict = Body(...)):
     usage_result = None
     if not use_own_keys:
         usage_key, _ = reserve_usage_run(
-            uid, data, is_pro=is_pro, deep_think=deep_think
+            uid, data, tier=tier, deep_think=deep_think
         )
-        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+        usage_result = consume_usage_run(uid, usage_key)
         claim_usage_operation(
             uid,
             usage_key,
@@ -1547,13 +1565,14 @@ def consensus(request: Request, data: dict = Body(...)):
     if stream_requested:
         extra_fields = {}
         if usage_result is not None:
-            extra_fields = usage_response_fields(usage_result.snapshot, is_pro)
+            extra_fields = usage_response_fields(usage_result.snapshot, tier)
             extra_fields["usage_run_status"] = usage_result.status.value
         elif use_own_keys:
             extra_fields = {
                 "free_usage_remaining": "Unlimited",
                 "deep_remaining": "Unlimited",
                 "is_pro_user": is_pro,
+                "tier": tier,
             }
 
         def consensus_event_source():
@@ -1803,13 +1822,14 @@ def consensus(request: Request, data: dict = Body(...)):
             chat_persisted=chat_persisted,
         )
     if usage_result is not None:
-        response.update(usage_response_fields(usage_result.snapshot, is_pro))
+        response.update(usage_response_fields(usage_result.snapshot, tier))
         response["usage_run_status"] = usage_result.status.value
     elif use_own_keys:
         response.update({
             "free_usage_remaining": "Unlimited",
             "deep_remaining": "Unlimited",
             "is_pro_user": is_pro,
+            "tier": tier,
         })
     return response
 
@@ -1919,21 +1939,25 @@ def resolve(request: Request, data: dict = Body(...)):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
-        is_pro = is_user_pro(uid)
+        tier = get_user_tier(uid)
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503,
             detail="Account tier is temporarily unavailable. Please retry.",
         ) from None
+    entitlements = entitlements_for(tier)
+    is_pro = entitlements.is_pro
 
-    # Resolve ist ein Pro-Feature; Free-Nutzer sehen den Button nur als Teaser.
-    # Serverseitig gilt das Gate auch mit eigenen Keys (wie bei Deep Think).
-    if not is_pro:
+    # Resolve ist ab Plus freigeschaltet; Free-Nutzer sehen den Button nur als
+    # Teaser. Die Runde laeuft auf dem Standard-Judge, kostet also keinen
+    # Frontier-Preis -- deshalb darf Plus sie testen. Serverseitig gilt das Gate
+    # auch mit eigenen Keys (wie bei Deep Think).
+    if not entitlements.resolve:
         raise HTTPException(
             status_code=403,
             detail={
-                "error": "Resolve rounds are a Pro feature.",
-                "error_code": "pro_required",
+                "error": "Resolve rounds need Plus or Pro.",
+                "error_code": "plus_required",
             },
         )
 
@@ -1957,11 +1981,11 @@ def resolve(request: Request, data: dict = Body(...)):
         usage_key, _ = reserve_usage_run(
             uid,
             data,
-            is_pro=is_pro,
+            tier=tier,
             deep_think=False,
             purpose="resolve",
         )
-        usage_result = consume_usage_run(uid, usage_key, is_pro=is_pro)
+        usage_result = consume_usage_run(uid, usage_key)
         claim_usage_operation(
             uid,
             usage_key,
@@ -1981,12 +2005,13 @@ def resolve(request: Request, data: dict = Body(...)):
         uid, data, claim, positions, result
     )
     if usage_result is not None:
-        result.update(usage_response_fields(usage_result.snapshot, is_pro))
+        result.update(usage_response_fields(usage_result.snapshot, tier))
         result["usage_run_status"] = usage_result.status.value
     else:
         result.update({
             "free_usage_remaining": "Unlimited",
             "deep_remaining": "Unlimited",
             "is_pro_user": is_pro,
+            "tier": tier,
         })
     return result

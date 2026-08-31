@@ -565,8 +565,12 @@
           "File uploads": "An attached file is read and sent along to every model, which makes all six calls a lot longer, and longer prompts cost more per run.",
         };
         const PRO_FEATURE_DESCRIPTION_FALLBACK = "This one costs a multiple of a normal run, so it stays off by default.";
+        // Ab Plus freigeschaltet: fuer diese beiden ist Plus schon genug, das
+        // Modal darf einem Plus-Konto also nicht mehr in den Weg kommen.
+        const PLUS_FEATURES = new Set(["Resolve", "File uploads"]);
         window.App.showProFeatureModal = function (featureName) {
           if (window.isUserPro) return false;
+          if (window.isUserPlus && PLUS_FEATURES.has(featureName)) return false;
           const nameEl = document.getElementById("proModalFeatureName");
           if (nameEl && featureName) nameEl.textContent = featureName;
           const descEl = document.getElementById("proModalDescription");
@@ -617,35 +621,39 @@
           return Number.isFinite(value) ? value : fallback;
         }
 
+        // Nur der Vorab-Wert, bis der Server im selben Response die echten
+        // Limits mitschickt. Plus hat kein eigenes Deep-Think-Kontingent --
+        // Deep Think bleibt Pro (siehe app/core/entitlements.py).
         const LIMITS = {
-          FREE: {
+          free: {
             NORMAL: getConfiguredLimit("free_consensus_run_limit", 0),
             DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
           },
-          PRO: {
+          plus: {
+            NORMAL: getConfiguredLimit("plus_consensus_run_limit", 0),
+            DEEP: getConfiguredLimit("free_deep_think_run_limit", 0)
+          },
+          pro: {
             NORMAL: getConfiguredLimit("pro_consensus_run_limit", 0),
             DEEP: getConfiguredLimit("pro_deep_think_run_limit", 0)
           }
         };
-        let currentMaxLimit = LIMITS.FREE.NORMAL;
-        let currentDeepLimit = LIMITS.FREE.DEEP;
+        let currentMaxLimit = LIMITS.free.NORMAL;
+        let currentDeepLimit = LIMITS.free.DEEP;
 
-        function setCurrentUsageLimits(isPro, serverLimits = {}) {
+        function setCurrentUsageLimits(tier, serverLimits = {}) {
           const normalLimit = Number(serverLimits.limit ?? serverLimits.total_limit);
           const deepLimit = Number(serverLimits.deep_limit ?? serverLimits.deep_total_limit);
+          const fallback = LIMITS[window.App.normalizeTier?.(tier) || "free"] || LIMITS.free;
 
-          currentMaxLimit = Number.isFinite(normalLimit)
-            ? normalLimit
-            : (isPro ? LIMITS.PRO.NORMAL : LIMITS.FREE.NORMAL);
-          currentDeepLimit = Number.isFinite(deepLimit)
-            ? deepLimit
-            : (isPro ? LIMITS.PRO.DEEP : LIMITS.FREE.DEEP);
+          currentMaxLimit = Number.isFinite(normalLimit) ? normalLimit : fallback.NORMAL;
+          currentDeepLimit = Number.isFinite(deepLimit) ? deepLimit : fallback.DEEP;
 
           window.App.state.set("currentMaxLimit", currentMaxLimit, "userTier");
           window.App.state.set("currentDeepLimit", currentDeepLimit, "userTier");
         }
 
-        setCurrentUsageLimits(false);
+        setCurrentUsageLimits("free");
         window.setCurrentUsageLimits = setCurrentUsageLimits;
 
         // Diese Funktion prüft den Status sofort beim Laden
@@ -668,10 +676,10 @@
               const data = await response.json();
 
               // 1. UI sofort umschalten (Badge an, Modelle frei)
-              updateUserTierUI(data.is_pro, true);
+              updateUserTierUI(data.tier ?? data.is_pro, true);
 
               // 2. Limits sofort aktualisieren (verhindert den 500/25 Fehler)
-              setCurrentUsageLimits(data.is_pro, data);
+              setCurrentUsageLimits(data.tier ?? data.is_pro, data);
 
               // 3. Sidebar Text initial befüllen (damit dort nicht 25 steht bis zum ersten Klick)
               // Wir rufen hier kurz den Usage-Endpoint auf, um die aktuellen Zahlen zu haben
@@ -691,7 +699,7 @@
               body: JSON.stringify({ id_token: token })
             });
             const data = await resp.json();
-            setCurrentUsageLimits(data.is_pro === true, data);
+            setCurrentUsageLimits(data.tier ?? data.is_pro === true, data);
 
             const usageView = window.App.runRegistry?.reconcileUsageSnapshot?.({
               uid: window.auth?.currentUser?.uid || null,
@@ -843,10 +851,12 @@
           // Prüfe, ob der Deep Think Toggle aktiv ist:
           const deepSearchActive = document.getElementById("deepSearchToggle").checked;
           // Setze das Wortlimit abhängig vom Deep Think Status
-          const isPro = Boolean(window.isUserPro);
+          // Deep Search gibt es nur mit Pro; das normale Wortlimit hat pro
+          // Stufe einen eigenen Admin-Wert.
+          const tier = window.userTier || "free";
           const maxWordsRaw = deepSearchActive
-            ? (isPro ? APP_LIMITS.pro_deep_search_max_words : APP_LIMITS.free_deep_search_max_words)
-            : (isPro ? APP_LIMITS.pro_max_words : APP_LIMITS.free_max_words);
+            ? (tier === "pro" ? APP_LIMITS.pro_deep_search_max_words : APP_LIMITS.free_deep_search_max_words)
+            : APP_LIMITS[`${tier}_max_words`];
           const maxWords = Number(maxWordsRaw || 0);
 
           if (wordCount > maxWords) {
@@ -1832,7 +1842,9 @@
         // Initialer Aufruf: Alles sperren (Standard)
         updatePremiumModelsState(false);
 
+        window.App.state.set("userTier", "free", "userTier");
         window.App.state.set("isUserPro", false, "userTier");
+        window.App.state.set("isUserPlus", false, "userTier");
 
         // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
         // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.

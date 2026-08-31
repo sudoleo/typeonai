@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 import app.core.config as cfg
 from app.core.observability import safe_exception
-from app.core.security import db_firestore, is_user_admin, is_user_pro
+from app.core.entitlements import entitlements_for
+from app.core.security import db_firestore, get_user_tier, is_user_admin
 from app.core.site import SITE_URL
 from app.core.rate_limit import (
     ApiUidRateLimitExceeded,
@@ -275,10 +276,12 @@ def create_consensus_run(
         run = existing
         model_plan = run.get("model_plan") or {}
     else:
-        is_pro = is_user_pro(identity.uid)
-        if payload.deep_think and not is_pro:
+        tier = get_user_tier(identity.uid)
+        entitlements = entitlements_for(tier)
+        is_pro = entitlements.is_pro
+        if payload.deep_think and not entitlements.deep_think:
             raise HTTPException(status_code=403, detail="Deep Think requires a Pro account")
-        max_words = cfg.get_word_limit(is_pro, payload.deep_think)
+        max_words = cfg.get_word_limit(tier, payload.deep_think)
         if count_words(question) > max_words:
             raise HTTPException(status_code=400, detail=f"Input exceeds word limit of {max_words}")
         try:
@@ -305,7 +308,7 @@ def create_consensus_run(
                 idempotency_key=idempotency_key.strip(),
                 request_payload=request_payload,
                 model_plan=model_plan,
-                is_pro=is_pro,
+                tier=tier,
             )
         except ApiRunConflict as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from None
@@ -541,7 +544,7 @@ def create_api_publisher_watch(
             run_weekday=config["watch_weekday"],
             run_time=config["watch_time"],
             timezone_name=config["watch_timezone"],
-            is_pro=is_user_pro(identity.uid),
+            tier=get_user_tier(identity.uid),
             model_tier="free",
             return_existing=True,
             bypass_active_limit=True,

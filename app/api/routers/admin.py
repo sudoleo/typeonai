@@ -19,7 +19,9 @@ from app.core.observability import safe_exception
 from app.core.config import get_limits_config, load_models_from_db, normalize_limits_config
 from app.services import share_snapshots as snapshots
 from app.services import (
+    account_tier,
     mailer,
+    persistence_guard,
     publisher_config,
     seo_data,
     seo_recommendation,
@@ -126,6 +128,15 @@ class AdminSeoEditorialDecisionRequest(BaseModel):
         "edit_static_page",
     ]
     note: str = Field(default="", max_length=500)
+
+
+class AdminAccountTierRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # UID oder E-Mail -- der Admin tippt, was er gerade zur Hand hat.
+    identifier: str = Field(min_length=1, max_length=320)
+    tier: Literal["free", "plus", "pro"]
+    note: str = Field(default="", max_length=account_tier.MAX_NOTE_CHARS)
 
 
 def _require_admin(request, data):
@@ -463,6 +474,74 @@ def admin_revoke_api_key(request: Request, key_id: str):
         )
         raise HTTPException(status_code=500, detail="Failed to revoke API key")
     return {"key_id": key_id, "status": key["status"]}
+
+
+_ACCOUNT_TIER_ERROR_STATUS = {
+    "not_found": 404,
+    "invalid_tier": 400,
+    "invalid_request": 400,
+}
+
+
+def _raise_account_tier_error(exc: account_tier.AccountTierError):
+    raise HTTPException(
+        status_code=_ACCOUNT_TIER_ERROR_STATUS.get(exc.code, 400),
+        detail={"error_code": exc.code, "message": exc.message},
+    ) from None
+
+
+@router.get("/api/admin/account-tier")
+@limiter.limit("30/minute")
+def admin_get_account_tier(request: Request, identifier: str = Query(min_length=1, max_length=320)):
+    """Stufe eines Kontos nachschlagen -- per UID oder E-Mail."""
+    _require_admin(request, {})
+    try:
+        return {"account": account_tier.get_account(identifier)}
+    except account_tier.AccountTierError as exc:
+        _raise_account_tier_error(exc)
+    except Exception as exc:
+        logging.error("admin_get_account_tier failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to look up the account")
+
+
+@router.put("/api/admin/account-tier")
+@limiter.limit("20/minute")
+def admin_set_account_tier(
+    request: Request, data: AdminAccountTierRequest = Body(...)
+):
+    """Stufe setzen. Schreibt users/{uid}.tier, protokolliert die Aenderung und
+    verwirft den Tier-Cache, damit sie sofort greift."""
+    admin_uid = _require_admin(request, {})
+    try:
+        account = account_tier.set_tier(
+            data.identifier,
+            data.tier,
+            admin_uid=admin_uid,
+            note=data.note,
+        )
+    except account_tier.AccountTierError as exc:
+        _raise_account_tier_error(exc)
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=409, detail="This account is being deleted.") from None
+    except Exception as exc:
+        logging.error("admin_set_account_tier failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to update the account tier")
+    return {"status": "success", "account": account}
+
+
+@router.get("/api/admin/account-tiers")
+@limiter.limit("20/minute")
+def admin_list_account_tiers(request: Request, changes: int = 25):
+    """Alle Konten oberhalb von Free plus die letzten Aenderungen."""
+    _require_admin(request, {})
+    try:
+        return {
+            "accounts": account_tier.list_elevated_accounts(),
+            "changes": account_tier.list_recent_changes(changes),
+        }
+    except Exception as exc:
+        logging.error("admin_list_account_tiers failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Failed to list account tiers")
 
 
 @router.get("/api/admin/publisher-config")

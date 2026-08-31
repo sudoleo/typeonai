@@ -46,10 +46,10 @@ def free_model(provider: str) -> str:
     return cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[provider]
 
 
-def auth_patches(uid="uid-followup-tests", is_pro=False):
+def auth_patches(uid="uid-followup-tests", tier="free"):
     return (
         patch.object(chat_router, "verify_user_token", return_value=uid),
-        patch.object(chat_router, "is_user_pro", return_value=is_pro),
+        patch.object(chat_router, "get_user_tier", return_value=tier),
     )
 
 
@@ -165,7 +165,7 @@ def test_ask_with_context_works_for_free_users():
         captured.update(kwargs)
         return {"ok": True}
 
-    p1, p2 = auth_patches(is_pro=False)
+    p1, p2 = auth_patches(tier="free")
     with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
         response = client.post(
             "/ask_gemini",
@@ -205,7 +205,7 @@ def test_ask_with_context_version_loads_authoritative_context_without_compressin
         assert provider == "Gemini"
         return "AUTHORITATIVE CHAT CONTEXT: decision=PostgreSQL"
 
-    p1, p2 = auth_patches(is_pro=False)
+    p1, p2 = auth_patches(tier="free")
     with p1, p2:
         with patch.object(
             chat_router.chat_context_service, "resolve_for_ask", side_effect=resolve
@@ -232,7 +232,7 @@ def test_ask_with_context_version_loads_authoritative_context_without_compressin
 
 def test_prepare_with_context_works_for_free_users():
     client = make_client()
-    p1, p2 = auth_patches(is_pro=False)
+    p1, p2 = auth_patches(tier="free")
     with p1, p2:
         response = client.post(
             "/prepare",
@@ -253,7 +253,7 @@ def test_ask_rejects_oversized_context_before_provider_call():
 
     oversized_consensus = "c" * (cfg.get_followup_consensus_char_limit() + 10_000)
     try:
-        p1, p2 = auth_patches(uid=uid, is_pro=True)
+        p1, p2 = auth_patches(uid=uid, tier="pro")
         with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
@@ -284,7 +284,7 @@ def test_ask_without_context_only_adds_the_memory_write_boundary():
         return {"ok": True}
 
     try:
-        p1, p2 = auth_patches(uid=uid, is_pro=True)
+        p1, p2 = auth_patches(uid=uid, tier="pro")
         with p1, p2, patch.object(chat_router, "_run_ask", side_effect=fake_run_ask):
             response = client.post(
                 "/ask_gemini",
@@ -309,7 +309,7 @@ def test_prepare_validates_but_does_not_inject_context():
     # Kontextblock doppelt im Prompt (Client schickt system_prompt + context
     # an /ask_*).
     client = make_client()
-    p1, p2 = auth_patches(uid="uid-followup-prepare", is_pro=True)
+    p1, p2 = auth_patches(uid="uid-followup-prepare", tier="pro")
     with p1, p2:
         response = client.post(
             "/prepare",

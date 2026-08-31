@@ -215,12 +215,22 @@ body:has(.sidebar.active) .brand-float {
   color: color-mix(in srgb, #e8c76a 86%, var(--text-color) 14%);
 }
 
-/* Brand-Variante im Sidebar-Kopf: JS blendet sie für Pro-Nutzer ein. */
+/* Brand-Variante im Sidebar-Kopf: JS blendet sie für Pro- und Plus-Nutzer ein
+   und beschriftet sie mit dem Namen der Stufe. */
 #proBadge {
   display: none;
   padding: 2px 7px;
   letter-spacing: var(--tracking-wide);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(201, 162, 50, 0.24);
+}
+
+/* Plus ist die Stufe zwischen Free und Pro und bleibt deshalb neutral: Gold
+   ist die Farbe der teuren Modelle, und die hat Plus gerade nicht. */
+.pro-badge.is-plus {
+  border-color: var(--line);
+  background: var(--well);
+  color: var(--ink-2);
+  box-shadow: none;
 }
 
 /* "Why limits" in der Fusszeile. Seit der Kontoname daneben weg ist, hat die

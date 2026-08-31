@@ -228,14 +228,30 @@ def test_resolve_requires_auth():
     assert response.status_code == 401
 
 
-def test_resolve_requires_pro():
+def test_resolve_is_refused_below_plus():
     client = make_client()
     with patch.object(chat_router, "verify_user_token", return_value="uid-free"), \
-         patch.object(chat_router, "is_user_pro", return_value=False):
+         patch.object(chat_router, "get_user_tier", return_value="free"):
         response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
     assert response.status_code == 403
     # Bare-App ohne main.py-Exception-Handler: detail bleibt verschachtelt.
-    assert response.json()["detail"]["error_code"] == "pro_required"
+    assert response.json()["detail"]["error_code"] == "plus_required"
+
+
+def test_resolve_is_open_to_plus(fake_run_usage):
+    """Die Resolve-Runde laeuft auf dem Standard-Judge, nicht auf Frontier-
+    Modellen -- deshalb darf Plus sie testen, ohne Pro-Kosten zu erzeugen."""
+    client = make_client()
+    uid = "uid-resolve-plus"
+    with patch.object(chat_router, "verify_user_token", return_value=uid),          patch.object(chat_router, "get_user_tier", return_value="plus"),          patch.object(chat_router, "run_resolve_round",
+                      return_value={"claim": "Opening year", "outcome": "standoff", "results": []}):
+        response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["tier"] == "plus"
+    # is_pro_user bleibt das Modell-/Deep-Think-Flag und ist fuer Plus falsch.
+    assert body["is_pro_user"] is False
+    assert body["limit"] == cfg.get_consensus_run_limit("plus")
 
 
 def test_resolve_rejects_invalid_positions():
@@ -243,7 +259,7 @@ def test_resolve_rejects_invalid_positions():
     payload = resolve_payload()
     payload["positions"] = payload["positions"][:1]
     with patch.object(chat_router, "verify_user_token", return_value="uid-r"), \
-         patch.object(chat_router, "is_user_pro", return_value=True):
+         patch.object(chat_router, "get_user_tier", return_value="pro"):
         response = client.post("/resolve", headers=AUTH_HEADER, json=payload)
     assert response.status_code == 400
     assert "two positions" in response.json()["detail"]
@@ -254,7 +270,7 @@ def test_resolve_counts_usage_and_returns_result(fake_run_usage):
     uid = "uid-resolve-usage"
     fake_result = {"claim": "Opening year", "outcome": "standoff", "results": []}
     with patch.object(chat_router, "verify_user_token", return_value=uid), \
-         patch.object(chat_router, "is_user_pro", return_value=True), \
+         patch.object(chat_router, "get_user_tier", return_value="pro"), \
          patch.object(chat_router, "run_resolve_round", return_value=dict(fake_result)) as round_mock:
         response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
     assert response.status_code == 200
@@ -295,7 +311,7 @@ def test_resolve_rejects_a_key_reserved_for_a_normal_consensus(fake_run_usage):
     )
 
     with patch.object(chat_router, "verify_user_token", return_value=uid), \
-         patch.object(chat_router, "is_user_pro", return_value=True), \
+         patch.object(chat_router, "get_user_tier", return_value="pro"), \
          patch.object(chat_router, "run_resolve_round") as round_mock:
         response = client.post("/resolve", headers=AUTH_HEADER, json=payload)
 
@@ -319,7 +335,7 @@ def test_resolve_blocks_when_usage_limit_reached(fake_run_usage):
         fake_run_usage.reserve(uid, key, RunKind.REGULAR, limits)
         fake_run_usage.consume(uid, key)
     with patch.object(chat_router, "verify_user_token", return_value=uid), \
-         patch.object(chat_router, "is_user_pro", return_value=True):
+         patch.object(chat_router, "get_user_tier", return_value="pro"):
         response = client.post("/resolve", headers=AUTH_HEADER, json=resolve_payload())
     assert response.status_code == 403
     assert response.json()["detail"]["error_code"] == "total_usage_limit_exceeded"

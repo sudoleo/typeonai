@@ -14,7 +14,16 @@ export function createAdminClient(auth) {
     let data = {};
     try { data = await response.json(); } catch (_) { /* empty */ }
     if (!response.ok) {
-      throw new Error(data.error || data.detail || `HTTP ${response.status}`);
+      // FastAPI-Fehler koennen ein Objekt sein ({error_code, message} oder
+      // eine Validierungsliste). Ohne Auspacken stuende hier "[object Object]".
+      const detail = data.detail;
+      const message = data.error
+        || (typeof detail === "string" ? detail : null)
+        || (detail && typeof detail === "object" && !Array.isArray(detail)
+          ? (detail.message || detail.error)
+          : null)
+        || `HTTP ${response.status}`;
+      throw new Error(message);
     }
     return data;
   };

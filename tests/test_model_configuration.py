@@ -513,7 +513,7 @@ class ModelConfigurationTests(unittest.TestCase):
     def test_input_helpers(self):
         for question in (None, "", "   "):
             with self.assertRaises(HTTPException) as exc:
-                validate_question_word_limit(question, is_pro=False, deep_search=False)
+                validate_question_word_limit(question, tier="free", deep_search=False)
             self.assertEqual(exc.exception.status_code, 400)
         self.assertTrue(parse_boolean_flag(" true "))
         self.assertFalse(parse_boolean_flag("false"))

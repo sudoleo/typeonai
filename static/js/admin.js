@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-import { createAdminClient } from "/static/js/admin-api.js?v=20260811-phase6";
+import { createAdminClient } from "/static/js/admin-api.js?v=20260901-plustier1";
 
 const app = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -12,15 +12,17 @@ const limitGroups = [
         title: 'Run Usage Limits (UTC day)',
         fields: [
             ['free_consensus_run_limit', 'Free consensus runs'],
+            ['plus_consensus_run_limit', 'Plus consensus runs'],
             ['pro_consensus_run_limit', 'Pro consensus runs'],
             ['free_deep_think_run_limit', 'Free Deep Think runs'],
-            ['pro_deep_think_run_limit', 'Pro Deep Think runs']
+            ['pro_deep_think_run_limit', 'Pro Deep Think runs (Plus has none)']
         ]
     },
     {
         title: 'Input / Context Limits',
         fields: [
             ['free_max_words', 'Free input words'],
+            ['plus_max_words', 'Plus input words'],
             ['pro_max_words', 'Pro input words'],
             ['free_deep_search_max_words', 'Free Deep Think input words'],
             ['pro_deep_search_max_words', 'Pro Deep Think input words']
@@ -30,6 +32,7 @@ const limitGroups = [
         title: 'Output Token Limits',
         fields: [
             ['free_max_tokens', 'Free output tokens'],
+            ['plus_max_tokens', 'Plus output tokens'],
             ['pro_max_tokens', 'Pro output tokens'],
             ['free_deep_search_max_tokens', 'Free Deep Think output tokens'],
             ['pro_deep_search_max_tokens', 'Pro Deep Think output tokens']
@@ -47,9 +50,11 @@ const limitGroups = [
         title: 'Consensus Watch Limits',
         fields: [
             ['watch_free_active_limit', 'Free active watches'],
+            ['watch_plus_active_limit', 'Plus active watches'],
             ['watch_pro_active_limit', 'Pro active watches'],
             ['watch_max_runs_per_day', 'Global runs per day'],
-            ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)']
+            ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)'],
+            ['watch_plus_daily_interval_allowed', 'Plus may use the daily interval (1 = yes)']
         ]
     },
     {
@@ -68,7 +73,7 @@ let globalModelsData = {};
 // ==============================
 // Tabs
 // ==============================
-const TAB_IDS = ['models', 'consensus', 'limits', 'api', 'shares', 'watches', 'topics', 'seo'];
+const TAB_IDS = ['models', 'consensus', 'limits', 'accounts', 'api', 'shares', 'watches', 'topics', 'seo'];
 function activateTab(tabId) {
     if (!TAB_IDS.includes(tabId)) tabId = 'models';
     if (tabId !== 'api') clearIssuedApiKey();
@@ -78,7 +83,7 @@ function activateTab(tabId) {
         btn.classList.toggle('active', id === tabId);
         btn.setAttribute('aria-selected', id === tabId ? 'true' : 'false');
     });
-    document.getElementById('adminSavebar').hidden = tabId === 'topics';
+    document.getElementById('adminSavebar').hidden = tabId === 'topics' || tabId === 'accounts';
     history.replaceState(null, '', `#${tabId}`);
 }
 document.querySelectorAll('.admin-tabs button').forEach(btn => {
@@ -1147,8 +1152,10 @@ function renderLimits() {
 
     const fields = [
         ['memory_free_chars', 'Free Memory note characters'],
+        ['memory_plus_chars', 'Plus Memory note characters'],
         ['memory_pro_chars', 'Pro Memory note characters'],
         ['memory_free_ai_edits_daily', 'Free AI edits / UTC day'],
+        ['memory_plus_ai_edits_daily', 'Plus AI edits / UTC day'],
         ['memory_pro_ai_edits_daily', 'Pro AI edits / UTC day'],
         ['memory_ai_edits_per_minute', 'AI edits / minute'],
         ['memory_global_calls_daily', 'Global calls / UTC day'],
@@ -1597,6 +1604,183 @@ async function loadPublisherWatches() {
 }
 
 document.getElementById('reloadPublisherWatchesBtn').addEventListener('click', loadPublisherWatches);
+
+// === Account tier (Free / Plus / Pro) ===
+// Eigener Speicherpfad: die Stufe ist eine Kontoaenderung, keine
+// Modellkonfiguration -- sie geht deshalb nicht ueber die Savebar.
+const TIER_LABELS = { free: 'Free', plus: 'Plus', pro: 'Pro' };
+
+function accountTierStatus(message, isError) {
+    const el = document.getElementById('accountTierStatus');
+    el.textContent = message || '';
+    el.className = isError ? 'error' : 'success';
+}
+
+function accountTiersStatus(message, isError) {
+    const el = document.getElementById('accountTiersStatus');
+    el.textContent = message || '';
+    el.className = isError ? 'error' : 'success';
+}
+
+function tierChip(tier) {
+    const value = TIER_LABELS[tier] ? tier : 'free';
+    return chip(`tier-${value}`, TIER_LABELS[value]);
+}
+
+function renderAccountTierDetail(account) {
+    const panel = document.getElementById('accountTierDetail');
+    panel.innerHTML = '';
+    if (!account) {
+        panel.hidden = true;
+        return;
+    }
+    const head = document.createElement('div');
+    head.className = 'api-key-name';
+    const who = document.createElement('span');
+    who.textContent = account.email || account.uid;
+    head.append(who, tierChip(account.tier));
+    if (account.role === 'admin') head.appendChild(chip('', 'admin'));
+
+    const meta = document.createElement('div');
+    meta.className = 'api-key-meta';
+    // Genau die Faehigkeiten, die der Server aus der Stufe ableitet -- damit
+    // im Dashboard nichts anderes steht als im Lauf gilt.
+    meta.textContent = [
+        `UID: ${account.uid}`,
+        `Frontier models: ${account.premium_models ? 'yes' : 'no'}`,
+        `Deep Think: ${account.deep_think ? 'yes' : 'no'}`,
+        `Attachments: ${account.attachments ? 'yes' : 'no'}`,
+        `Resolve: ${account.resolve ? 'yes' : 'no'}`,
+        `Changed: ${formatAdminTime(account.tier_updated_at)}`,
+        account.tier_note ? `Note: ${account.tier_note}` : ''
+    ].filter(Boolean).join(' | ');
+
+    panel.append(head, meta);
+    panel.hidden = false;
+}
+
+async function lookupAccountTier() {
+    const identifier = document.getElementById('accountTierIdentifier').value.trim();
+    if (!identifier) {
+        accountTierStatus('Enter a UID or an email address.', true);
+        document.getElementById('accountTierIdentifier').focus();
+        return;
+    }
+    accountTierStatus('Looking up...', false);
+    try {
+        const data = await shareAdminRequest(
+            'GET', `/api/admin/account-tier?identifier=${encodeURIComponent(identifier)}`);
+        renderAccountTierDetail(data.account);
+        // Der Select zeigt die Ist-Stufe, damit "Set tier" ohne weiteres
+        // Zutun nichts veraendert.
+        document.getElementById('accountTierSelect').value = data.account.tier;
+        accountTierStatus('', false);
+    } catch (err) {
+        renderAccountTierDetail(null);
+        accountTierStatus(err.message, true);
+    }
+}
+
+async function saveAccountTier() {
+    const identifier = document.getElementById('accountTierIdentifier').value.trim();
+    const tier = document.getElementById('accountTierSelect').value;
+    const note = document.getElementById('accountTierNote').value.trim();
+    if (!identifier) {
+        accountTierStatus('Enter a UID or an email address.', true);
+        document.getElementById('accountTierIdentifier').focus();
+        return;
+    }
+    if (!confirm(`Set ${identifier} to ${TIER_LABELS[tier] || tier}?`)) return;
+    const button = document.getElementById('saveAccountTierBtn');
+    button.disabled = true;
+    accountTierStatus('Saving...', false);
+    try {
+        const data = await shareAdminRequest('PUT', '/api/admin/account-tier', { identifier, tier, note });
+        renderAccountTierDetail(data.account);
+        const from = TIER_LABELS[data.account.previous_tier] || data.account.previous_tier;
+        accountTierStatus(`Tier changed: ${from} -> ${TIER_LABELS[data.account.tier]}.`, false);
+        await loadAccountTiers();
+    } catch (err) {
+        accountTierStatus(err.message, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function renderAccountTiers(accounts) {
+    const container = document.getElementById('accountTiersContainer');
+    container.innerHTML = '';
+    if (!accounts.length) {
+        container.textContent = 'No account is above Free.';
+        return;
+    }
+    accounts.forEach(account => {
+        const row = document.createElement('div');
+        row.className = 'api-key-row';
+        const main = document.createElement('div');
+        main.className = 'api-key-main';
+        const name = document.createElement('div');
+        name.className = 'api-key-name';
+        const who = document.createElement('span');
+        who.textContent = account.uid;
+        name.append(who, tierChip(account.tier));
+        const meta = document.createElement('div');
+        meta.className = 'api-key-meta';
+        meta.textContent = [
+            `Changed: ${formatAdminTime(account.tier_updated_at)}`,
+            account.tier_updated_by ? `By: ${account.tier_updated_by}` : '',
+            account.tier_note ? `Note: ${account.tier_note}` : ''
+        ].filter(Boolean).join(' | ');
+        main.append(name, meta);
+
+        const actions = document.createElement('div');
+        actions.className = 'api-key-actions';
+        const open = actionBtn('Open', () => {
+            document.getElementById('accountTierIdentifier').value = account.uid;
+            lookupAccountTier();
+        });
+        open.className = 'admin-btn secondary';
+        actions.appendChild(open);
+        row.append(main, actions);
+        container.appendChild(row);
+    });
+}
+
+function renderAccountTierChanges(changes) {
+    const container = document.getElementById('accountTierChangesContainer');
+    container.innerHTML = '';
+    if (!changes.length) {
+        container.textContent = 'No tier change has been recorded yet.';
+        return;
+    }
+    changes.forEach(entry => {
+        const row = document.createElement('div');
+        row.className = 'api-key-meta';
+        row.textContent = [
+            formatAdminTime(entry.changed_at),
+            `${entry.uid}: ${TIER_LABELS[entry.from_tier] || entry.from_tier} -> ${TIER_LABELS[entry.to_tier] || entry.to_tier}`,
+            entry.changed_by ? `by ${entry.changed_by}` : '',
+            entry.note || ''
+        ].filter(Boolean).join(' | ');
+        container.appendChild(row);
+    });
+}
+
+async function loadAccountTiers() {
+    accountTiersStatus('Loading...', false);
+    try {
+        const data = await shareAdminRequest('GET', '/api/admin/account-tiers');
+        renderAccountTiers(data.accounts || []);
+        renderAccountTierChanges(data.changes || []);
+        accountTiersStatus('', false);
+    } catch (err) {
+        accountTiersStatus(err.message, true);
+    }
+}
+
+document.getElementById('lookupAccountTierBtn').addEventListener('click', lookupAccountTier);
+document.getElementById('saveAccountTierBtn').addEventListener('click', saveAccountTier);
+document.getElementById('reloadAccountTiersBtn').addEventListener('click', loadAccountTiers);
 
 // === Consensus API keys ===
 function apiKeysStatus(message, isError) {

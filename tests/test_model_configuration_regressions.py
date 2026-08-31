@@ -624,7 +624,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         for question in (None, "", "   "):
             with self.subTest(question=question):
                 with self.assertRaises(HTTPException) as exc:
-                    validate_question_word_limit(question, is_pro=False, deep_search=False)
+                    validate_question_word_limit(question, tier="free", deep_search=False)
                 self.assertEqual(exc.exception.status_code, 400)
 
     def test_boolean_flag_parser_is_whitespace_tolerant(self):

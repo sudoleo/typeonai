@@ -309,11 +309,13 @@
   function normalizeWatchLimits(rawLimits, watches) {
     const list = Array.isArray(watches) ? watches : [];
     const activeFromList = list.filter(watch => watch.status === "active").length;
-    const isPro = String(rawLimits?.plan || "").toLowerCase() === "pro"
-      || (rawLimits?.plan == null && window.isUserPro === true);
+    // "plan" traegt jetzt free/plus/pro. Der Fallback greift nur, solange der
+    // Server noch nicht geantwortet hat; die Zahl selbst kommt sonst immer aus
+    // der Antwort.
+    const tier = window.App.normalizeTier?.(rawLimits?.plan ?? window.userTier) || "free";
     const configuredLimit = Number(rawLimits?.active_limit);
     const configFallback = Number((window.APP_LIMITS || {})[
-      isPro ? "watch_pro_active_limit" : "watch_free_active_limit"
+      `watch_${tier}_active_limit`
     ]);
     const activeLimit = Number.isFinite(configuredLimit) && configuredLimit >= 0
       ? configuredLimit : (Number.isFinite(configFallback) ? configFallback : 0);
@@ -324,7 +326,7 @@
     const pausedCount = Number.isFinite(configuredPaused) && configuredPaused >= 0
       ? configuredPaused : Math.max(0, list.length - activeFromList);
     return {
-      plan: isPro ? "pro" : "free",
+      plan: tier,
       activeCount: activeCount,
       activeLimit: activeLimit,
       remaining: Math.max(0, activeLimit - activeCount),
@@ -362,8 +364,12 @@
 
   function renderWatchLimit(target, limits) {
     if (!target || !limits) return;
-    const isPro = limits.plan === "pro";
-    const planLabel = isPro ? "Pro access" : "Standard access";
+    const tier = window.App.normalizeTier?.(limits.plan) || "free";
+    // Nur Free bekommt die Kostenerklaerung samt "Why limits?": Plus und Pro
+    // haben ihr groesseres Kontingent schon.
+    const isFree = tier === "free";
+    const planLabel = tier === "pro"
+      ? "Pro access" : (tier === "plus" ? "Plus access" : "Standard access");
     const activeLabel = `${limits.activeCount} of ${limits.activeLimit} active`;
     const availabilityLabel = limits.atLimit
       ? "Limit reached"
@@ -381,7 +387,7 @@
       </div>
       <div class="watch-limit-detail">
         <span>Paused Watches do not count.</span>
-        ${isPro ? "" : `<span>Every Watch re-runs your question on a schedule and costs me money each time, which is why the number is capped.</span><button type="button" class="watch-limit-upgrade">Why limits?</button>`}
+        ${isFree ? `<span>Every Watch re-runs your question on a schedule and costs me money each time, which is why the number is capped.</span><button type="button" class="watch-limit-upgrade">Why limits?</button>` : ""}
       </div>`;
     target.querySelector(".watch-limit-upgrade")?.addEventListener("click", showWatchCostInfo);
   }
@@ -442,7 +448,10 @@
   function dailyIntervalAllowed() {
     if (window.isUserPro === true) return true;
     if (watchState.limits) return watchState.limits.dailyAvailable === true;
-    return Number((window.APP_LIMITS || {}).watch_daily_interval_requires_pro) === 0;
+    if (Number((window.APP_LIMITS || {}).watch_daily_interval_requires_pro) === 0) return true;
+    // Plus darf das taegliche Intervall, solange der Admin-Schalter es erlaubt.
+    return window.isUserPlus === true
+      && Number((window.APP_LIMITS || {}).watch_plus_daily_interval_allowed) !== 0;
   }
 
   function intervalOptions(selected) {
@@ -890,7 +899,7 @@
         if (error.status === 429) {
           watchState.setLimits(null);
           loadWatchLimits(true).then(applyDialogWatchLimit).catch(() => {});
-          if (!window.isUserPro) showWatchCostInfo();
+          if (!window.isUserPlus) showWatchCostInfo();
         }
         popup("Watch could not be started: " + error.message);
       }

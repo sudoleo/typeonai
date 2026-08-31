@@ -284,9 +284,11 @@
     // Only when the run actually disagrees with the tier on screen. Pushing
     // it on every pass rebuilt the whole model picker for each streamed
     // chunk, and the picker's own restore is what closed the cycle above.
-    if (typeof context.usage?.isProUser === "boolean"
-      && context.usage.isProUser !== Boolean(window.isUserPro)) {
-      window.updateUserTierUI?.(context.usage.isProUser, true);
+    const runTier = context.usage?.tier
+      ?? (typeof context.usage?.isProUser === "boolean" ? context.usage.isProUser : null);
+    if (runTier !== null
+      && (window.App.normalizeTier?.(runTier) || "free") !== (window.userTier || "free")) {
+      window.updateUserTierUI?.(runTier, true);
     }
 
     if (context.config?.agentMode === false) {

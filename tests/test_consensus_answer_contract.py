@@ -33,7 +33,7 @@ def consensus_api(monkeypatch):
         return "Consensus"
 
     monkeypatch.setattr(chat_router, "verify_user_token", lambda token: UID)
-    monkeypatch.setattr(chat_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(chat_router, "get_user_tier", lambda uid: "free")
     monkeypatch.setattr(chat_router, "query_consensus", fake_consensus)
     monkeypatch.setattr(
         chat_router,

@@ -16,6 +16,15 @@ from app.core.e2e_profile import (
     e2e_test_mode_enabled,
     firebase_project_id,
 )
+from app.core.entitlements import (
+    TIER_FREE,
+    TIER_PLUS,
+    TIER_PRO,
+    Entitlements,
+    entitlements_for,
+    normalize_tier,
+    tier_at_least,
+)
 from app.core.observability import safe_exception
 
 # --- E2E-Test-Hook (MOCK_AUTH=1) ------------------------------------------
@@ -65,6 +74,12 @@ assert_safe_e2e_environment()
 
 def _mock_auth_enabled() -> bool:
     return os.environ.get("MOCK_AUTH") == "1"
+
+
+def _mock_auth_tier() -> str:
+    """Stufe des E2E-Mock-Users. Ohne MOCK_TIER bleibt er Free, damit die
+    Suite den Free-Pfad testet; MOCK_TIER=plus|pro schaltet gezielt um."""
+    return normalize_tier(os.environ.get("MOCK_TIER"))
 
 
 if _mock_auth_enabled():
@@ -284,14 +299,17 @@ TIER_CACHE_TTL_SECONDS = 60
 _tier_cache = TTLCache(maxsize=4096, ttl=TIER_CACHE_TTL_SECONDS)
 _tier_cache_lock = threading.Lock()
 
-_TIER_FLAGS_DEFAULT = {"pro": False, "admin": False}
+_TIER_FLAGS_DEFAULT = {"tier": TIER_FREE, "pro": False, "admin": False}
 
 
 def _compute_tier_flags(data: dict) -> dict:
-    tier = str(data.get("tier", "")).lower()
+    tier = normalize_tier(data.get("tier"))
     role = str(data.get("role", "")).lower()
     return {
-        "pro": tier in ("premium", "pro"),
+        "tier": tier,
+        # "pro" heisst weiterhin "darf teure Modelle und Deep Think" und ist
+        # fuer Plus bewusst False (siehe app/core/entitlements.py).
+        "pro": tier == TIER_PRO,
         "admin": role == "admin",
     }
 
@@ -319,13 +337,35 @@ def invalidate_tier_cache(uid: str) -> None:
         _tier_cache.pop(uid, None)
 
 
+def get_user_tier(uid: str) -> str:
+    """Kontostufe aus Firestore (gecacht): "free", "plus" oder "pro".
+
+    Einzige Quelle fuer alles, was Plus zusaetzlich darf. Wer nur wissen will,
+    ob teure Modelle erlaubt sind, nimmt weiter is_user_pro().
+    """
+    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
+        return _mock_auth_tier()
+    return _get_tier_flags(uid)["tier"]
+
+
+def get_user_entitlements(uid: str) -> Entitlements:
+    return entitlements_for(get_user_tier(uid))
+
+
 def is_user_pro(uid: str) -> bool:
     """
     Liest (gecacht) aus Firestore, ob das Feld 'tier' auf 'premium' (oder 'pro') steht.
+    Plus ist hier absichtlich NICHT enthalten: das Flag steuert den Zugriff auf
+    teure Modelle und Deep Think.
     """
     if _mock_auth_enabled() and uid == E2E_MOCK_UID:
-        return False
+        return _mock_auth_tier() == TIER_PRO
     return _get_tier_flags(uid)["pro"]
+
+
+def is_user_plus(uid: str) -> bool:
+    """Plus ODER Pro - die Stufe, ab der Anhaenge und Resolve freigeschaltet sind."""
+    return tier_at_least(get_user_tier(uid), TIER_PLUS)
 
 def is_user_admin(uid: str) -> bool:
     """

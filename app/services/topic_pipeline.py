@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 
+from app.core.entitlements import TIER_FREE
 from app.core.observability import safe_exception
 from app.services import opinion_map, share_snapshots
 from app.services.consensus_pipeline import run_consensus_pipeline
@@ -46,7 +47,7 @@ def execute_topic(
     previous_consensus: str,
     condition: str = "",
     previous_opinion_map=None,
-    is_pro: bool = False,
+    tier=TIER_FREE,
     baseline_consensus: str = "",
     model_overrides=None,
     known_claims=None,
@@ -74,7 +75,7 @@ def execute_topic(
         provider_models=provider_models,
         consensus_model=first_successful_engine,
         keys=keys,
-        is_pro=is_pro,
+        tier=tier,
         provider_order=provider_transport.PROVIDER_ORDER,
         log_context="Consensus Topic",
     )

@@ -50,6 +50,16 @@ function boot() {
             snapshot: () => ({ uid: user.uid, generation: 3 })
           },
           state: { set: (key, value) => state.set(key, value) },
+          // Im Browser kommt das aus app-state.js (head-Bundle); run-view
+          // vergleicht damit die Stufe des Laufs gegen die auf dem Schirm.
+          normalizeTier: (value) => {
+            if (value === true) return "pro";
+            if (value === false || value === null || value === undefined) return "free";
+            const text = String(value).trim().toLowerCase();
+            if (text === "pro" || text === "premium") return "pro";
+            if (text === "plus") return "plus";
+            return "free";
+          },
           consensusBodyEl: root => root?.querySelector("#consensusAnswerBody"),
           setAppTitle: vi.fn(),
           setThreadQuestion: vi.fn(),
@@ -172,9 +182,9 @@ describe("projection re-entrancy", () => {
       .toBe("answer A");
 
     // A tier the view already shows is not pushed again on every stream tick.
-    // app-state.js exposes window.isUserPro as a read-only view, so mimic that
+    // app-state.js exposes window.userTier as a read-only view, so mimic that
     // shape rather than assigning (a plain write throws in the real app).
-    Object.defineProperty(window, "isUserPro", { get: () => true, configurable: true });
+    Object.defineProperty(window, "userTier", { get: () => "pro", configurable: true });
     registry.update(run.runId, () => {});
     expect(tierCalls).toBe(1);
     dom.window.close();

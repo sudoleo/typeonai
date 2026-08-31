@@ -19,6 +19,7 @@ from typing import Callable
 from firebase_admin import firestore
 from app.core.observability import safe_exception
 from app.core.config import get_model_config, REASONING_EFFORT_FOR_MEMORY_EDIT
+from app.core.entitlements import normalize_tier
 from app.services import persistence_guard, user_memory
 from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
 from app.services.llm.engines import OPENROUTER_BASE_URL
@@ -67,6 +68,11 @@ PATCH_SYSTEM_PROMPT = (
     "change more than one passage, and never invent information beyond the explicit "
     "correction. For append, target must be empty. For delete, replacement must be empty."
 )
+
+
+def _tier_key(tier, suffix: str) -> str:
+    """Config-Schluessel der Stufe: memory_{free|plus|pro}_{suffix}."""
+    return f"memory_{normalize_tier(tier)}_{suffix}"
 
 
 class MemoryEditError(RuntimeError):
@@ -289,7 +295,7 @@ class FirestoreMemoryEditRepository:
         *,
         client_request_id: str,
         fingerprint: str,
-        is_pro: bool,
+        tier,
         config: dict,
         now: datetime | None = None,
     ) -> dict:
@@ -299,15 +305,10 @@ class FirestoreMemoryEditRepository:
         profile_ref = self._profile_ref(uid)
         usage_ref = self.db.collection(USAGE_COLLECTION).document(_hash(uid))
         global_ref = self.db.collection(GLOBAL_USAGE_COLLECTION).document(f"memory-edit-{day}")
-        daily_limit = int(
-            config["memory_pro_ai_edits_daily"] if is_pro
-            else config["memory_free_ai_edits_daily"]
-        )
+        daily_limit = int(config[_tier_key(tier, "ai_edits_daily")])
         minute_limit = int(config["memory_ai_edits_per_minute"])
         global_limit = int(config["memory_global_calls_daily"])
-        memory_limit = int(
-            config["memory_pro_chars"] if is_pro else config["memory_free_chars"]
-        )
+        memory_limit = int(config[_tier_key(tier, "chars")])
 
         def operation(tx):
             # Muss der erste fachliche Read in jeder owner-gebundenen Mutation sein.
@@ -655,7 +656,7 @@ class MemoryEditService:
         self,
         uid: str,
         *,
-        is_pro: bool,
+        tier,
         client_request_id: str,
         source_kind: str,
         selected_text: str,
@@ -693,7 +694,7 @@ class MemoryEditService:
             uid,
             client_request_id=request_id,
             fingerprint=fingerprint,
-            is_pro=is_pro,
+            tier=tier,
             config=config,
         )
         if reservation["existing"]:
@@ -726,9 +727,7 @@ class MemoryEditService:
                 client_request_id=request_id,
                 fingerprint=fingerprint,
                 patch=patch,
-                memory_limit=int(
-                    config["memory_pro_chars"] if is_pro else config["memory_free_chars"]
-                ),
+                memory_limit=int(config[_tier_key(tier, "chars")]),
             )
         except MemoryEditError as exc:
             self.repository.fail(

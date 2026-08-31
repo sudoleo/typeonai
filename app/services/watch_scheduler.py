@@ -12,6 +12,7 @@ from firebase_admin import auth
 import app.core.config as cfg
 from app.core import security
 from app.core.background_tasks import task_succeeded
+from app.core.entitlements import TIER_FREE
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.core.site import SITE_URL
 from app.services.consensus_pipeline import run_consensus_pipeline
@@ -46,7 +47,7 @@ def _developer_keys() -> dict:
     return provider_transport.developer_keys()
 
 
-def _selected_models(keys: dict, is_pro: bool,
+def _selected_models(keys: dict, tier,
                      model_overrides=None) -> list[tuple[str, str]]:
     """Every provider the tier configures, minus the ones with no credential.
 
@@ -57,7 +58,7 @@ def _selected_models(keys: dict, is_pro: bool,
     configured = (
         dict(model_overrides)
         if isinstance(model_overrides, dict)
-        else cfg.get_watch_models(is_pro)
+        else cfg.get_watch_models(tier)
     )
     if mock_llm_enabled():
         return [
@@ -73,15 +74,15 @@ def _selected_models(keys: dict, is_pro: bool,
 
 
 def _provider_answer(provider: str, model: str, question: str, keys: dict,
-                     is_pro: bool, deep_think: bool = False):
+                     tier, deep_think: bool = False):
     return provider_transport.query_provider(
-        provider, model, question, keys, is_pro, deep_think
+        provider, model, question, keys, tier, deep_think
     )
 
 
-def _configured_consensus_engine(keys: dict, is_pro: bool) -> str | None:
+def _configured_consensus_engine(keys: dict, tier) -> str | None:
     """Return the configured Watch engine when its provider can be called."""
-    chosen = cfg.get_watch_consensus_model(is_pro)
+    chosen = cfg.get_watch_consensus_model(tier)
     resolved = cfg.get_consensus_model_config(chosen)
     if not resolved or not resolved.provider:
         return None
@@ -91,15 +92,15 @@ def _configured_consensus_engine(keys: dict, is_pro: bool) -> str | None:
 
 
 def execute_watch(question: str, previous_consensus: str, condition: str = "",
-                  previous_opinion_map=None, is_pro: bool = False,
+                  previous_opinion_map=None, tier=TIER_FREE,
                   baseline_consensus: str = "",
                   model_overrides=None) -> dict:
     """Run the configured tier models; never touches usage counters."""
     keys = _developer_keys()
     selected_models = _selected_models(
-        keys, is_pro, model_overrides=model_overrides
+        keys, tier, model_overrides=model_overrides
     )
-    configured_engine = _configured_consensus_engine(keys, is_pro)
+    configured_engine = _configured_consensus_engine(keys, tier)
     if mock_llm_enabled():
         for provider, _model in selected_models:
             keys[PROVIDER_LABELS[provider]] = "mock"
@@ -117,7 +118,7 @@ def execute_watch(question: str, previous_consensus: str, condition: str = "",
         provider_models=provider_models,
         consensus_model=configured_engine or first_successful_engine,
         keys=keys,
-        is_pro=is_pro,
+        tier=tier,
         deep_think=False,
         provider_order=PROVIDER_ORDER,
         provider_call=_provider_answer,
@@ -434,13 +435,15 @@ async def run_watch_tick() -> int:
                     share.get("awaiting_first_watch_run")
                     and not claimed.get("last_successful_run_id")
                 )
-                account_is_pro = await asyncio.to_thread(
-                    security.is_user_pro, claimed["owner_uid"]
+                account_tier = await asyncio.to_thread(
+                    security.get_user_tier, claimed["owner_uid"]
                 )
                 # Scheduled Publisher pages are deliberately pinned to the
                 # Admin-configured Free Watch providers. All ordinary watches
                 # continue to follow the owner's live account tier.
-                is_pro = False if claimed.get("model_tier") == "free" else account_is_pro
+                # Plus faehrt hier ohnehin die Free-Modelle (siehe
+                # cfg.get_watch_models) -- mehr Watches, gleiche Kosten.
+                tier = TIER_FREE if claimed.get("model_tier") == "free" else account_tier
                 try:
                     history = await asyncio.to_thread(
                         share_snapshots.list_watch_history, claimed["share_id"], max_items=1,
@@ -477,7 +480,7 @@ async def run_watch_tick() -> int:
                     execute_watch, claimed["question"], previous_consensus,
                     claimed.get("condition") if claimed.get("email_mode") == "condition" else "",
                     previous_position_map,
-                    is_pro,
+                    tier,
                     baseline_consensus=original_consensus,
                 )
                 mail_kind = notification_kind(claimed, result)

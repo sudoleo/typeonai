@@ -11,7 +11,13 @@
     currentEvidenceSources: { owner: "evidence", initial: [] },
     consensusCitationMeta: { owner: "consensus", initial: null },
     lastShareResultId: { owner: "share", initial: null },
+    // Drei Stufen, zwei Flags: isUserPro heisst weiterhin "darf Frontier-
+    // Modelle und Deep Think" (Plus -> false), isUserPlus heisst "darf
+    // Anhaenge und Resolve" (Plus und Pro -> true). Wer nur eines der beiden
+    // liest, sperrt Plus im Zweifel wie Free statt wie Pro.
+    userTier: { owner: "userTier", initial: "free" },
     isUserPro: { owner: "userTier", initial: false },
+    isUserPlus: { owner: "userTier", initial: false },
     currentMaxLimit: { owner: "userTier", initial: null },
     currentDeepLimit: { owner: "userTier", initial: null },
     spinnerHTML: { owner: "runUi", initial: "" }
@@ -58,5 +64,20 @@
     });
   });
 
+  // Die eine Lesart der Kontostufe im Frontend. Sie steht hier statt in
+  // user-tier.js, weil app-state.js im head-Bundle laedt: jeder spaetere
+  // Konsument (run-view, watch, sidebar) findet sie dann schon vor.
+  // Gegenstueck zu normalize_tier() in app/core/entitlements.py.
+  function normalizeTier(value) {
+    // Booleans bleiben erlaubt: aeltere Aufrufer reichen data.is_pro durch.
+    if (value === true) return "pro";
+    if (value === false || value === null || value === undefined) return "free";
+    const text = String(value).trim().toLowerCase();
+    if (text === "pro" || text === "premium") return "pro";
+    if (text === "plus") return "plus";
+    return "free";
+  }
+
+  window.App.normalizeTier = normalizeTier;
   window.App.state = Object.freeze({ get, set, definitions });
 })();

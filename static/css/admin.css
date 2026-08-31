@@ -273,6 +273,12 @@
 /* Shared traffic-light amber, same meaning as everywhere else: not broken,
    but not what the configuration above says either. */
 .admin-chip.warn { color: var(--partial); border-color: color-mix(in srgb, var(--partial) 45%, transparent); }
+/* Kontostufen. Plus liegt zwischen Free und Pro und bekommt deshalb den
+   ruhigen Sekundaerton -- Gold bleibt allein bei Pro, damit ein Blick auf die
+   Liste die teure Stufe sofort findet. */
+.admin-chip.tier-free { color: var(--sidebar-text-muted); }
+.admin-chip.tier-plus { color: var(--accent-secondary); border-color: color-mix(in srgb, var(--accent-secondary) 42%, transparent); }
+.admin-chip.tier-pro { color: #c9a232; border-color: color-mix(in srgb, #d4af37 55%, transparent); }
 
 .icon-btn {
     background: transparent !important;
@@ -546,6 +552,18 @@
 .api-key-prefix { font-family: var(--font-mono); color: var(--sidebar-text-muted); font-size: var(--font-size-sm); }
 .api-key-meta { margin-top: 5px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs); overflow-wrap: anywhere; }
 .api-key-actions { display: flex; align-items: center; }
+.account-tier-detail {
+    margin-top: 14px;
+    padding: 12px 14px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-xs);
+}
+.account-tier-subhead {
+    margin: 18px 0 6px;
+    font-size: var(--font-size-sm);
+    color: var(--sidebar-text-muted);
+}
+#accountTierChangesContainer .api-key-meta { padding: 3px 0; }
 .publisher-config-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

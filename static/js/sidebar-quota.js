@@ -119,13 +119,15 @@
     renderRow("quotaRowWatch", "quotaWatchValue", watches);
     renderRing(runs);
 
-    // Der Plan steht hier, nicht mehr neben "New comparison". Pro spricht
-    // ueber das goldene Badge daneben (user-tier.js blendet #proBadge ein),
-    // also weicht das Textlabel dann zurueck statt "Pro Pro" zu schreiben.
+    // Der Plan steht hier, nicht mehr neben "New comparison". Pro und Plus
+    // sprechen ueber das Badge daneben (user-tier.js blendet #proBadge ein und
+    // beschriftet es), also weicht das Textlabel dann zurueck statt den Namen
+    // doppelt zu schreiben. Nur Free hat kein Badge und braucht das Label.
     var planLabel = el("quotaPlanLabel");
     if (planLabel) {
-      planLabel.textContent = window.isUserPro ? "Pro" : "Free";
-      planLabel.hidden = !!window.isUserPro;
+      var tier = window.userTier || "free";
+      planLabel.textContent = "Free";
+      planLabel.hidden = tier !== "free";
     }
 
     // The countdown span carries the reset time ("Resets in 1 h 58 min").

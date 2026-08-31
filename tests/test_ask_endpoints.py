@@ -43,10 +43,10 @@ def free_model(provider: str) -> str:
     return cfg.FREE_DEFAULT_MODEL_BY_PROVIDER[provider]
 
 
-def auth_patches(uid="uid-ask-tests", is_pro=False):
+def auth_patches(uid="uid-ask-tests", tier="free"):
     return (
         patch.object(chat_router, "verify_user_token", return_value=uid),
-        patch.object(chat_router, "is_user_pro", return_value=is_pro),
+        patch.object(chat_router, "get_user_tier", return_value=tier),
     )
 
 
@@ -94,7 +94,7 @@ def test_own_keys_flag_without_openrouter_key_is_rejected():
 
 def test_deep_search_is_pro_only():
     client = make_client()
-    p1, p2 = auth_patches(is_pro=False)
+    p1, p2 = auth_patches(tier="free")
     with p1, p2:
         response = client.post(
             "/ask_grok",
@@ -109,9 +109,67 @@ def test_deep_search_is_pro_only():
     assert "Pro users" in response.json()["detail"]
 
 
+def test_deep_search_is_refused_for_plus():
+    """Deep Think faehrt Frontier-Modelle und bleibt deshalb Pro -- genau die
+    Grenze, wegen der es die Plus-Stufe ueberhaupt gibt."""
+    client = make_client()
+    p1, p2 = auth_patches(tier="plus")
+    with p1, p2:
+        response = client.post(
+            "/ask_grok",
+            headers=AUTH_HEADER,
+            json={
+                "question": "hello",
+                "model": free_model("grok"),
+                "deep_search": "true",
+            },
+        )
+    assert response.status_code == 403
+
+
+def test_plus_cannot_ask_a_premium_model():
+    client = make_client()
+    premium = next(
+        model for model in cfg.PROVIDERS["grok"].models if model in cfg.PREMIUM_MODELS
+    )
+    p1, p2 = auth_patches(tier="plus")
+    with p1, p2:
+        response = client.post(
+            "/ask_grok",
+            headers=AUTH_HEADER,
+            json={"question": "hello", "model": premium},
+        )
+    assert response.status_code == 403
+
+
+def test_plus_may_attach_a_file_and_gets_the_plus_quota():
+    client = make_client()
+    p1, p2 = auth_patches(tier="plus")
+    with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
+        response = client.post(
+            "/ask_grok",
+            headers=AUTH_HEADER,
+            json={
+                "question": "describe it",
+                "model": free_model("grok"),
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
+                "attachments": [PNG_ATTACHMENT],
+            },
+        )
+    assert response.status_code == 200
+    assert len(run.call_args.kwargs["attachments"]) == 1
+    extras = run.call_args.kwargs["extras"]
+    assert extras["tier"] == "plus"
+    # is_pro_user bleibt das Modell-/Deep-Think-Flag.
+    assert extras["is_pro_user"] is False
+    # Und das Wortlimit kommt aus dem eigenen Plus-Wert.
+    assert cfg.get_word_limit("plus") == cfg.LIMITS["plus_max_words"]
+
+
 def test_glm_attachment_support_depends_on_the_effective_model():
     client = make_client()
-    p1, p2 = auth_patches(is_pro=True)
+    p1, p2 = auth_patches(tier="pro")
     with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
         flash = client.post(
             "/ask_glm",

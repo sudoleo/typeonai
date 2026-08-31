@@ -16,6 +16,7 @@ from firebase_admin import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 import app.core.config as cfg
+from app.core.entitlements import TIER_PRO
 from app.core.security import db_firestore
 from app.services import drift_signal, opinion_map, persistence_guard, share_snapshots
 
@@ -113,12 +114,17 @@ def _watch_id() -> str:
     return secrets.token_urlsafe(18).replace("-", "").replace("_", "")[:24]
 
 
-def validate_interval(interval, is_pro: bool) -> str:
+def validate_interval(interval, tier) -> str:
     normalized = str(interval or "").strip().lower()
     if normalized not in WATCH_INTERVALS:
         raise WatchError("invalid_interval", "Interval must be daily, weekly, or monthly.")
-    if normalized == "daily" and not cfg.is_watch_daily_allowed(is_pro):
-        raise WatchError("pro_required", "Daily watches require Pro.")
+    if normalized == "daily" and not cfg.is_watch_daily_allowed(tier):
+        raise WatchError(
+            "pro_required",
+            "Daily watches require Plus or Pro."
+            if cfg.watch_plus_daily_allowed()
+            else "Daily watches require Pro.",
+        )
     return normalized
 
 
@@ -282,14 +288,14 @@ def _owned_active_share(uid: str, share_id: str, db) -> dict:
     return share
 
 
-def _check_active_limit(uid: str, is_pro: bool, db, *, excluding_id: str | None = None):
+def _check_active_limit(uid: str, tier, db, *, excluding_id: str | None = None):
     count = 0
     for doc in _where_equal(db.collection(WATCHES_COLLECTION), "owner_uid", uid).stream():
         if doc.id == excluding_id:
             continue
         if (doc.to_dict() or {}).get("status") == "active":
             count += 1
-    if count >= cfg.get_watch_active_limit(is_pro):
+    if count >= cfg.get_watch_active_limit(tier):
         raise WatchError("limit_reached", "Active watch limit reached.")
 
 
@@ -379,7 +385,7 @@ def _ensure_watch_indexes(
     _run_transaction(db, initialize)
 
 
-def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
+def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
                  email_enabled=True, telegram_enabled=False,
                  condition="", visibility="public", run_time="", timezone_name="",
                  run_weekday="",
@@ -388,7 +394,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
                  bypass_active_limit=False,
                  publisher_active_limit=None, db=None) -> dict:
     db = db if db is not None else db_firestore
-    interval = validate_interval(interval, is_pro)
+    interval = validate_interval(interval, tier)
     email_mode = validate_email_mode(email_mode)
     email_enabled = validate_notification_channel(email_enabled, "email_enabled")
     telegram_enabled = validate_notification_channel(telegram_enabled, "telegram_enabled")
@@ -549,7 +555,7 @@ def create_watch(uid: str, *, interval, is_pro: bool, email_mode="changes_only",
 
         owner_state = owner_snapshot.to_dict() if owner_snapshot.exists else {}
         active_count = _safe_count((owner_state or {}).get("active_count"))
-        if not bypass_active_limit and active_count >= cfg.get_watch_active_limit(is_pro):
+        if not bypass_active_limit and active_count >= cfg.get_watch_active_limit(tier):
             raise WatchError("limit_reached", "Active watch limit reached.")
         publisher_count = 0
         if include_publisher:
@@ -846,7 +852,7 @@ def set_watch_status_admin(watch_id: str, status: str, *, db=None) -> dict:
         str(data.get("owner_uid") or ""),
         watch_id,
         updates,
-        is_pro=True,
+        tier=TIER_PRO,
         bypass_active_limit=data.get("model_tier") == "free",
         db=db,
     )
@@ -896,7 +902,7 @@ def _apply_watch_updates(
     watch_id: str,
     updates: dict,
     *,
-    is_pro: bool,
+    tier,
     bypass_active_limit: bool = False,
     db,
 ) -> dict:
@@ -932,7 +938,7 @@ def _apply_watch_updates(
             new_active
             and not old_active
             and not bypass_active_limit
-            and active_count >= cfg.get_watch_active_limit(is_pro)
+            and active_count >= cfg.get_watch_active_limit(tier)
         ):
             raise WatchError("limit_reached", "Active watch limit reached.")
         delta = int(new_active) - int(old_active)
@@ -961,7 +967,7 @@ def _apply_watch_updates(
     return _run_transaction(db, mutate)
 
 
-def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) -> dict:
+def update_watch(uid: str, watch_id: str, changes: dict, tier, db=None) -> dict:
     db = db if db is not None else db_firestore
     ref, data = _owned_watch(uid, watch_id, db)
     allowed_changes = {
@@ -984,7 +990,7 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
     now = utcnow()
     effective_interval = data.get("interval") or "weekly"
     if "interval" in changes:
-        interval = validate_interval(changes["interval"], is_pro)
+        interval = validate_interval(changes["interval"], tier)
         effective_interval = interval
         updates["interval"] = interval
     schedule_changed = any(
@@ -1038,9 +1044,9 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
             raise WatchError("invalid_status", "Status must be active or paused.")
         if status == "active" and data.get("status") != "active":
             if data.get("model_tier") != "free":
-                _check_active_limit(uid, is_pro, db, excluding_id=watch_id)
+                _check_active_limit(uid, tier, db, excluding_id=watch_id)
             interval = updates.get("interval") or data.get("interval") or "weekly"
-            validate_interval(interval, is_pro)
+            validate_interval(interval, tier)
             run_time = updates.get("run_time", data.get("run_time") or "")
             timezone_name = updates.get("timezone", data.get("timezone") or "")
             run_weekday = updates.get("run_weekday", data.get("run_weekday") or "")
@@ -1055,7 +1061,7 @@ def update_watch(uid: str, watch_id: str, changes: dict, is_pro: bool, db=None) 
         uid,
         watch_id,
         updates,
-        is_pro=is_pro,
+        tier=tier,
         bypass_active_limit=data.get("model_tier") == "free",
         db=db,
     )
@@ -1176,7 +1182,7 @@ def pause_watch(uid: str, watch_id: str, db=None) -> dict:
         uid,
         watch_id,
         {"status": "paused", "claimed_until": None, "current_run_id": None},
-        is_pro=True,
+        tier=TIER_PRO,
         db=db,
     )
     share = share_snapshots.get_share(str(data.get("share_id") or ""), db=db) or {}
@@ -1238,7 +1244,7 @@ def unsubscribe(token: str, db=None) -> dict:
         str(data.get("owner_uid") or ""),
         watch_id,
         {"status": "paused", "claimed_until": None, "current_run_id": None},
-        is_pro=True,
+        tier=TIER_PRO,
         db=db,
     )
     return {"watch_id": watch_id, "question": str(data.get("question") or "")[:200]}

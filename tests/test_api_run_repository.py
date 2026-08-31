@@ -111,7 +111,7 @@ def create(repo, question="Why?"):
         idempotency_key="request-123",
         request_payload={"question": question, "deep_think": False},
         model_plan={"providers": {"openai": "model"}, "consensus_model": "OpenAI"},
-        is_pro=False,
+        tier="free",
     )
 
 

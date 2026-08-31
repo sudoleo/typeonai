@@ -291,7 +291,7 @@ def memory_api(monkeypatch):
     stub = StubRepository()
     monkeypatch.setattr(users_router, "user_memory_repository", stub)
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kw: UID)
-    monkeypatch.setattr(users_router, "is_user_pro", lambda uid: False)
+    monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(users_router.router)
@@ -376,7 +376,7 @@ def run_ask(monkeypatch, profile, payload=None):
     }
     body.update(payload or {})
     with patch.object(chat_router, "verify_user_token", return_value=UID), \
-         patch.object(chat_router, "is_user_pro", return_value=False), \
+         patch.object(chat_router, "get_user_tier", return_value="free"), \
          patch.object(chat_router, "_run_ask") as provider_call:
         response = client.post("/ask_openai", headers=AUTH, json=body)
     assert response.status_code == 200 or provider_call.called

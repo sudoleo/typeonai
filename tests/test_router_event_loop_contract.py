@@ -52,9 +52,9 @@ def test_prepare_firestore_bundle_does_not_serialize_the_event_loop(monkeypatch)
 
     def slow_tier_read(uid):
         rendezvous.wait(timeout=2)
-        return True
+        return "pro"
 
-    monkeypatch.setattr(chat, "is_user_pro", slow_tier_read)
+    monkeypatch.setattr(chat, "get_user_tier", slow_tier_read)
 
     async def exercise():
         transport = httpx.ASGITransport(app=main.app)

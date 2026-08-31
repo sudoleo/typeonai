@@ -34,7 +34,7 @@ def test_public_site_origin_is_neutral_validated_core_configuration():
 def test_neutral_pipeline_owns_fanout_synthesis_parsing_and_scoring():
     calls = []
 
-    def provider(provider, model, question, keys, is_pro, deep_think):
+    def provider(provider, model, question, keys, tier, deep_think):
         calls.append((provider, model, deep_think))
         return {"text": f"{provider} answer", "sources": []}
 
@@ -56,7 +56,7 @@ def test_neutral_pipeline_owns_fanout_synthesis_parsing_and_scoring():
         provider_models={"openai": "o", "mistral": "m"},
         consensus_model="OpenAI",
         keys={},
-        is_pro=False,
+        tier="free",
         provider_call=provider,
         synthesize=synthesize,
         judge=judge,
@@ -68,7 +68,7 @@ def test_neutral_pipeline_owns_fanout_synthesis_parsing_and_scoring():
 
 
 def test_neutral_pipeline_can_select_the_first_successful_provider_as_engine():
-    def provider(provider, model, question, keys, is_pro, deep_think):
+    def provider(provider, model, question, keys, tier, deep_think):
         if provider == "openai":
             raise RuntimeError("transport failed")
         return {"text": f"{provider} answer", "sources": []}
@@ -85,7 +85,7 @@ def test_neutral_pipeline_can_select_the_first_successful_provider_as_engine():
             for provider in ("mistral", "gemini") if provider in answers
         ),
         keys={},
-        is_pro=False,
+        tier="free",
         provider_call=provider,
         synthesize=synthesize,
         judge=lambda *args, **kwargs: (
@@ -148,8 +148,8 @@ def test_privileged_app_and_admin_templates_are_external_script_surfaces():
         assert not re.search(r"\sstyle\s*=", html, re.I)
     admin = source("templates/admin.html")
     assert len(admin.splitlines()) < 700
-    assert "/static/css/admin.css?v=20260831-reasoning1" in admin
-    assert "/static/js/admin.js?v=20260831-reasoning1" in admin
+    assert "/static/css/admin.css?v=20260901-plustier1" in admin
+    assert "/static/js/admin.js?v=20260901-plustier1" in admin
     assert "createAdminClient" in source("static/js/admin.js")
     benchmark = source("templates/admin_benchmark.html")
     assert 'id="adminBootstrapConfig"' in benchmark

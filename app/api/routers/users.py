@@ -8,10 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 import app.core.config as cfg
+from app.core.entitlements import entitlements_for
 from app.core.security import (
     TierStatusUnavailable,
     verify_user_token,
     extract_id_token,
+    get_user_tier,
     is_user_pro,
     invalidate_tier_cache,
     db_firestore,
@@ -40,10 +42,10 @@ class UsageRequest(BaseModel):
     id_token: str = Field(min_length=1, max_length=8192)
 
 
-def _run_limits(is_pro: bool) -> UsageLimits:
+def _run_limits(tier) -> UsageLimits:
     return UsageLimits(
-        total=cfg.get_consensus_run_limit(is_pro),
-        deep_think=cfg.get_deep_think_run_limit(is_pro),
+        total=cfg.get_consensus_run_limit(tier),
+        deep_think=cfg.get_deep_think_run_limit(tier),
     )
 
 @router.get("/user_status")
@@ -65,20 +67,26 @@ def get_user_status(request: Request):
         
         # 2. Status aus Firestore holen
         try:
-            pro_status = is_user_pro(uid)
+            tier = get_user_tier(uid)
         except TierStatusUnavailable:
             raise HTTPException(
                 status_code=503,
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
+        entitlements = entitlements_for(tier)
 
         # 3. Limits basierend auf Status setzen
-        limit_regular = cfg.get_consensus_run_limit(pro_status)
-        limit_deep = cfg.get_deep_think_run_limit(pro_status)
+        limit_regular = cfg.get_consensus_run_limit(tier)
+        limit_deep = cfg.get_deep_think_run_limit(tier)
 
         return {
             "uid": uid,
-            "is_pro": pro_status,
+            # is_pro heisst weiterhin "Frontier-Modelle und Deep Think" und ist
+            # fuer Plus False; "tier" traegt die vollstaendige Stufe.
+            "is_pro": entitlements.is_pro,
+            "tier": entitlements.tier,
+            "attachments": entitlements.attachments,
+            "resolve": entitlements.resolve,
             "limit": limit_regular,
             "deep_limit": limit_deep
         }
@@ -104,15 +112,16 @@ def get_usage_post(request: Request, data: UsageRequest):
     
     # 1. Status prüfen
     try:
-        pro_status = is_user_pro(uid)
+        tier = get_user_tier(uid)
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503,
             detail="Account tier is temporarily unavailable. Please retry.",
         ) from None
+    entitlements = entitlements_for(tier)
 
     # 2. Limits festlegen
-    limits = _run_limits(pro_status)
+    limits = _run_limits(tier)
 
     # 3. Persistenten UTC-Tagesstand abrufen. Ein einzelnes Tagesdokument
     #    enthaelt Total- und Deep-Think-Bucket konsistent zusammen.
@@ -121,7 +130,10 @@ def get_usage_post(request: Request, data: UsageRequest):
     return {
         "remaining": snapshot.total.remaining,
         "deep_remaining": snapshot.deep_think.remaining,
-        "is_pro": pro_status,
+        "is_pro": entitlements.is_pro,
+        "tier": entitlements.tier,
+        "attachments": entitlements.attachments,
+        "resolve": entitlements.resolve,
         "total_limit": snapshot.total.limit,
         "deep_total_limit": snapshot.deep_think.limit,
         "reserved": snapshot.total.reserved,
@@ -208,9 +220,9 @@ def _memory_uid(request: Request) -> str:
         raise HTTPException(status_code=401, detail="Authentication failed") from None
 
 
-def _memory_tier(uid: str) -> bool:
+def _memory_tier(uid: str) -> str:
     try:
-        return is_user_pro(uid)
+        return get_user_tier(uid)
     except TierStatusUnavailable:
         raise HTTPException(
             status_code=503,
@@ -218,8 +230,8 @@ def _memory_tier(uid: str) -> bool:
         ) from None
 
 
-def _memory_response(profile: dict, *, is_pro: bool) -> dict:
-    notes_limit = cfg.get_memory_char_limit(is_pro)
+def _memory_response(profile: dict, *, tier) -> dict:
+    notes_limit = cfg.get_memory_char_limit(tier)
     return {
         "status": "success",
         "memory": profile,
@@ -237,31 +249,31 @@ def _memory_response(profile: dict, *, is_pro: bool) -> dict:
 @limiter.limit("30/minute")
 def get_user_memory(request: Request):
     uid = _memory_uid(request)
-    is_pro = _memory_tier(uid)
+    tier = _memory_tier(uid)
     try:
         try:
             profile = user_memory_repository.get(
-                uid, max_notes_chars=cfg.get_memory_char_limit(is_pro)
+                uid, max_notes_chars=cfg.get_memory_char_limit(tier)
             )
         except TypeError:
             profile = user_memory_repository.get(uid)
     except Exception as exc:
         logging.error("user memory read failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory is temporarily unavailable.") from None
-    return _memory_response(profile, is_pro=is_pro)
+    return _memory_response(profile, tier=tier)
 
 
 @router.put("/api/my/memory")
 @limiter.limit("20/minute")
 def put_user_memory(request: Request, payload: UserMemoryRequest):
     uid = _memory_uid(request)
-    is_pro = _memory_tier(uid)
+    tier = _memory_tier(uid)
     try:
         try:
             profile = user_memory_repository.save(
                 uid,
                 payload.model_dump(),
-                max_notes_chars=cfg.get_memory_char_limit(is_pro),
+                max_notes_chars=cfg.get_memory_char_limit(tier),
             )
         except TypeError:
             profile = user_memory_repository.save(uid, payload.model_dump())
@@ -270,7 +282,7 @@ def put_user_memory(request: Request, payload: UserMemoryRequest):
     except Exception as exc:
         logging.error("user memory write failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Memory could not be saved.") from None
-    return _memory_response(profile, is_pro=is_pro)
+    return _memory_response(profile, tier=tier)
 
 
 _MEMORY_EDIT_HTTP_STATUS = {
@@ -300,11 +312,11 @@ def _raise_memory_edit_error(exc: memory_edit.MemoryEditError):
 @limiter.limit("10/minute")
 def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
     uid = _memory_uid(request)
-    is_pro = _memory_tier(uid)
+    tier = _memory_tier(uid)
     try:
         result = memory_edit_service.edit(
             uid,
-            is_pro=is_pro,
+            tier=tier,
             client_request_id=payload.client_request_id,
             source_kind=payload.source_kind,
             selected_text=payload.selected_text,
@@ -325,12 +337,12 @@ def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
 @limiter.limit("10/minute")
 def undo_user_memory(request: Request, payload: UserMemoryUndoRequest):
     uid = _memory_uid(request)
-    is_pro = _memory_tier(uid)
+    tier = _memory_tier(uid)
     try:
         return memory_edit_repository.undo(
             uid,
             payload.revision_id,
-            memory_limit=cfg.get_memory_char_limit(is_pro),
+            memory_limit=cfg.get_memory_char_limit(tier),
         )
     except persistence_guard.AccountDeletionInProgress:
         raise HTTPException(status_code=403, detail="This account is being deleted.") from None

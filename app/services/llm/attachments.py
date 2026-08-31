@@ -187,8 +187,12 @@ def _looks_like_text(raw: bytes) -> bool:
     return True
 
 
-def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
+def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     """Liest und validiert `attachments` aus dem Request-Body.
+
+    `attachments_allowed` kommt aus den Entitlements der Kontostufe (Plus und
+    Pro) -- bewusst kein `is_pro` mehr: Anhaenge kosten nur so viel wie das
+    antwortende Modell, und Plus faehrt ohnehin die guenstige Modellauswahl.
 
     Gibt eine Liste von {name, mime, data (base64), raw (bytes)} zurück.
     """
@@ -196,10 +200,10 @@ def parse_attachments(data: dict, is_pro: bool) -> list[dict]:
     if not raw_list:
         return []
 
-    if not is_pro:
+    if not attachments_allowed:
         raise HTTPException(
             status_code=403,
-            detail="File uploads are exclusively available for Pro users.",
+            detail="File uploads need Plus or Pro.",
         )
 
     if not isinstance(raw_list, list):

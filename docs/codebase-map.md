@@ -14,7 +14,8 @@ beachten ist. Bewusst kurz gehalten — keine vollständige Datei-/Funktionslist
 consens.io vergleicht Antworten mehrerer LLM-Provider nebeneinander und
 synthetisiert daraus einen **Consensus** plus eine strukturierte
 **Differences**-Analyse. Optional: Agent Mode (Auto-Consensus), Datei-Anhänge
-(Pro), öffentliche Share-Seiten.
+(ab Plus), öffentliche Share-Seiten. Es gibt drei Kontostufen: **Free**,
+**Plus** und **Pro** (siehe §4 „Auth / Usage / Tier").
 
 - **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
   SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
@@ -98,7 +99,7 @@ als Auslöser, verlangen aber eine Frage, die das Ereignis überlebt: ob eine
 Behauptung hält, nicht ob etwas existiert oder wann es erscheint. Über die
 Veröffentlichung entscheidet danach der Judge: Runs, deren Modelle sich einig
 sind, werden bezahlt und trotzdem verworfen.
-| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
+| `admin.py` | `/api/admin/shares`, `/api/admin/shares/{id}/moderate`, `DELETE /api/admin/shares/{id}` (sofortiger Hard-Delete inklusive Watch/History/Followern), `/api/admin/models` (GET/POST; enthält auch die validierte `memory_edit`-Konfiguration), Publisher-Steuerung unter `/api/admin/publisher-config` (GET/PUT), API-Key-Ausgabe/-Liste/-Widerruf unter `/api/admin/api-keys`, Kontostufen unter `/api/admin/account-tier` (GET Lookup per UID/E-Mail, PUT setzen) und `/api/admin/account-tiers` (Liste + Audit), `/api/admin/watches` (cursor-paginierte Diagnose-Liste mit `limit`, `next_cursor`, `has_more`; im API-Tab zusätzlich als gefilterte Publisher-Watch-Seitenliste), `/api/admin/watches/{id}/run` (fällig stellen + Scheduler sofort wecken), `/api/admin/watches/test-email` (SMTP-Test an die verifizierte Admin-Adresse), read-only SEO-Übersicht `GET /api/admin/seo`, sanitisierten Live-Check `POST /api/admin/seo/check`, manueller Search-Console-Lauf `POST /api/admin/seo/collect` sowie speicherbare read-only Judgements per `POST /api/admin/seo/pages/{page_id}/recommendation` und optional `.../content-judge`, `/api/admin/benchmark/runs` (Liste) + `/api/admin/benchmark/runs/{run_id}` (Detail, liest Firestore-publizierte kompakte Benchmark-Reports mit lokalem Disk-Fallback über `benchmark/report_reader.py`). Alle hinter `is_user_admin`. |
 
 Weekly-SEO-Admin-Erweiterung: `GET /api/admin/seo/review`, `PUT
 /api/admin/seo/review/config` und `POST /api/admin/seo/review/run` liefern bzw.
@@ -386,9 +387,11 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   damit Module wie „Run again" den Preis eines Klicks benennen können, ohne
   eine zweite Rechnung aufzumachen.
   Seit 2026-07-27 trägt der Panel-Kopf auch den **Plan**: `#quotaPlanLabel`
-  („Free") bzw. das goldene `#proBadge` — das Badge sass vorher neben „New
+  („Free") bzw. `#proBadge` — das Badge sass vorher neben „New
   comparison" und konkurrierte dort mit der einzigen Aktion der Kopfzeile.
-  Pro zeigt nur das Badge (`planLabel.hidden`), nie „Pro Pro". Die **Wortmarke**
+  Plus und Pro zeigen nur das Badge (`planLabel.hidden`), nie „Pro Pro"; das
+  Badge trägt den Namen der Stufe und ist bei Plus neutral statt golden
+  (`.pro-badge.is-plus`) — Gold gehört den teuren Modellen, die Plus nicht hat. Die **Wortmarke**
   ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
   `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
@@ -497,8 +500,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   der gezielte Korrekturpfad.
   Drei Grenzen sind Vertrag, nicht Sparmaßnahme:
   1. **Deckel** 250 Zeichen je Kurzfeld; `notes` ist serverseitig aus
-     `app_config/models.memory_edit` auf 12.000 (Free) bzw. 24.000 (Pro)
-     begrenzt. Der Text
+     `app_config/models.memory_edit` je Stufe begrenzt (12.000 Free,
+     18.000 Plus, 24.000 Pro; Plus wird beim Speichern zwischen Free und Pro
+     eingeklemmt). Der Text
      geht allen sechs Modellen **identisch** voran und ist damit ein gemeinsamer
      Bias: je mehr davon, desto ähnlicher die Antworten und desto höher der
      Agreement-Score, ohne dass die Modelle sich einiger wären. Dieselbe
@@ -1756,7 +1760,10 @@ dem günstigen Judge-Modell seines Providers
 (`DIFFERENCES_JUDGE_MODEL_BY_PROVIDER`), Structured Output
 `{decision: maintain|revise, position, reason}`. Aggregiertes Outcome:
 `resolved` (≥1 revidiert, ≥1 bleibt) / `standoff` (alle bleiben) /
-`mutual_revision` (alle revidieren) / `error`. Verifizierter Login nötig,
+`mutual_revision` (alle revidieren) / `error`. Verifizierter Login **und
+mindestens Plus** nötig (`entitlements.resolve`; Fehlercode `plus_required`) —
+die Runde läuft auf dem günstigen Standard-Judge, nicht auf Frontier-Modellen,
+deshalb ist sie keine Pro-Grenze,
 kostet 1 eigenen persistenten Run (außer `useOwnKeys`), Eingaben werden wie bei
 `/consensus` serverseitig gekappt (`normalize_resolve_positions`), Ergebnis
 wird **nicht** persistiert. Frontend: „Resolve with the models"-Button an
@@ -1800,7 +1807,7 @@ Antwortboxen (`body.is-hero.agent-mode-enabled .response-section {display:none}`
 in `shell.css`); eine explizite Nutzerentscheidung (`setAgentMode(…, {persist:
 true})`) ueberschreibt den Default dauerhaft.
 
-### Attachments (Pro)
+### Attachments (ab Plus)
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
 validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
 (TXT umfasst auch die UI-Endungen MD und CSV). Word- und Textdateien werden
@@ -1812,7 +1819,8 @@ Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der
 Dateiauswahldialog die vollständige PDF/DOCX/TXT/MD/CSV/PNG/JPEG/WebP-Whitelist;
-alle Wege nutzen dasselbe Pro-Gate sowie dieselben Anzahl-/Größenlimits.
+alle Wege nutzen dasselbe Tier-Gate (`entitlements.attachments`, also Plus und
+Pro) sowie dieselben Anzahl-/Größenlimits.
 Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
 sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
 Base64 wird anhand der kodierten Länge **vor** dem Dekodieren begrenzt. DOCX
@@ -1863,16 +1871,52 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Chat-Frage und System-Prompt besitzen getrennte Zeichen- und UTF-8-Bytecaps;
   Legacy-Follow-up-Kontext wird bei Überschreitung abgewiesen statt still
   gekappt. Dadurch fallen auch extrem lange Ein-Wort-Strings vor Providerarbeit.
-- Pro-Status: `is_user_pro` liest Firestore `users/{uid}.tier ∈ {premium, pro}`.
-  Admin: `users/{uid}.role == admin`.
-- **Tier-Flags sind gecacht**: `is_user_pro`/`is_user_admin`
+- **Drei Stufen** (`app/core/entitlements.py`): `users/{uid}.tier` ist
+  `free`, `plus` oder `pro`; der historische Tag `premium` bedeutet weiterhin
+  Pro, alles Unbekannte fällt auf Free. Admin bleibt `users/{uid}.role == admin`.
+
+  | | Frontier-Modelle | Deep Think | Anhänge | Resolve | Run-Kontingent |
+  |---|---|---|---|---|---|
+  | Free | – | – | – | – | klein |
+  | Plus | – | – | ✓ | ✓ | **größtes** |
+  | Pro | ✓ | ✓ | ✓ | ✓ | mittel |
+
+  Plus existiert für Tester, die Funktionen ausprobieren sollen, **ohne einen
+  Frontier-Lauf auslösen zu können**. Weil Plus dieselbe günstige Modellauswahl
+  fährt wie Free, darf sein Tageskontingent größer sein als das von Pro.
+- **Zwei Flags, eine Regel:** `is_user_pro(uid)` behält überall seine alte
+  Bedeutung „darf teure Modelle und Deep Think" und ist für Plus **False**;
+  `is_user_plus(uid)`/`entitlements.attachments|resolve` decken die
+  Komfortfunktionen ab. Jeder Pfad, der noch nicht tier-bewusst ist, behandelt
+  einen Plus-Account damit automatisch wie Free — eine Lücke kostet höchstens
+  Komfort, nie Geld. Aus demselben Grund fällt `_tier_limit` in
+  `config.py` bei einem fehlenden Plus-Schlüssel auf den Free-Wert zurück, nie
+  auf den Pro-Wert.
+- `get_user_tier(uid)` ist die einzige Quelle für die Stufe; die Limit-Getter in
+  `config.py` nehmen jetzt `tier` statt `is_pro` (ein Bool bleibt erlaubt:
+  `True` → Pro, `False` → Free). `/user_status`, `/usage`, `/prepare`, `/ask_*`,
+  `/consensus` und `/resolve` liefern zusätzlich zu `is_pro_user` das Feld
+  `tier`; das Frontend hält es in `window.userTier` plus den abgeleiteten
+  `window.isUserPro` / `window.isUserPlus` (`app-state.js`,
+  `App.normalizeTier`).
+- **Tier-Flags sind gecacht**: `get_user_tier`/`is_user_pro`/`is_user_admin`
   teilen sich einen TTL-Cache (60s, `security.py::_tier_cache`) über das
   `users/{uid}`-Dokument — ein Firestore-Read statt zwei pro Aufrufstelle.
   Firestore-Ausfälle werden als `TierStatusUnavailable` statt als Free-/Nicht-
   Admin-Status behandelt und von User-/Chat-/Admin-Grenzen als 503 abgebildet.
-  Fehler werden nicht gecacht; `/delete_account` invalidiert via
-  `invalidate_tier_cache(uid)`. Manuell vergebene Pro-Tags greifen dadurch
-  erst nach ≤60s. Ein separates Early-Tier existiert nicht mehr.
+  Fehler werden nicht gecacht; `/delete_account` und jede Admin-Tier-Änderung
+  invalidieren via `invalidate_tier_cache(uid)`. Ein separates Early-Tier
+  existiert nicht mehr.
+- **Stufe setzen (Admin):** `app/services/account_tier.py` ist die einzige
+  Schreibstelle für `users/{uid}.tier`. `GET /api/admin/account-tier?identifier=`
+  schlägt per UID **oder** E-Mail nach, `PUT /api/admin/account-tier`
+  (`{identifier, tier, note}`) setzt die Stufe, `GET /api/admin/account-tiers`
+  listet alle Konten oberhalb von Free plus die letzten Änderungen. Jede
+  Änderung schreibt `tier_updated_at`/`tier_updated_by`/`tier_note` in das
+  Profil (merge, andere Felder bleiben) und ein unveränderliches Dokument in
+  `account_tier_audit`; anschließend wird der Tier-Cache verworfen, damit die
+  Stufe sofort statt erst nach ≤60 s greift. Ein Konto in Löschung bekommt
+  keine neue Stufe (`persistence_guard`). UI: Admin-Tab **Accounts**.
 - **Usage ist persistent und run-basiert:**
   `app/services/usage_repository.py` definiert `UsageRepository` und die
   Firestore-Implementierung `FirestoreUsageRepository`. Ein kompletter
@@ -1895,8 +1939,12 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
   Der Free-Default ist seit 2026-08-04 **12** reguläre Runs pro UTC-Tag
   (`free_consensus_run_limit`, vorher 3: drei Runs erlaubten einen Test, keine
   Gewohnheit — und mit freigeschalteten Follow-ups wäre drei sofort wieder die
-  alte Sackgasse); reguläre und Deep-Think-Run-Limits je Tier sind
-  als vier eigene `app_config/models.limits`-Felder konfigurierbar. `/prepare`
+  alte Sackgasse); Plus liegt per Default bei **750**
+  (`plus_consensus_run_limit`). Alle Run-, Wort-, Token-, Memory- und
+  Watch-Limits je Stufe sind eigene `app_config/models.limits`-Felder
+  (`plus_*` bzw. `watch_plus_*`/`memory_plus_*`) und im Admin-Tab **Limits**
+  bedienbar. Deep Think hat bewusst **kein** Plus-Feld: die Capability-Prüfung
+  blockiert Plus ohnehin, ein Kontingent wäre ein toter Schalter. `/prepare`
   reserviert und konsumiert den Slot sofort; Provider-Fan-out und `/consensus`
   bestätigen denselben Consume danach nur noch idempotent und claimen dann ihre
   Operation. `/resolve` erzeugt einen eigenen Run und Claim. `/usage` und
@@ -1912,9 +1960,12 @@ wird nur chunkweise bis zum Budget expandiert und DTD/Entities werden abgewiesen
 - Die Antwortmodell-Picker wenden bei einem Tier-Wechsel die Free-/Pro-
   Defaults erneut an, solange der Nutzer für den jeweiligen Provider keine
   explizite Auswahl (`pref_select_*`) gespeichert hat. Explizite Picker-Werte
-  haben Vorrang. Normale Watch-Runs lesen den aktuellen Pro-Status des Owners
+  haben Vorrang. Normale Watch-Runs lesen die aktuelle Stufe des Owners
   bei jedem Lauf neu und wählen danach `WATCH_MODELS_BY_TIER` (ein Upgrade wirkt
   deshalb auch auf bereits bestehende Watches nach Ablauf des Tier-Cache).
+  **Plus fährt dabei die Free-Watch-Modelle**: mehr Watch-Slots
+  (`watch_plus_active_limit`) und optional das tägliche Intervall
+  (`watch_plus_daily_interval_allowed`), aber unveränderte Kosten pro Lauf.
   Publisher-Watches tragen dagegen intern `model_tier=free`; der Scheduler
   behandelt sie unabhängig vom Owner-Tier dauerhaft wie einen Free-Watch.
   Als interner Content-Betrieb zählen sie nicht gegen das aktive persönliche
@@ -2183,8 +2234,9 @@ main.py                      App-Entry, Middleware, Router-Registrierung, lifesp
 app/core/
   background_tasks.py        Supervisor, Restart-Backoff, Alerts und Task-Health
   config.py                  Modell-Kataloge, Tier-Limits, Firestore-Sync (load_models_from_db)
+  entitlements.py            Die drei Kontostufen free/plus/pro: normalize_tier + Entitlements
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
-  security.py                Firebase-Init, Token/Tier/Admin-Checks, CSP-Middleware
+  security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   rate_limit.py              slowapi-Limiter (erste, von Render gesetzte Client-IP in XFF) + prozesslokale UID-Budgets
   observability.py           PII-freie Correlation-IDs, strukturierte Logs + Prozessmetriken
@@ -2266,7 +2318,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   sie vorher aus `users/{uid}` herauslösen (z. B. Firebase Custom Claims).
 
 **Firestore-Collections** (verifiziert über Code):
-- `users/{uid}` — `tier`, `role`; Subcollections `bookmarks`, `counters`, `chats`,
+- `users/{uid}` — `tier` (`free`/`plus`/`pro`, historisch auch `premium` = Pro)
+  plus `tier_updated_at`/`tier_updated_by`/`tier_note`, `role`; Subcollections `bookmarks`, `counters`, `chats`,
   `chat_state`, `watch_state` und `watch_uniques` sowie
   die produktive run-basierte Usage:
   `bookmarks` speichert pro laufender Unterhaltung genau ein Dokument unter der
@@ -2426,17 +2479,23 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
   API-Runs/-Keys und Waitlist — lesen diesen Tombstone innerhalb derselben
   Firestore-Transaktion wie ihren Write. Cleanup-interne Deletes besitzen dafür
   einen benannten Bypass; normale Requests nicht.
+- `account_tier_audit/{id}` — eine unveränderliche Zeile je Stufenwechsel
+  (`uid`, `from_tier`, `to_tier`, `changed_by`, `note`, `changed_at`), von
+  `app/services/account_tier.py` geschrieben und im Admin-Tab **Accounts**
+  gelesen. Ein fehlgeschlagener Audit-Write lässt die bereits gesetzte Stufe
+  stehen und wird geloggt — der Adminvorgang darf daran nicht scheitern.
 - `api_consensus_runs/{run_id}` — UID-gebundener v1-API-Run mit serverseitig
   eingefrorenem Request/Modellplan, `idempotency_hash`, Status und Status-
-  Zeitstempeln, einstündigem Running-Lease sowie terminal `result` oder
-  sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
+  Zeitstempeln, einstündigem Running-Lease, der bei Annahme eingefrorenen Stufe
+  (`tier_at_acceptance`, mit `is_pro_at_acceptance` als Altfeld) sowie terminal
+  `result` oder sanitisiertem `error` und 30-Tage-`expires_at`. Erlaubte Hauptfolge:
   `accepted → reserved → running → succeeded|failed`.
 - `app_config/models` — von `load_models_from_db()` gelesen/erzeugt: erlaubte
   Modelle pro Provider, `premium`, `consensus`, `preset_models`, `deep_think_model`,
   `judge_models`, `judge_models_pro`, `judge_families`, `watch_models`,
   `watch_consensus_models`, `defaults`,
   `limits` sowie die sichere, einzeln normalisierte `memory_edit`-Konfiguration
-  (Kill-Switch, OpenAI-Modell, Free-/Pro-Zeichen- und Tageslimits, Minuten-/
+  (Kill-Switch, OpenAI-Modell, Zeichen- und Tageslimits je Stufe, Minuten-/
   Globallimit, Input-/Output- und Timeout-Caps).
   **Single Source of Truth für Limits/Modelle in Produktion** (überschreibt die
   `config.py`-Fallbacks beim Startup). Providerlisten und `premium` sind dabei
@@ -2814,8 +2873,8 @@ konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwende
   Judges + `deep_think_model`. Provider-
 Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
-Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / API / Shared Pages /
-Consensus Watch / SEO) bekommt via
+Das Admin-UI (Tabs: Models / Consensus & Deep Think / Limits / Accounts / API /
+Shared Pages / Consensus Watch / Topics / SEO) bekommt via
   `GET /api/admin/models` ein `meta`-Objekt (Alias-Auflösung, Labels und
   referenzierende Defaults/Presets/Watches/Judges). `meta.reasoning` ist eine
   read-only Projektion derselben zentralen Runtime-Policy: Der Models-Tab zeigt

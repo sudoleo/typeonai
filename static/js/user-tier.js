@@ -1,18 +1,40 @@
 // =====================================================================
 // user-tier.js
 // Tier-/Pro-UI: Badge, "Why limits"-Link, Deep-Search-Sperre, Premium-Modell-
-// Optionen je nach Pro/Free/ausgeloggt. In eigene IIFE gekapselt.
+// Optionen je nach Pro/Plus/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
+// window.App.normalizeTier kommt aus app-state.js (head-Bundle).
 // Abhaengigkeiten: window.setCurrentUsageLimits (optional waehrend Init), window.restoreModelSelections,
 // window.syncCustomModelPickers, window.App.updateDeepThinkText,
 // window.App.applyTierDefaultModels, window.isUserPro (State).
+//
+// Drei Stufen, zwei Flags (Serverseite: app/core/entitlements.py):
+//   Free  - Basis-Modelle, kleines Kontingent.
+//   Plus  - Modellauswahl wie Free, KEIN Deep Think, aber Anhaenge, Resolve
+//           und das groesste Kontingent.
+//   Pro   - alles.
+// isUserPro bleibt das Modell-/Deep-Think-Flag und ist fuer Plus false;
+// isUserPlus ist "Plus oder Pro". Wer nur isUserPro liest, sperrt Plus wie
+// Free -- das ist die sichere Richtung.
 // =====================================================================
 
 (function () {
-  function updateUserTierUI(isPro, isLoggedIn = false) {
+  const TIER_FREE = "free";
+  const TIER_PLUS = "plus";
+  const TIER_PRO = "pro";
+
+  const normalizeTier = window.App.normalizeTier;
+
+  function updateUserTierUI(tierValue, isLoggedIn = false) {
+    const tier = normalizeTier(tierValue);
+    const isPro = tier === TIER_PRO;
+    const isPlus = tier === TIER_PLUS || isPro;
+
     // 1. Globalen Status aktualisieren.
+    window.App.state.set("userTier", tier, "userTier");
     window.App.state.set("isUserPro", isPro, "userTier");
+    window.App.state.set("isUserPlus", isPlus, "userTier");
 
     // Follow-up-Affordance neu rendern (tierunabhängig, aber der Composer
     // wird bei jedem Tier-Wechsel ohnehin neu aufgebaut).
@@ -30,7 +52,7 @@
       if (upgradeLink) upgradeLink.style.display = "none";
 
       // Optional: Standard-Limits (Free) oder ganz sperren
-      window.setCurrentUsageLimits?.(false);
+      window.setCurrentUsageLimits?.(TIER_FREE);
 
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
@@ -42,16 +64,23 @@
       return; // Funktion hier beenden!
     }
 
-    // === CASE 2: EINGELOGGT (Pro oder Free) ===
+    // === CASE 2: EINGELOGGT (Pro, Plus oder Free) ===
+    // Das Badge traegt den Namen der Stufe; nur Free hat keines und sieht
+    // dafuer den "Why limits"-Link.
+    if (badge) {
+      badge.style.display = tier === TIER_FREE ? "none" : "inline-block";
+      if (tier !== TIER_FREE) badge.textContent = isPro ? "Pro" : "Plus";
+      badge.classList.toggle("is-plus", tier === TIER_PLUS);
+    }
+    // Der Link ist ein Flex-Container (Glyph + Text), nicht inline-block.
+    if (upgradeLink) upgradeLink.style.display = tier === TIER_FREE ? "inline-flex" : "none";
+
+    // Limits: die Stufe selbst, nicht mehr nur "Pro ja/nein".
+    window.setCurrentUsageLimits?.(tier);
+
     if (isPro) {
-      // --- PRO USER ---
-      if (badge) badge.style.display = "inline-block";
-      if (upgradeLink) upgradeLink.style.display = "none";
       const proModal = document.getElementById("proFeatureModal");
       if (proModal) proModal.style.display = "none";
-
-      // Limits
-      window.setCurrentUsageLimits?.(true);
 
       // Dropdowns entsperren
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(true);
@@ -65,15 +94,9 @@
       }
 
     } else {
-      // --- FREE USER (EINGELOGGT) ---
-      if (badge) badge.style.display = "none";
-      // Der Link ist ein Flex-Container (Glyph + Text), nicht inline-block.
-      if (upgradeLink) upgradeLink.style.display = "inline-flex"; // "Why limits" nur fuer Free
-
-      // Limits
-      window.setCurrentUsageLimits?.(false);
-
-      // Pro-Modelle sperren
+      // --- FREE ODER PLUS (EINGELOGGT) ---
+      // Beide fahren dieselbe Modellauswahl und haben kein Deep Think; genau
+      // das macht Plus fuer Tester bezahlbar.
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
 
       // Deep Search ausschalten & sperren
@@ -136,7 +159,7 @@
       window.syncCustomModelPickers();
     }
 
-    // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist, 
+    // FIX: Nach dem Restore prüfen, ob Deep Think aktiv ist,
     // und die Texte wieder auf die Reasoning-Namen setzen.
     if (typeof window.App.updateDeepThinkText === "function") {
       window.App.updateDeepThinkText();

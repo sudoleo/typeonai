@@ -627,7 +627,7 @@ def test_provider_pipeline_metrics_classify_normalized_results_without_secrets(
             question="private question",
             provider_models={"openai": "model"},
             keys={"OpenRouter": "secret-key"},
-            is_pro=False,
+            tier="free",
             deep_think=False,
             provider_call=lambda *args: raw_result,
             log_context="Consensus_Watch",

@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import app.core.config as cfg
 from app.core.background_tasks import task_succeeded
+from app.core.entitlements import TIER_FREE, TIER_PRO, normalize_tier
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
 from app.services.api_account_cleanup import (
@@ -109,11 +110,20 @@ def validate_server_credentials(model_plan: dict) -> None:
         raise RuntimeError("Missing server credentials for: " + ", ".join(missing))
 
 
+def run_tier(run: dict):
+    """Kontostufe, wie sie bei der Annahme des Runs galt. Aeltere Dokumente
+    kennen nur is_pro_at_acceptance - der Fallback liest genau die."""
+    stored = run.get("tier_at_acceptance")
+    if stored:
+        return normalize_tier(stored)
+    return TIER_PRO if run.get("is_pro_at_acceptance") else TIER_FREE
+
+
 def usage_limits_for_run(run: dict) -> UsageLimits:
-    is_pro = bool(run.get("is_pro_at_acceptance"))
+    tier = run_tier(run)
     return UsageLimits(
-        total=cfg.get_consensus_run_limit(is_pro),
-        deep_think=cfg.get_deep_think_run_limit(is_pro),
+        total=cfg.get_consensus_run_limit(tier),
+        deep_think=cfg.get_deep_think_run_limit(tier),
     )
 
 
@@ -337,7 +347,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
     request = run.get("request") or {}
     question = str(request.get("question") or "").strip()
     deep_think = bool(request.get("deep_think"))
-    is_pro = bool(run.get("is_pro_at_acceptance"))
+    tier = run_tier(run)
     plan = run.get("model_plan") or {}
     providers = dict(plan.get("providers") or {})
     # Publisher runs use the same six preset families as every other API run. The
@@ -353,7 +363,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
         provider_models=providers,
         consensus_model=consensus_model,
         keys=keys,
-        is_pro=is_pro,
+        tier=tier,
         deep_think=deep_think,
         provider_order=PROVIDER_ORDER,
         provider_call=_provider_answer,
@@ -371,11 +381,11 @@ def _provider_answer(
     model: str,
     question: str,
     keys: dict,
-    is_pro: bool,
+    tier,
     deep_think: bool,
 ):
     return provider_transport.query_provider(
-        provider, model, question, keys, is_pro, deep_think
+        provider, model, question, keys, tier, deep_think
     )
 
 

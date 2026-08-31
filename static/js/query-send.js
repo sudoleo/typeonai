@@ -149,6 +149,11 @@
     if (normalized.is_pro_user !== undefined) {
       context.usage.isProUser = normalized.is_pro_user === true;
     }
+    // Die volle Stufe, damit ein Plus-Lauf die Ansicht nicht auf Free
+    // zurueckstellt (is_pro_user ist fuer Plus false).
+    if (normalized.tier !== undefined) {
+      context.usage.tier = window.App.normalizeTier?.(normalized.tier) || "free";
+    }
     // Usage is account-level rather than view-level. The auth fence prevents
     // a late response from a previous login from repainting the next account.
     if (authIsCurrent(context)) {
@@ -166,9 +171,10 @@
       window.App.renderUsageDisplay?.(usageView);
       const noSavedViewSelected = !registry.visible()
         && !registry.getSelectedConversationBasis?.();
-      if (normalized.is_pro_user !== undefined
+      if ((normalized.tier !== undefined || normalized.is_pro_user !== undefined)
           && (registry.isVisible(context.runId) || noSavedViewSelected)) {
-        window.updateUserTierUI?.(normalized.is_pro_user === true, true);
+        window.updateUserTierUI?.(
+          normalized.tier ?? (normalized.is_pro_user === true), true);
       }
     }
   }
@@ -569,7 +575,7 @@
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const attachments = window.getAttachmentsPayload?.() || [];
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
-    if (attachments.length && !window.isUserPro) {
+    if (attachments.length && !window.isUserPlus) {
       if (!window.App.showProFeatureModal?.("File uploads")) {
         window.App.showPopup?.("File uploads are off here. Remove the attachments to continue.");
       }

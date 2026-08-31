@@ -138,7 +138,8 @@ describe("attachments of a saved question", () => {
 
   it("gives a .csv the type the server also knows", async () => {
     const { window, document } = appWindow();
-    window.isUserPro = true;
+    // Anhaenge haengen seit der Plus-Stufe an isUserPlus, nicht an isUserPro.
+    window.isUserPlus = true;
 
     const input = document.getElementById("attachFileInput");
     // Was der Browser meldet, ist je nach System verschieden. Kaeme "text/csv"

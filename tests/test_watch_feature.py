@@ -172,7 +172,7 @@ class WatchCrudTests(unittest.TestCase):
         cfg.apply_limits(self.old_limits)
 
     def test_free_create_list_update_pause_delete(self):
-        created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
+        created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db)
         self.assertEqual(created["status"], "active")
         self.assertEqual(created["email_mode"], "changes_only")
         self.assertTrue(created["email_enabled"])
@@ -197,7 +197,7 @@ class WatchCrudTests(unittest.TestCase):
                 "u1",
                 share_id=self.share_id,
                 interval="weekly",
-                is_pro=False,
+                tier="free",
                 db=self.db,
             )
         self.assertEqual(self.db.stores[watch_service.WATCHES_COLLECTION], {})
@@ -207,7 +207,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1",
             share_id=self.share_id,
             interval="weekly",
-            is_pro=False,
+            tier="free",
             db=self.db,
         )
         self.db.stores[persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION]["u1"] = {
@@ -233,7 +233,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1",
             share_id=self.share_id,
             interval="weekly",
-            is_pro=True,
+            tier="pro",
             model_tier="free",
             db=self.db,
         )
@@ -266,7 +266,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1",
             share_id=self.share_id,
             interval="weekly",
-            is_pro=True,
+            tier="pro",
             model_tier="free",
             db=self.db,
         )
@@ -295,7 +295,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1",
             share_id=self.share_id,
             interval="weekly",
-            is_pro=True,
+            tier="pro",
             model_tier="free",
             db=self.db,
         )
@@ -319,11 +319,11 @@ class WatchCrudTests(unittest.TestCase):
     def test_watch_requires_one_notification_channel(self):
         with self.assertRaisesRegex(WatchError, "e-mail or Telegram"):
             watch_service.create_watch(
-                "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+                "u1", share_id=self.share_id, interval="weekly", tier="free",
                 email_enabled=False, telegram_enabled=False, db=self.db,
             )
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+            "u1", share_id=self.share_id, interval="weekly", tier="free",
             email_enabled=False, telegram_enabled=True, db=self.db,
         )
         self.assertFalse(created["email_enabled"])
@@ -336,7 +336,7 @@ class WatchCrudTests(unittest.TestCase):
     def test_every_run_email_mode_can_be_created_and_changed(self):
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly", email_mode="every_run",
-            is_pro=False, db=self.db,
+            tier="free", db=self.db,
         )
         self.assertEqual(created["email_mode"], "every_run")
         updated = watch_service.update_watch(
@@ -352,12 +352,12 @@ class WatchCrudTests(unittest.TestCase):
         with self.assertRaisesRegex(WatchError, "condition"):
             watch_service.create_watch(
                 "u1", share_id=self.share_id, interval="weekly",
-                email_mode="condition", is_pro=False, db=self.db,
+                email_mode="condition", tier="free", db=self.db,
             )
         created = watch_service.create_watch(
             "u1", share_id=self.share_id, interval="weekly",
             email_mode="condition", condition="An official date is announced",
-            is_pro=False, db=self.db,
+            tier="free", db=self.db,
         )
         self.assertEqual(created["condition"], "An official date is announced")
         self.db.stores["watches"][created["id"]]["last_condition_status"] = "met"
@@ -367,37 +367,54 @@ class WatchCrudTests(unittest.TestCase):
         )
         self.assertIsNone(updated["last_condition_status"])
 
-    def test_free_daily_requires_pro(self):
-        with self.assertRaisesRegex(WatchError, "Daily watches require Pro"):
-            watch_service.create_watch("u1", share_id=self.share_id, interval="daily", is_pro=False, db=self.db)
-        created = watch_service.create_watch("u1", share_id=self.share_id, interval="daily", is_pro=True, db=self.db)
+    def test_free_daily_requires_a_higher_tier(self):
+        with self.assertRaisesRegex(WatchError, "Daily watches require"):
+            watch_service.create_watch("u1", share_id=self.share_id, interval="daily", tier="free", db=self.db)
+        created = watch_service.create_watch("u1", share_id=self.share_id, interval="daily", tier="pro", db=self.db)
         self.assertEqual(created["interval"], "daily")
+
+    def test_plus_may_watch_daily_but_keeps_a_smaller_slot_count(self):
+        """Plus liegt bei Watches zwischen Free und Pro: taegliches Intervall
+        ja, aber ein eigenes, kleineres Kontingent."""
+        created = watch_service.create_watch(
+            "u1", share_id=self.share_id, interval="daily", tier="plus", db=self.db,
+        )
+        self.assertEqual(created["interval"], "daily")
+        self.assertLessEqual(cfg.get_watch_active_limit("plus"), cfg.get_watch_active_limit("pro"))
+        self.assertGreaterEqual(cfg.get_watch_active_limit("plus"), cfg.get_watch_active_limit("free"))
+
+    def test_plus_daily_can_be_switched_off_by_the_admin(self):
+        cfg.apply_limits({**self.old_limits, "watch_plus_daily_interval_allowed": 0})
+        with self.assertRaisesRegex(WatchError, "Daily watches require Pro"):
+            watch_service.create_watch(
+                "u1", share_id=self.share_id, interval="daily", tier="plus", db=self.db,
+            )
 
     def test_daily_gate_follows_admin_limit(self):
         cfg.apply_limits({**self.old_limits, "watch_daily_interval_requires_pro": 0})
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="daily", is_pro=False, db=self.db,
+            "u1", share_id=self.share_id, interval="daily", tier="free", db=self.db,
         )
         self.assertEqual(created["interval"], "daily")
 
     def test_free_and_pro_active_limits(self):
         cfg.apply_limits({**self.old_limits, "watch_free_active_limit": 1, "watch_pro_active_limit": 2})
-        first = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
+        first = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db)
         second_share_id = "B" * 16
         self.db.stores["shares"][second_share_id] = share(slug="two")
         with self.assertRaisesRegex(WatchError, "limit"):
-            watch_service.create_watch("u1", share_id=second_share_id, interval="weekly", is_pro=False, db=self.db)
-        second = watch_service.create_watch("u1", share_id=second_share_id, interval="daily", is_pro=True, db=self.db)
+            watch_service.create_watch("u1", share_id=second_share_id, interval="weekly", tier="free", db=self.db)
+        second = watch_service.create_watch("u1", share_id=second_share_id, interval="daily", tier="pro", db=self.db)
         self.assertNotEqual(first["id"], second["id"])
 
     def test_pause_delete_and_resume_keep_owner_counter_consistent(self):
         second_share_id = "B" * 16
         self.db.stores["shares"][second_share_id] = share(slug="two")
         first = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db
+            "u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db
         )
         second = watch_service.create_watch(
-            "u1", share_id=second_share_id, interval="weekly", is_pro=True, db=self.db
+            "u1", share_id=second_share_id, interval="weekly", tier="pro", db=self.db
         )
         state_store = self.db.stores["users/u1/watch_state"]
         self.assertEqual(state_store["quota"]["active_count"], 2)
@@ -417,19 +434,19 @@ class WatchCrudTests(unittest.TestCase):
         foreign_id = "F" * 16
         self.db.stores["shares"][foreign_id] = share(owner="u2")
         with self.assertRaisesRegex(WatchError, "own shares"):
-            watch_service.create_watch("u1", share_id=foreign_id, interval="weekly", is_pro=False, db=self.db)
-        watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
+            watch_service.create_watch("u1", share_id=foreign_id, interval="weekly", tier="free", db=self.db)
+        watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db)
         with self.assertRaisesRegex(WatchError, "already watched"):
-            watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=True, db=self.db)
+            watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="pro", db=self.db)
 
     def test_publisher_watch_is_free_pinned_and_idempotent(self):
         self.db.stores["shares"][self.share_id]["publication_source"] = "scheduled_publisher"
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            "u1", share_id=self.share_id, interval="weekly", tier="pro",
             model_tier="free", return_existing=True, db=self.db,
         )
         repeated = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            "u1", share_id=self.share_id, interval="weekly", tier="pro",
             model_tier="free", return_existing=True, db=self.db,
         )
 
@@ -457,7 +474,7 @@ class WatchCrudTests(unittest.TestCase):
             "u1",
             share_id=self.share_id,
             interval="weekly",
-            is_pro=True,
+            tier="pro",
             model_tier="free",
             bypass_active_limit=True,
             db=self.db,
@@ -480,7 +497,7 @@ class WatchCrudTests(unittest.TestCase):
             "request": {"publisher_mode": True}
         }
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=True,
+            "u1", share_id=self.share_id, interval="weekly", tier="pro",
             model_tier="free", return_existing=True, db=self.db,
         )
         self.db.stores["watches"][created["id"]].pop("publication_source", None)
@@ -499,7 +516,7 @@ class WatchCrudTests(unittest.TestCase):
 
     def test_admin_can_list_and_queue_active_watch(self):
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
+            "u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db
         )
         queued_at = datetime(2026, 7, 12, 12, 0, tzinfo=timezone.utc)
         listed = watch_service.list_watches_for_admin(db=self.db)
@@ -512,7 +529,7 @@ class WatchCrudTests(unittest.TestCase):
 
     def test_admin_queue_rejects_paused_or_claimed_watch(self):
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db
+            "u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db
         )
         watch_id = created["id"]
         now = datetime(2026, 7, 12, 12, 0, tzinfo=timezone.utc)
@@ -526,7 +543,7 @@ class WatchCrudTests(unittest.TestCase):
             watch_service.queue_watch_run(watch_id, now=now, db=self.db)
 
     def test_update_rejects_unknown_fields_and_owner(self):
-        created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db)
+        created = watch_service.create_watch("u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db)
         with self.assertRaises(WatchError):
             watch_service.update_watch("u1", created["id"], {"owner_uid": "u2"}, False, db=self.db)
         with self.assertRaisesRegex(WatchError, "own watches"):
@@ -538,7 +555,7 @@ class WatchCrudTests(unittest.TestCase):
             return_value={"share_id": self.share_id, "slug": "question", "created": True},
         ) as create_share:
             created = watch_service.create_watch(
-                "u1", result_id="R" * 16, interval="weekly", is_pro=False, db=self.db
+                "u1", result_id="R" * 16, interval="weekly", tier="free", db=self.db
             )
         create_share.assert_called_once_with("u1", "R" * 16, db=self.db, visibility="public")
         self.assertEqual(created["share_id"], self.share_id)
@@ -552,7 +569,7 @@ class WatchCrudTests(unittest.TestCase):
             run_weekday="wednesday",
             run_time="09:00",
             timezone_name="Europe/Berlin",
-            is_pro=False,
+            tier="free",
             db=self.db,
         )
         seeded_share = self.db.stores["shares"][created["share_id"]]
@@ -568,7 +585,7 @@ class WatchCrudTests(unittest.TestCase):
         kwargs = {
             "question": "Has the EU AI Act guidance changed?",
             "interval": "weekly",
-            "is_pro": True,
+            "tier": "pro",
             "db": self.db,
         }
         watch_service.create_watch("u1", **kwargs)
@@ -578,18 +595,18 @@ class WatchCrudTests(unittest.TestCase):
     def test_query_first_watch_requires_a_complete_text_question(self):
         with self.assertRaisesRegex(WatchError, "complete question"):
             watch_service.create_watch(
-                "u1", question="Why?", interval="weekly", is_pro=False, db=self.db,
+                "u1", question="Why?", interval="weekly", tier="free", db=self.db,
             )
         with self.assertRaisesRegex(WatchError, "must be text"):
             watch_service.create_watch(
                 "u1", question={"prompt": "invalid"}, interval="weekly",
-                is_pro=False, db=self.db,
+                tier="free", db=self.db,
             )
 
     def test_deleting_query_first_watch_revokes_its_empty_page(self):
         created = watch_service.create_watch(
             "u1", question="Has the guidance changed?", interval="weekly",
-            is_pro=False, db=self.db,
+            tier="free", db=self.db,
         )
         with patch.object(watch_service.share_snapshots, "invalidate_share_cache"):
             watch_service.delete_watch("u1", created["id"], db=self.db)
@@ -602,7 +619,7 @@ class WatchCrudTests(unittest.TestCase):
         self.db.stores["shares"][private_id] = {**share(slug="private"), "visibility": "private"}
         created = watch_service.create_watch(
             "u1", share_id=private_id, interval="weekly", visibility="private",
-            is_pro=False, db=self.db,
+            tier="free", db=self.db,
         )
         self.assertEqual(created["visibility"], "private")
 
@@ -610,7 +627,7 @@ class WatchCrudTests(unittest.TestCase):
         now = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)
         with patch.object(watch_service, "utcnow", return_value=now):
             created = watch_service.create_watch(
-                "u1", share_id=self.share_id, interval="daily", is_pro=True,
+                "u1", share_id=self.share_id, interval="daily", tier="pro",
                 run_time="09:00", timezone_name="Europe/Berlin", db=self.db,
             )
         self.assertEqual(created["run_time"], "09:00")
@@ -625,7 +642,7 @@ class WatchCrudTests(unittest.TestCase):
         now = datetime(2026, 3, 28, 10, 0, tzinfo=timezone.utc)
         with patch.object(watch_service, "utcnow", return_value=now):
             created = watch_service.create_watch(
-                "u1", share_id=self.share_id, interval="weekly", is_pro=False,
+                "u1", share_id=self.share_id, interval="weekly", tier="free",
                 run_weekday="wednesday", run_time="09:00",
                 timezone_name="Europe/Berlin", db=self.db,
             )
@@ -638,7 +655,7 @@ class WatchCrudTests(unittest.TestCase):
 
     def test_weekly_run_day_can_be_updated_and_rejects_invalid_values(self):
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db,
+            "u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db,
         )
         now = datetime(2026, 7, 13, 10, 0, tzinfo=timezone.utc)  # Monday
         with patch.object(watch_service, "utcnow", return_value=now):
@@ -667,7 +684,7 @@ class WatchCrudTests(unittest.TestCase):
 
     def test_run_time_update_reschedules_and_rejects_invalid_values(self):
         created = watch_service.create_watch(
-            "u1", share_id=self.share_id, interval="weekly", is_pro=False, db=self.db,
+            "u1", share_id=self.share_id, interval="weekly", tier="free", db=self.db,
         )
         updated = watch_service.update_watch(
             "u1", created["id"],
@@ -1200,7 +1217,7 @@ class SchedulerSafetyTests(unittest.TestCase):
                 patch.object(cfg, "get_watch_models", return_value=configured), \
                 patch.object(cfg, "get_watch_consensus_model", return_value="Gemini-Pro"), \
                 patch.object(watch_scheduler, "run_consensus_pipeline", side_effect=pipeline):
-            result = watch_scheduler.execute_watch("Question", "", is_pro=True)
+            result = watch_scheduler.execute_watch("Question", "", tier="pro")
 
         self.assertEqual(result["consensus_model"], "Gemini-Pro")
 
@@ -1553,7 +1570,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "is_user_pro", return_value=False),
+            patch.object(watch_scheduler.security, "get_user_tier", return_value="free"),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value={
                 "status": "active", "slug": "q", "question": "Q", "consensus_md": "Old",
             }),
@@ -1582,7 +1599,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "is_user_pro", return_value=True) as pro_check,
+            patch.object(watch_scheduler.security, "get_user_tier", return_value="pro") as pro_check,
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result),
@@ -1613,7 +1630,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "is_user_pro", return_value=False),
+            patch.object(watch_scheduler.security, "get_user_tier", return_value="free"),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result),
@@ -1643,7 +1660,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(dict(claimed), "claimed")),
-            patch.object(watch_scheduler.security, "is_user_pro", side_effect=[False, True]),
+            patch.object(watch_scheduler.security, "get_user_tier", side_effect=["free", "pro"]),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
@@ -1652,8 +1669,9 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             await watch_scheduler.run_watch_tick()
             await watch_scheduler.run_watch_tick()
 
-        self.assertFalse(execute.call_args_list[0].args[-1])
-        self.assertTrue(execute.call_args_list[1].args[-1])
+        # execute_watch bekommt jetzt die Stufe, nicht mehr ein Pro-Bool.
+        self.assertEqual(execute.call_args_list[0].args[-1], "free")
+        self.assertEqual(execute.call_args_list[1].args[-1], "pro")
 
     async def test_publisher_watch_stays_on_free_tier_for_pro_owner(self):
         claimed = {
@@ -1673,7 +1691,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             patch.object(watch_service, "release_worker_lease"),
             patch.object(watch_service, "list_due_watch_ids", return_value=["w1"]),
             patch.object(watch_service, "claim_watch", return_value=(claimed, "claimed")),
-            patch.object(watch_scheduler.security, "is_user_pro", return_value=True),
+            patch.object(watch_scheduler.security, "get_user_tier", return_value="pro"),
             patch.object(watch_scheduler.share_snapshots, "get_share", return_value=share_data),
             patch.object(watch_scheduler.share_snapshots, "list_watch_history", return_value=[]),
             patch.object(watch_scheduler, "execute_watch", return_value=result) as execute,
@@ -1681,7 +1699,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
         ):
             await watch_scheduler.run_watch_tick()
 
-        self.assertFalse(execute.call_args.args[-1])
+        self.assertEqual(execute.call_args.args[-1], "free")
         self.assertNotIn("excluded_providers", execute.call_args.kwargs)
 
 
@@ -2069,7 +2087,7 @@ class WatchHistorySerializationTests(unittest.TestCase):
         share_id = "A" * 16
         db.stores["shares"][share_id] = share()
         created = watch_service.create_watch(
-            "u1", share_id=share_id, interval="weekly", is_pro=False, db=db
+            "u1", share_id=share_id, interval="weekly", tier="free", db=db
         )
         points = [
             {"ts": datetime(2026, 7, 1, tzinfo=timezone.utc), "agreement_score": 40,
@@ -2091,7 +2109,7 @@ class WatchHistorySerializationTests(unittest.TestCase):
         db = FakeDb()
         share_id = "A" * 16
         db.stores["shares"][share_id] = share()
-        watch_service.create_watch("u1", share_id=share_id, interval="weekly", is_pro=False, db=db)
+        watch_service.create_watch("u1", share_id=share_id, interval="weekly", tier="free", db=db)
         # FakeDb has no subcollections: the real lookup raises and must degrade.
         items = watch_service.list_watches("u1", db=db, include_history=True)
         self.assertEqual(items[0]["history"], [])
@@ -2411,7 +2429,7 @@ class WatchRouteTests(unittest.TestCase):
         with (
             patch.object(watch_router, "extract_id_token", return_value="tok"),
             patch.object(watch_router, "verify_user_token", return_value="u1"),
-            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router, "get_user_tier", return_value="free"),
             patch.object(watch_router.watch_service, "create_watch", return_value=created) as create,
         ):
             response = self.client.post("/api/watch", json={
@@ -2427,7 +2445,7 @@ class WatchRouteTests(unittest.TestCase):
         with (
             patch.object(watch_router, "extract_id_token", return_value="tok"),
             patch.object(watch_router, "verify_user_token", return_value="u1"),
-            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router, "get_user_tier", return_value="free"),
             patch.object(watch_router.watch_service, "create_watch", return_value=created) as create,
         ):
             response = self.client.post("/api/watch", json={
@@ -2450,7 +2468,7 @@ class WatchRouteTests(unittest.TestCase):
         with (
             patch.object(watch_router, "extract_id_token", return_value="tok"),
             patch.object(watch_router, "verify_user_token", return_value="u1"),
-            patch.object(watch_router, "is_user_pro", return_value=False),
+            patch.object(watch_router, "get_user_tier", return_value="free"),
             patch.object(watch_router.watch_service, "list_watches", return_value=watches),
             patch.object(watch_router.cfg, "get_watch_active_limit", return_value=1),
         ):

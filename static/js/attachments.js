@@ -6,7 +6,7 @@
 // Exporte: window.pendingAttachments, window.renderAttachmentChips,
 // window.clearPendingAttachments, window.getAttachmentsPayload,
 // window.showBookmarkAttachments.
-// Call-time-Abhaengigkeiten: window.isUserPro, window.trackUmamiEvent,
+// Call-time-Abhaengigkeiten: window.isUserPlus, window.trackUmamiEvent,
 // DOM (#attachTrigger, #attachMenu, #attachFileInput, #attachmentBar, ...).
 // =====================================================================
 
@@ -266,7 +266,9 @@
     }
 
     uploadOption.addEventListener("click", function () {
-      if (!window.isUserPro) {
+      // Anhaenge sind ab Plus frei: sie kosten nur so viel, wie das
+      // antwortende Modell ohnehin kostet, und Plus faehrt die Free-Auswahl.
+      if (!window.isUserPlus) {
         showAttachmentProGate("picker");
         return;
       }
@@ -501,7 +503,7 @@
       const imagesOnly = !!(options && options.imagesOnly);
       if (!files.length) return;
 
-      if (!window.isUserPro) {
+      if (!window.isUserPlus) {
         showAttachmentProGate(source);
         return;
       }
