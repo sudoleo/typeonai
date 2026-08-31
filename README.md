@@ -11,31 +11,40 @@
 <table align="center">
   <tr>
     <td align="center" width="90">
-      <img src="static/icons/chatgpt.png" height="28" alt="OpenAI">
+      <img src="static/icons/chatgpt.png" height="28" alt="OpenAI"><br>
+      <sub>OpenAI</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/claude.png" height="28" alt="Anthropic">
+      <img src="static/icons/claude.png" height="28" alt="Anthropic"><br>
+      <sub>Anthropic</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/gemini.png" height="28" alt="Gemini">
+      <img src="static/icons/gemini.png" height="28" alt="Gemini"><br>
+      <sub>Gemini</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/mistral.png" height="28" alt="Mistral AI">
+      <img src="static/icons/mistral.png" height="28" alt="Mistral AI"><br>
+      <sub>Mistral</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/deepseek.png" height="28" alt="DeepSeek">
+      <img src="static/icons/deepseek.png" height="28" alt="DeepSeek"><br>
+      <sub>DeepSeek</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/grok.png" height="28" alt="xAI Grok">
+      <img src="static/icons/grok.png" height="28" alt="xAI Grok"><br>
+      <sub>Grok</sub>
     </td>
     <td align="center" width="90">
       <img src="static/icons/glm.png" height="28" alt="GLM">
+      <sub>GLM</sub>
     </td>
     <td align="center" width="90">
       <img src="static/icons/kimi.png" height="28" alt="Kimi">
+      <sub>Kimi</sub>
     </td>
   </tr>
 </table>
+
 **consens.io** is an experimental multi-model AI system for comparing and synthesizing responses from independent large language models.
 
 Instead of relying on a single model, consens.io queries models from multiple providers independently and analyzes their responses to identify **agreement, disagreement, and uncertainty**. A separate synthesis step can then generate a consolidated answer from the collected outputs.
