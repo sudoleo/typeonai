@@ -3,9 +3,10 @@
 1. Der Send-Button bleibt Cancel-Button, bis auch Consensus/Differences
    fertig sind (vorher sprang er zurueck, sobald die Modelle geantwortet
    hatten - der Lauf war dann nicht mehr abbrechbar).
-2. Die Chip-Ladebalken starten beim ZWEITEN Lauf wieder bei 0 (vorher las
-   der erste Tick noch das "complete" des Vorlaufs; der monotone Balken
-   rastete sofort auf 100 % ein und haengte dort fest).
+2. Die Modellzeilen des zweiten Laufs zeigen den zweiten Lauf - nicht die
+   Zeiten des ersten. (Die frueher hier gemessenen Chip-Ladebalken sind
+   entfallen: die Antworten streamen sichtbar, ein geschaetzter Balken war
+   die dritte Auskunft ueber denselben Vorgang.)
 
 Die frueher hier gepruefte Fortschrittsleiste des Differences-Laufs ist
 entfallen: der gefuehrte Lauf ueber dem Thread zeigt dieselbe Phase schon
@@ -86,39 +87,37 @@ def test_send_button_cancels_a_running_consensus(app_page):
     expect(app_page.locator("#sendButton")).not_to_have_class("is-cancel-action")
 
 
-def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
+def test_model_rows_restart_empty_on_a_second_run(app_page):
+    """Die Zeit neben einem Modell ist gemessen, nicht geerbt: beim zweiten
+    Lauf muessen die Zeilen erst wieder leer sein (·) und dann frische
+    Zeiten zeigen. Vorher hing hier ein geschaetzter Balken, der das
+    "complete" des Vorlaufs las und sofort auf 100 % einrastete."""
     app_page.set_viewport_size({"width": 390, "height": 844})
     app_page.evaluate("() => window.setAgentMode(true, { persist: true })")
 
     _send_question(app_page)
     _wait_for_all_final_answers(app_page)
-    # Erst wenn der Consensus wirklich durch ist, ist der Send-Button wieder
-    # ein Send-Button - vorher wuerde der naechste Klick den Lauf abbrechen.
     _wait_for_consensus_start(app_page)
     _wait_for_consensus_idle(app_page)
 
-    # Nach Lauf 1 stehen alle Balken auf 100 %.
-    assert app_page.evaluate(
-        """() => [...document.querySelectorAll(".agent-mode-chip")]
-          .every((chip) => parseFloat(chip.style.getPropertyValue("--stream-progress") || "0") > 0.99)"""
-    ) is True
-
-    # Lauf 2 engmaschig mitschneiden: der Balken MUSS zwischendurch wieder
-    # klein werden, sonst haengt er auf dem Ergebnis des Vorlaufs fest.
+    # Lauf 2 engmaschig mitschneiden: die Zeilen MUESSEN zwischendurch wieder
+    # ohne Zeit dastehen, sonst zeigen sie noch den Vorlauf.
     app_page.evaluate(
         """() => {
-          window.__progressSamples = [];
-          window.__progressSampler = setInterval(() => {
-            const values = [...document.querySelectorAll(".agent-mode-chip")]
-              .map((chip) => parseFloat(chip.style.getPropertyValue("--stream-progress") || "0"));
-            if (values.length) window.__progressSamples.push(Math.max(...values));
+          window.__rowSamples = [];
+          window.__rowSampler = setInterval(() => {
+            const rows = [...document.querySelectorAll("#runDetail .run-model")];
+            if (!rows.length) return;
+            window.__rowSamples.push(
+              rows.filter((row) => row.dataset.state === "done").length
+            );
           }, 30);
         }"""
     )
 
     # Nach einer beantworteten Frage laeuft das Gespraech weiter. Dieser Test
     # misst einen frischen Lauf, deshalb hier bewusst der Ausstieg ueber
-    # "New comparison" in der Sidebar — genau wie in der App. Die Sidebar ist
+    # "New comparison" in der Sidebar - genau wie in der App. Die Sidebar ist
     # auf dieser Breite eingeklappt, deshalb erst aufklappen.
     app_page.locator(".sidebar-toggle:visible").first.click()
     app_page.locator("#newRunButton").click()
@@ -128,12 +127,12 @@ def test_chip_progress_bars_restart_from_zero_on_a_second_run(app_page):
     _send_question(app_page)
     _wait_for_run_start(app_page)
     _wait_for_all_final_answers(app_page)
-    app_page.evaluate("() => clearInterval(window.__progressSampler)")
+    app_page.evaluate("() => clearInterval(window.__rowSampler)")
 
-    samples = app_page.evaluate("() => window.__progressSamples")
-    assert samples, "Keine Chips gefunden - Agent Mode nicht aktiv?"
-    assert min(samples) < 0.3, (
-        "Ladebalken wurde beim zweiten Lauf nie zurueckgesetzt "
+    samples = app_page.evaluate("() => window.__rowSamples")
+    assert samples, "Keine Modellzeilen gefunden - lief der zweite Lauf ueberhaupt?"
+    assert min(samples) == 0, (
+        "Die Modellzeilen starteten den zweiten Lauf nicht leer "
         f"(kleinster Wert: {min(samples)})"
     )
-    assert max(samples) > 0.99, "Ladebalken lief im zweiten Lauf nicht voll"
+    assert max(samples) > 0, "Keine Zeile wurde im zweiten Lauf fertig"

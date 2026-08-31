@@ -190,6 +190,14 @@
   function syncPipeline(context, force) {
     const pipeline = window.App.consensusPipeline;
     if (!pipeline) return;
+    // Ein Direktvergleich hat keinen gefuehrten Lauf: sechs Antworten, sonst
+    // nichts. Der Fortschrittsblock kuendigt dort Schritte an, die nie kommen
+    // (Consensus, Widerspruchspruefung), waehrend die Antworten daneben schon
+    // sichtbar streamen.
+    if (context.config?.agentMode === false) {
+      pipeline.dismiss?.();
+      return;
+    }
     const phaseChanged = force || projectedPhase !== context.phase || projectedStatus !== context.status;
     if (!phaseChanged) {
       pipeline.renderProvenance?.();
@@ -289,7 +297,10 @@
     }
 
     window.App.setAppTitle?.(context.question);
-    window.App.setThreadQuestion?.(context.config?.agentMode === false ? "" : context.question);
+    // Auch der Direktvergleich zeigt die Frage: er fuehrt keinen Thread, aber
+    // ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
+    // nirgends mehr geschrieben steht.
+    window.App.setThreadQuestion?.(context.question);
     window.App.setThreadQuestionAttachments?.(context.attachmentMeta || []);
     syncConversationProjection(context);
     providers().forEach(provider => renderModel(context, provider));

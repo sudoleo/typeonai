@@ -112,9 +112,12 @@
     spentExchange: null,
 
     // Ein sichtbares Gespraech laeuft immer weiter: sobald ein fortsetzbarer
-    // Turn da ist, geht die naechste Frage mit seinem Kontext raus.
+    // Turn da ist, geht die naechste Frage mit seinem Kontext raus — aber nur
+    // im Agent Mode. beginContext (query-send.js) bindet den Kontext an genau
+    // diese Bedingung; ohne sie versprach der Platzhalter "Ask a follow-up
+    // question" eine Fortsetzung, die der naechste Lauf nicht mehr gab.
     isArmed() {
-      return !!this.lastExchange;
+      return !!this.lastExchange && window.isAgentModeEnabled?.() === true;
     },
 
     hasContinuableExchange() {

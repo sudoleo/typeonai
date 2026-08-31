@@ -42,6 +42,11 @@ def test_disabled_agent_mode_is_a_direct_six_answer_flow():
     assert 'if (context.config?.agentMode === false)' in view
     assert 'window.enterDirectComparisonView?.();' in view
     assert 'document.body.classList.add("is-hero", "direct-comparison-active")' in core
+    # Die Frage bleibt stehen: der Direktvergleich fuehrt keinen Thread, aber
+    # ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
+    # nirgends mehr geschrieben steht (User-Befund 2026-08-31).
+    enter_view = core.split("function enterDirectComparisonView()", 1)[1].split("}", 1)[0]
+    assert 'setThreadQuestion("")' not in enter_view
     assert 'followup?.reset?.();' in view
     assert 'window.App.chatSession?.reset?.();' in view
     assert 'pipeline.dismiss?.();' in view
@@ -66,9 +71,45 @@ def test_plus_menu_agent_mode_switch_is_free_and_synchronized():
     assert "Agent Mode" in agent_row
     assert "pro-badge" not in agent_row
     assert 'const menuSwitchEl = document.getElementById("agentModeMenuSwitch");' in script
-    assert 'if (menuSwitchEl) menuSwitchEl.checked = enabled;' in script
+    assert 'if (menuSwitchEl) menuSwitchEl.checked = preference;' in script
     assert 'agentModeMenuSwitch.addEventListener("change"' in script
     assert 'setAgentMode(this.checked, { persist: true });' in script
+
+
+def test_the_switch_shows_the_setting_not_the_run_on_screen():
+    """Der Schalter sagt, was der NAECHSTE Lauf tut. Solange er den
+    projizierten Lauf spiegelte, sprang er nach jeder Antwort in die alte
+    Stellung zurueck: die Einstellung war umgestellt, zu sehen war davon
+    nichts — erst eine neue Sitzung zeigte die Wirkung (User-Befund
+    2026-08-31). Die Body-Klassen beschreiben weiterhin den Lauf auf dem
+    Schirm, sonst risse das Umlegen ein fertiges Ergebnis ein."""
+    script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
+    ui = script.split("function updateAgentModeUI()", 1)[1]
+
+    assert "const preference = isAgentModeEnabled();" in ui
+    assert "if (switchEl) switchEl.checked = preference;" in ui
+    assert "if (menuSwitchEl) menuSwitchEl.checked = preference;" in ui
+    assert "setAutoConsensusForAgentMode(preference);" in ui
+    assert 'document.body.classList.toggle("agent-mode-enabled", enabled);' in ui
+
+
+def test_the_direct_comparison_says_that_every_turn_starts_over():
+    """Ohne Agent Mode gibt es keinen Folgeturn: jede Frage ist ein eigener
+    Lauf ohne Kontext. Das stand nirgends — man merkte es daran, dass die
+    naechste Frage bei null anfing."""
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
+    run = (ROOT / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
+
+    assert 'id="modeNotice"' in template
+    assert "Follow-up questions need Agent Mode." in script
+    # Der Hinweis haengt am Schalter, nicht am sichtbaren Lauf: umlegen zeigt
+    # sofort, was der naechste Lauf tut.
+    assert "renderModeNotice(preference);" in script
+    assert "notice.hidden = !!agentModeOn;" in script
+    # ... und der Platzhalter verspricht kein Follow-up, das es nicht gibt.
+    assert "window.isAgentModeEnabled?.() === true" in run
+    assert "window.App?.followup?.render?.();" in script
 
 
 def test_composer_and_its_plus_menu_stay_above_the_answer_boxes():

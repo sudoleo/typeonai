@@ -21,6 +21,7 @@ from app.services.llm.provider_runtime import (
     ProviderCancellation,
     ProviderCancelled,
     bind_provider_cancellation,
+    current_provider_cancellation,
     managed_provider_resource,
 )
 from app.services.llm.consensus_engine import (
@@ -168,6 +169,53 @@ class ProviderCancellationTests(unittest.TestCase):
         self.assertTrue(closed.wait(timeout=1))
         self.assertTrue(producer_stopped.wait(timeout=1))
         self.assertFalse(followup_work.is_set())
+
+    def test_parallel_streams_keep_their_own_cancellation(self):
+        """Sechs gleichzeitige /ask-Streams duerfen sich nicht vermischen.
+
+        Starlette zieht synchrone Iteratoren ueber einen Worker-Pool: jedes
+        next() kann auf einem anderen Thread landen. Sieht ein Producer dabei
+        die (bereits beendete und damit gecancelte) Cancellation eines fremden
+        Laufs, bricht er ohne final-Event ab -- im Browser: "Connection lost
+        before the response was completed."
+        """
+        names = [f"stream-{index}" for index in range(6)]
+        seen = {name: [] for name in names}
+
+        def source(name):
+            for index in range(4):
+                seen[name].append(current_provider_cancellation())
+                yield {"type": "delta", "text": str(index)}
+            seen[name].append(current_provider_cancellation())
+            yield {"type": "final", "result": make_llm_result("done")}
+
+        responses = {
+            name: streaming_model_response(source(name), "OpenAI") for name in names
+        }
+        bodies = {}
+
+        async def drive(name):
+            chunks = []
+            async for chunk in responses[name].body_iterator:
+                chunks.append(chunk if isinstance(chunk, str) else chunk.decode("utf-8"))
+                await anyio.sleep(0)
+            bodies[name] = "".join(chunks)
+
+        async def drive_all():
+            async with anyio.create_task_group() as task_group:
+                for name in names:
+                    task_group.start_soon(drive, name)
+
+        anyio.run(drive_all)
+
+        for name in names:
+            own = responses[name].provider_cancellation
+            self.assertEqual(
+                [cancellation is own for cancellation in seen[name]],
+                [True] * len(seen[name]),
+                f"{name} hat eine fremde Cancellation gesehen",
+            )
+            self.assertIn("event: final", bodies[name])
 
     def test_cancelled_provider_wrapper_does_not_emit_a_failure_result(self):
         cancellation = ProviderCancellation()

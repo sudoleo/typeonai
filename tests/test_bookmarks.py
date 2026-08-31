@@ -1052,7 +1052,8 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     consensus_run = (root / "static" / "js" / "consensus-run.js").read_text(encoding="utf-8")
 
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
-    assert 'window.App?.setThreadQuestion?.(directComparison ? "" : displayQuestion);' in firebase
+    # Auch ein Direktvergleich-Bookmark laedt mit seiner Frage zurueck.
+    assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
     assert "renderStoredTurns?.(materialized.historyTurns)" in firebase
     assert '"/conversation?limit=50"' in firebase
     assert "function loadBookmarkConversationOnce(bookmark)" in firebase

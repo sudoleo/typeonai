@@ -424,12 +424,17 @@
 
   // Der Direktvergleich (Agent Mode aus) ist keine Zwischenstufe des Threads,
   // sondern eine eigene Ansicht: Composer oben, sechs Antworten darunter, kein
-  // Thread-Kopf und kein Consensus. Ein frisch gesendeter Vergleich und ein aus
-  // einem Bookmark wiederhergestellter muessen dieselbe Ansicht ergeben —
-  // deshalb steht sie hier einmal statt zweimal (query-send.js, firebase.js).
+  // Consensus. Ein frisch gesendeter Vergleich und ein aus einem Bookmark
+  // wiederhergestellter muessen dieselbe Ansicht ergeben — deshalb steht sie
+  // hier einmal statt zweimal (query-send.js, firebase.js).
+  //
+  // Die gestellte Frage raeumt diese Ansicht NICHT mehr ab. Sie tat es, weil
+  // der Direktvergleich keinen Thread fuehrt — nur stand danach nirgends
+  // mehr, was gefragt worden war: das Feld ist beim Senden leer, und die
+  // sechs Antworten wiederholen die Frage nicht. Den Kopf setzen die beiden
+  // Aufrufer unmittelbar danach selbst.
   function enterDirectComparisonView() {
     document.body.classList.add("is-hero", "direct-comparison-active");
-    setThreadQuestion("");
     syncHeroResponseAccess();
   }
 

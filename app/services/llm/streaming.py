@@ -373,8 +373,15 @@ def streaming_model_response(
         finally:
             cancellation.cancel()
 
+    # Der Provider-Generator laeuft bewusst im eigenen Pump-Thread von
+    # iter_sse_with_keepalive. Das ist keine Kosmetik: Starlette zieht einen
+    # synchronen Iterator ueber iterate_in_threadpool, und jedes next() darf auf
+    # einem anderen Worker-Thread landen. Die Cancellation haengt aber an einem
+    # threading.local -- ohne festen Thread liest ein laufender Stream die
+    # Cancellation eines fremden, laengst beendeten Laufs, bricht als
+    # ProviderCancelled ab und schickt nie ein final-Event.
     return ProviderStreamingResponse(
-        event_source(),
+        iter_sse_with_keepalive(event_source(), cancellation=cancellation),
         media_type="text/event-stream",
         headers=dict(SSE_HEADERS),
         cancellation=cancellation,

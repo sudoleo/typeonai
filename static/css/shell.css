@@ -980,11 +980,22 @@ body:not(.dark-mode) .chat-input-container {
   display: none;
 }
 
+/* Name links, gemessene Zeit rechts, das Skip-Angebot dazwischen. Der
+   Modell-Balken dazwischen ist entfallen: die Antworten streamen sichtbar,
+   und der Schritt darueber zaehlt sie — ein geschaetzter Balken war die
+   dritte Auskunft ueber denselben Vorgang und die einzige geratene. */
 .run-model {
-  display: grid;
-  grid-template-columns: minmax(76px, 124px) minmax(0, 1fr) 38px auto;
-  gap: 10px;
+  display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.run-model-name {
+  flex: 1 1 auto;
+}
+
+.run-model-skip {
+  flex: 0 0 auto;
 }
 
 /* The skip offer only takes room once it has something to say. */
@@ -1023,34 +1034,24 @@ body:not(.dark-mode) .chat-input-container {
   text-overflow: ellipsis;
 }
 
+/* Ein fertiges Modell ist die einzige Zustandsaenderung, die diese Zeile
+   noch anzeigt: der Name tritt aus dem Grau heraus, die Zeit steht daneben. */
+
 .run-model[data-state="done"] .run-model-name {
   color: var(--ink-2);
 }
 
-.run-model-track {
-  height: 2px;
-  border-radius: 2px;
-  background: var(--line-soft);
-  overflow: hidden;
-}
-
-.run-model-track i {
-  display: block;
-  height: 100%;
-  width: var(--p, 0%);
-  background: var(--ink-3);
-  transition: width 0.3s linear;
-}
-
-.run-model[data-state="done"] .run-model-track i {
-  background: var(--agree);
-}
-
 .run-model-time {
+  flex: 0 0 auto;
+  min-width: 38px;
   font-size: var(--font-size-micro);
   color: var(--ink-3);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+.run-model[data-state="done"] .run-model-time {
+  color: var(--agree);
 }
 
 /* ---- The run that did not happen -----------------------------------------
@@ -2139,6 +2140,10 @@ body:not(.is-hero) .input-section {
   body:not(.is-hero) .app-footer {
     margin-top: 6px;
   }
+
+  body:not(.is-hero) .mode-notice {
+    margin-top: 6px;
+  }
 }
 
 /* ---- B) Handy: die Zeile ist ein Zustand, der sich oeffnet ---------------- */
@@ -2152,6 +2157,9 @@ body:not(.is-hero) .input-section {
   body.composer-collapsed:not(.is-hero) .composer-run-notice,
   body.composer-collapsed:not(.is-hero) .consensus-switch-container,
   body.composer-collapsed:not(.is-hero) .demo-chip,
+  /* Der Modus-Hinweis gehoert zur Fusszeile und geht mit ihr: der
+     eingeklappte Composer ist genau eine Zeile. */
+  body.composer-collapsed:not(.is-hero) .mode-notice,
   body.composer-collapsed:not(.is-hero) .app-footer {
     display: none;
   }
@@ -3293,6 +3301,26 @@ body.is-hero .chat-input-container .consensus-model .select-wrapper .model-picke
 }
 
 .composer-run-notice[hidden] {
+  display: none;
+}
+
+/* ---- Was der Modus fuer die naechste Frage bedeutet ----------------------
+   Steht unter dem Composer, wo die Folge eintritt, und in derselben leisen
+   Stufe wie der Disclaimer darunter: eine Bedingung des Laufs, keine
+   Warnung. Sichtbar nur ohne Agent Mode — im Agent Mode fehlt nichts, was
+   angesagt werden muesste. */
+.mode-notice {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 10px 0 0;
+  padding: 0 2px;
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-ui);
+  text-align: center;
+  color: var(--ink-3);
+}
+
+.mode-notice[hidden] {
   display: none;
 }
 

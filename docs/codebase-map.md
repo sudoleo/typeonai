@@ -672,17 +672,37 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   nehmen — `innerText` liefert fuer `display:none` den leeren String. Die
   Zaehlung in `consensus-lifecycle.js`, die Zitations-Modelle in
   `consensus-run.js`/`consensus-actions.js` und `isBoxDone` in
-  `consensus-progress.js` sind entsprechend umgestellt. Neu exportiert:
-  `window.App.agentMode.streamProgressByResponseId()`, damit der gefuehrte Lauf
-  dieselbe monotone Stream-Schaetzung nutzt statt sie zu duplizieren.
+  `consensus-progress.js` sind entsprechend umgestellt.
+  Seit **2026-08-31** ist die geschaetzte Stream-Fortschritts-Rechnung
+  (`--stream-progress`, der 120-ms-Ticker und
+  `window.App.agentMode.streamProgressByResponseId()`) **entfallen**: sie hat
+  nur Balken gefuellt, und die gibt es nicht mehr (siehe
+  `consensus-progress.js`). Ebenfalls seit 2026-08-31 zeigen die beiden
+  Agent-Mode-Schalter (`#agentModeSwitch`, `#agentModeMenuSwitch`) **immer die
+  Einstellung** (`isAgentModeEnabled()`), nie den projizierten Lauf — sie
+  beschreiben den NAECHSTEN Lauf. Vorher sprangen sie nach jeder Antwort in
+  die alte Stellung zurueck, obwohl `localStorage` laengst umgestellt war.
+  Die Body-Klassen (`agent-mode-enabled` &c.) folgen weiterhin dem Lauf auf
+  dem Schirm. Am selben Schalter haengt der Hinweis `#modeNotice` unter dem
+  Composer: ohne Agent Mode gibt es keinen Folgeturn, jede Frage ist ein
+  eigener Lauf — `isArmed()` in `consensus-run.js` prueft dieselbe Bedingung,
+  damit der Platzhalter kein Follow-up verspricht, das nicht kommt.
 - **`consensus-progress.js`** — der **gefuehrte Lauf** `#consensusRun` unter dem
   Input, seit 2026-07-27 die **einzige** Fortschrittsanzeige (auch im Agent
-  Mode; dessen Panel ist als Progress-Flaeche stillgelegt, siehe unten).
+  Mode; dessen Panel ist als Progress-Flaeche stillgelegt, siehe unten) — und
+  seit **2026-08-31 nur noch im Agent Mode ueberhaupt**: im Direktvergleich
+  gibt es keinen Ablauf anzukuendigen (sechs Antworten, danach nichts), also
+  keinen Block. Gesperrt an zwei Stellen: `run-view.js::syncPipeline` ruft die
+  Pipeline bei `agentMode === false` gar nicht erst, und `isDirectComparison()`
+  (Body-Klasse `direct-comparison-active`) haelt `show()`/`onPrepare`/
+  `onQueryStatus` auch gegen fremde Aufrufer zu (Lifecycle, Demo, Replay).
   Sichtbar ist immer nur EIN aktiver Schritt — vier Phasen in dieser Reihenfolge:
   `prepare → answers → consensus → differences`. Erledigte Schritte schrumpfen
-  auf graue Haken-Zeilen (`#runPast`), die Modell-Zeilen (`#runDetail`, Balken
-  aus `window.App.agentMode.streamProgressByResponseId()`) existieren nur
-  waehrend der Antwortphase, und Phasen ohne ehrlichen Prozentwert laufen
+  auf graue Haken-Zeilen (`#runPast`), die Modell-Zeilen (`#runDetail`:
+  Name links, **gemessene** Zeit rechts) existieren nur waehrend der
+  Antwortphase — der geschaetzte Balken pro Modell ist seit 2026-08-31 raus,
+  weil die Antworten sichtbar streamen und der Schritt darueber sie zaehlt —,
+  und Phasen ohne ehrlichen Prozentwert laufen
   indeterminiert (`.run-track.is-indeterminate`) statt einen zu erfinden.
   Am Ende klappt der Block zusammen und uebergibt an den **Provenance-Fuss**
   `#runProvenance` unter der Antwort. Seit **2026-07-28 zwei Zeilen statt drei**
@@ -1126,7 +1146,9 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   explizit `runId`/Context; `cancelCurrentQuery(runId)` bricht gezielt nur
   dessen Controller ab. Ein valider Agent-Mode-Lauf
   beendet über `window.exitHeroMode()` den zentrierten Input-Leerzustand; der
-  Direktvergleich behält den Hero-/Screenshot-Aufbau. Vor
+  Direktvergleich behält den Hero-/Screenshot-Aufbau — **zeigt seit
+  2026-08-31 aber seine Frage** (`#threadAsk` über dem Composer), statt sie
+  beim Senden spurlos abzuräumen. Vor
   `/prepare` gilt eine harte Mindestzahl von zwei ausgewählten Modellen;
   `app-init.js::updateQuestionInputAccess` deaktiviert den Send-Button bereits
   synchron dazu, während `query-send.js` programmgesteuerte Starts nochmals

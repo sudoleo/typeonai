@@ -510,6 +510,13 @@
         </div>
         <button type="button" id="postDemoLoginButton" class="post-demo-login-action">Log in or sign up</button>
       </div>
+      <!-- Was der Modus fuer die naechste Frage bedeutet. Nur ohne Agent Mode
+           sichtbar, weil nur dort etwas fehlt: kein Thread, kein Folgeturn,
+           kein Kontext aus der vorigen Antwort. Der Hinweis haengt am
+           SCHALTER, nicht am sichtbaren Lauf — umlegen zeigt sofort, was der
+           naechste Lauf tut. Gefuellt von static/js/agent-mode.js. -->
+      <p id="modeNotice" class="mode-notice" role="status" hidden></p>
+
       <!-- Der Modus-Erklaerer ist entfallen: Agent Mode und Deep Think stehen
            im (+)-Menue, Agent Mode und Auto Consensus zusaetzlich in den
            Settings, und der gefuehrte Lauf benennt jeden Schritt waehrend er

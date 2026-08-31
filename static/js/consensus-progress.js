@@ -102,10 +102,12 @@
   }
 
   // ---- Per-model rows ------------------------------------------------
-  // Only rendered while the models are answering. Each row grows on the
-  // real stream (agent-mode.js already estimates this from the streamed
-  // text) and freezes at the elapsed time when its model finishes, so the
-  // number that stays on screen is measured, not invented.
+  // Only rendered while the models are answering: who is still out, and how
+  // long the ones that came back took. There used to be a bar per model
+  // here, filled from an estimate of the stream. It was a second, guessed
+  // answer to a question the screen already answers truthfully — the
+  // answers stream in visibly, and the step above counts them. What is left
+  // is the part that is measured: the elapsed time each model needed.
   const rowTimes = new Map();
 
   // A run is only as fast as its slowest model. Once enough models have
@@ -130,9 +132,8 @@
       const name = box.dataset.shortLabel || box.dataset.model || "Model";
       return '<span class="run-model" data-box="' + box.id + '">'
         + '<span class="run-model-name">' + name + "</span>"
-        + '<span class="run-model-track"><i></i></span>'
-        + '<span class="run-model-time">·</span>'
         + '<span class="run-model-skip"></span>'
+        + '<span class="run-model-time">·</span>'
         + "</span>";
     }).join("");
     detail.hidden = boxes.length === 0;
@@ -168,17 +169,13 @@
   function renderDetail() {
     const detail = $("runDetail");
     if (!detail || detail.hidden) return;
-    const progressByBox = window.App?.agentMode?.streamProgressByResponseId?.() || {};
 
     detail.querySelectorAll(".run-model").forEach(row => {
       const box = document.getElementById(row.dataset.box);
       if (!box) return;
       const done = isBoxDone(box);
-      const share = done ? 1 : (progressByBox[box.id] || 0);
 
       row.dataset.state = done ? "done" : "running";
-      const bar = row.querySelector(".run-model-track i");
-      if (bar) bar.style.setProperty("--p", (share * 100).toFixed(1) + "%");
 
       const time = row.querySelector(".run-model-time");
       if (time) {
@@ -293,9 +290,21 @@
 
   // ---- Visibility ----------------------------------------------------
 
+  // Der Direktvergleich hat keinen gefuehrten Lauf. Es gibt dort keine
+  // Phasen anzukuendigen: die sechs Antworten streamen sichtbar nebeneinander
+  // und danach kommt nichts mehr — kein Consensus, keine Widerspruchspruefung.
+  // Ein Fortschrittsblock darueber beschreibt einen Ablauf, den es nicht gibt.
+  // Die Marke steht auf dem Body, weil sie den Lauf AUF DEM SCHIRM meint und
+  // nicht den Schalter fuer den naechsten (run-view.js setzt sie, bevor die
+  // Pipeline ueberhaupt gerufen wird).
+  function isDirectComparison() {
+    return document.body.classList.contains("direct-comparison-active");
+  }
+
   function show() {
     const el = root();
     if (!el) return;
+    if (isDirectComparison()) return;
     if (hideTimer) {
       clearTimeout(hideTimer);
       hideTimer = null;
@@ -570,6 +579,10 @@
   // counting from the real start instead of from the moment it came back
   // on screen.
   function onPrepare(startedAtMs) {
+    if (isDirectComparison()) {
+      dismiss();
+      return;
+    }
     resetState();
     clearProvenance();
     setComposerRunNotice("");
@@ -581,6 +594,10 @@
   }
 
   function onQueryStatus(status) {
+    if (isDirectComparison()) {
+      dismiss();
+      return;
+    }
     if (status === "running") {
       // A run that never announced /prepare (demo, replay) still gets a clock.
       if (stage === "idle") {

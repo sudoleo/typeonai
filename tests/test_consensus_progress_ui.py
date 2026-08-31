@@ -36,6 +36,52 @@ def test_run_block_shows_one_step_at_a_time():
     assert 'id="runDetail"' in template
 
 
+def test_the_direct_comparison_has_no_run_block_at_all():
+    """Der gefuehrte Lauf beschreibt eine Abfolge, die es ohne Agent Mode
+    nicht gibt: nach den sechs Antworten kommt kein Consensus und keine
+    Widerspruchspruefung. Waehrend die Antworten sichtbar danebenstreamen,
+    kuendigte der Block Schritte an, die nie kamen (User-Vorgabe 2026-08-31:
+    "bei dem Direktvergleich braucht man keinerlei Ladefortschritt")."""
+    progress = read("static/js/consensus-progress.js")
+    view = read("static/js/run-view.js")
+
+    # Der Projektor ruft die Pipeline erst gar nicht ...
+    sync = view.split("function syncPipeline(context, force)", 1)[1].split(
+        "function syncAgentStatus", 1
+    )[0]
+    assert 'if (context.config?.agentMode === false) {' in sync
+    assert "pipeline.dismiss?.();" in sync
+
+    # ... und der Block selbst geht auch dann nicht auf, wenn ihn jemand
+    # anderes anstoesst (Lifecycle, Demo, Replay).
+    assert 'return document.body.classList.contains("direct-comparison-active");' in progress
+    show = progress.split("function show() {", 1)[1].split("function vanish", 1)[0]
+    assert "if (isDirectComparison()) return;" in show
+    for hook in ("function onPrepare(startedAtMs) {", "function onQueryStatus(status) {"):
+        body = progress.split(hook, 1)[1][:200]
+        assert "if (isDirectComparison()) {" in body, hook
+
+
+def test_the_per_model_rows_measure_instead_of_animating():
+    """Jede Modellzeile hatte einen Balken, gefuellt aus einer Schaetzung des
+    Streams. Waehrend die Antworten sichtbar streamen und der Schritt darueber
+    sie zaehlt, war das die dritte Auskunft ueber denselben Vorgang — und die
+    einzige geratene (User-Befund 2026-08-31). Uebrig bleibt, was gemessen
+    ist: die Zeit, die jedes Modell gebraucht hat."""
+    progress = read("static/js/consensus-progress.js")
+    agent = read("static/js/agent-mode.js")
+
+    assert "run-model-track" not in progress
+    assert "run-model-track" not in read("static/css/shell.css")
+    assert "streamProgressByResponseId" not in progress
+    assert "streamProgressByResponseId" not in agent
+    assert "--stream-progress" not in read("static/css/components-consensus.css")
+    # Der 120-ms-Ticker, der die Schaetzung fortschrieb, ist mit ihr weg.
+    assert "agentProgressTicker" not in agent
+    assert "rowTimes.set(box.id, Date.now() - startedAt)" in progress
+    assert 'class="run-model-time"' in progress
+
+
 def test_run_covers_every_phase_and_terminal_state():
     progress = read("static/js/consensus-progress.js")
     lifecycle = read("static/js/consensus-lifecycle.js")
@@ -120,8 +166,14 @@ def test_the_composer_carries_no_followup_affordance_at_all():
     assert "followup-newrun" not in run
     assert 'id="newRunButton"' in template
 
-    # Der Kontext geht trotzdem immer mit: ein fortsetzbarer Turn ist armed.
-    assert "isArmed() {\n      return !!this.lastExchange;\n    }" in run
+    # Der Kontext geht mit, solange es einen gibt — und den gibt es nur im
+    # Agent Mode (query-send bindet ihn genau dort). Der Platzhalter darf
+    # deshalb kein Follow-up versprechen, das der naechste Lauf nicht gibt.
+    assert (
+        "isArmed() {\n"
+        "      return !!this.lastExchange && window.isAgentModeEnabled?.() === true;\n"
+        "    }"
+    ) in run
 
 
 def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
@@ -149,7 +201,9 @@ def test_followup_archives_the_previous_turn_before_rendering_the_next_one():
     assert append_at < query.index("registry.update(context.runId", append_at)
     view = read("static/js/run-view.js")
     assert "followup?.renderStoredTurns?.(context.historyTurns || [])" in view
-    assert "window.App.setThreadQuestion?.(context.config?.agentMode === false ? \"\" : context.question)" in view
+    # Auch der Direktvergleich zeigt seine Frage: er fuehrt keinen Thread,
+    # aber ohne sie stand auf dem Schirm nur die Antwort auf etwas Ungesagtes.
+    assert "window.App.setThreadQuestion?.(context.question)" in view
     assert "clearHistory?.()" in app_init
 
     # User-Turns stehen rechts; Consensus-Turns bleiben als Lesetext links.
@@ -194,7 +248,7 @@ def test_the_sent_message_leaves_the_field_before_prepare_runs():
     )[0]
     assert 'input.value = "";' in handoff
     assert "registry.renderVisible();" in handoff
-    assert "window.App.setThreadQuestion?.(context.config?.agentMode === false ? \"\" : context.question)" in read(
+    assert "window.App.setThreadQuestion?.(context.question)" in read(
         "static/js/run-view.js"
     )
 

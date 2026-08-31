@@ -2275,12 +2275,11 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // Auswahl in die Antworttitel schreiben würde.
         bookmarkCitationModels = applyBookmarkModelPresentation(bookmark);
         
-        // Die Frage steht im Thread-Kopf über der Antwort; das Eingabefeld
-        // unten bleibt frei für die nächste Frage. Der Direktvergleich kennt
-        // keinen Thread-Kopf — dort sind die sechs Antworten das Ergebnis,
-        // genau wie direkt nach dem Senden.
+        // Die Frage steht über der Antwort; das Eingabefeld unten bleibt frei
+        // für die nächste Frage. Das gilt auch für den Direktvergleich: er
+        // führt keinen Thread, aber die Frage gehört trotzdem auf den Schirm.
         if (bookmark.query) {
-            window.App?.setThreadQuestion?.(directComparison ? "" : displayQuestion);
+            window.App?.setThreadQuestion?.(displayQuestion);
             const questionInput = document.getElementById("questionInput");
             if (questionInput) {
                 questionInput.value = "";

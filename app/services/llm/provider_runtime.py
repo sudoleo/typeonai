@@ -126,6 +126,14 @@ _thread_context = threading.local()
 def bind_provider_cancellation(
     cancellation: ProviderCancellation,
 ) -> Iterator[ProviderCancellation]:
+    """Bindet die Cancellation an DIESEN Thread.
+
+    Invariante: Ein Producer, der hier gebunden wird, muss vollstaendig auf
+    einem Thread laufen. Ein Generator, den Starlette ueber
+    iterate_in_threadpool zieht, erfuellt das nicht (jedes next() kann auf
+    einem anderen Worker landen) und wuerde fremde Cancellations sehen --
+    solche Producer gehoeren in den Pump-Thread von iter_sse_with_keepalive.
+    """
     previous = getattr(_thread_context, "cancellation", None)
     _thread_context.cancellation = cancellation
     try:

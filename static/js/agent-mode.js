@@ -43,85 +43,13 @@
   // Session-only disclosure: every new grouped run starts in the clean view.
   let modelAnswersVisible = false;
 
-  // Stream-Fortschritt pro Modell (0..1), monoton steigend innerhalb eines
-  // Runs. Treibt den „Ladebalken“ in jedem Chip (CSS-Variable --stream-progress).
-  const modelProgress = new Map();        // pref.key -> 0..1
-  const modelStreamStartedAt = new Map(); // pref.key -> ts (sanfter Anlauf)
-  let agentProgressTicker = null;
-
-  // Beim zweiten Lauf stehen die Antwort-Boxen beim Start noch auf dem
-  // Ergebnis des vorherigen Laufs: setAgentModeStatus("running") kommt vor
-  // dem Zuruecksetzen der Boxen auf "pending" (query-send.js). Ohne diese
-  // Sperre liest der erste Tick "complete", der monoton steigende Balken
-  // rastet sofort auf 100 % ein und haengt dort den ganzen Lauf fest.
-  const staleModelKeys = new Set();
+  // Der geschaetzte Stream-Fortschritt pro Modell ist mit dem Balken im
+  // gefuehrten Lauf entfallen (siehe consensus-progress.js): waehrend die
+  // Antworten sichtbar streamen, war er eine zweite, geratene Auskunft ueber
+  // dasselbe. Was bleibt, ist die gemessene Zeit pro Modell.
 
   function isTerminalResponseState(state) {
     return state === "complete" || state === "error";
-  }
-
-  // Schätzt den Fortschritt eines Modells aus dem tatsächlichen Stream:
-  // fertig ⇒ voll, während des Streams asymptotisch aus der Textlänge, davor
-  // ein langsamer zeitbasierter Anlauf, damit der Balken sichtbar „lebt“.
-  function computeModelProgress(pref) {
-    const box = document.getElementById(pref.responseId);
-    if (!box) return 0;
-    const state = box.dataset.responseState || "";
-    // Noch das alte Ergebnis in der Box: erst wenn der neue Lauf sie auf
-    // "pending" zurueckgesetzt hat, zaehlt der Fortschritt wieder.
-    if (staleModelKeys.has(pref.key)) {
-      if (isTerminalResponseState(state)) return 0;
-      staleModelKeys.delete(pref.key);
-    }
-    if (isTerminalResponseState(state)) return 1;
-    const contentEl = box.querySelector(".collapsible-content");
-    const streaming = !!contentEl && contentEl.classList.contains("is-streaming");
-    if (streaming) {
-      const chars = (contentEl.textContent || "").trim().length;
-      // Asymptotisch: viel Text ⇒ Balken fast voll, aber nie ganz — die vollen
-      // 100 % kommen erst mit dem „complete“-Status.
-      const eased = 1 - Math.exp(-chars / 420);
-      return Math.min(0.92, 0.12 + eased * 0.8);
-    }
-    // Noch kein Token: langsamer Anlauf über die Zeit (bis ~10 %).
-    const startedAt = modelStreamStartedAt.get(pref.key) || Date.now();
-    modelStreamStartedAt.set(pref.key, startedAt);
-    return Math.min(0.1, (Date.now() - startedAt) / 26000);
-  }
-
-  function applyModelProgress() {
-    (window.App?.modelPrefs || []).forEach(pref => {
-      const next = computeModelProgress(pref);
-      const value = Math.max(modelProgress.get(pref.key) || 0, next); // monoton
-      modelProgress.set(pref.key, value);
-      const chip = document.querySelector(
-        `.agent-mode-chip[data-model-key="${pref.key}"]`
-      );
-      if (chip) chip.style.setProperty("--stream-progress", value.toFixed(3));
-    });
-  }
-
-  function startAgentProgressTicker() {
-    window.clearInterval(agentProgressTicker);
-    applyModelProgress();
-    agentProgressTicker = window.setInterval(applyModelProgress, 120);
-  }
-
-  function stopAgentProgressTicker() {
-    window.clearInterval(agentProgressTicker);
-    agentProgressTicker = null;
-  }
-
-  function resetModelProgress() {
-    modelProgress.clear();
-    modelStreamStartedAt.clear();
-    staleModelKeys.clear();
-    (window.App?.modelPrefs || []).forEach(pref => {
-      const box = document.getElementById(pref.responseId);
-      if (box && isTerminalResponseState(box.dataset.responseState || "")) {
-        staleModelKeys.add(pref.key);
-      }
-    });
   }
 
   // ---- Einzelantworten als Vorschau statt als Scroll-Schacht --------------
@@ -358,6 +286,24 @@
       : "Auto Consensus is available only in Agent Mode";
   }
 
+  // Ohne Agent Mode ist jede Frage ein eigener Lauf: es gibt keinen Thread,
+  // keinen Folgeturn und keinen Kontext aus der vorigen Antwort. Das war
+  // nirgends gesagt — man merkte es erst daran, dass die Frage nach dem
+  // Senden verschwand und die naechste bei null anfing. Der Hinweis steht
+  // deshalb dort, wo die Folge eintritt (unter dem Composer), und er haengt
+  // am SCHALTER, nicht am sichtbaren Lauf: umlegen zeigt sofort, was der
+  // naechste Lauf tut.
+  const MODE_NOTICE_TEXT =
+    "Direct comparison: every question starts a new run. "
+    + "Follow-up questions need Agent Mode.";
+
+  function renderModeNotice(agentModeOn) {
+    const notice = document.getElementById("modeNotice");
+    if (!notice) return;
+    notice.textContent = agentModeOn ? "" : MODE_NOTICE_TEXT;
+    notice.hidden = !!agentModeOn;
+  }
+
   function updateAgentModeUI() {
     const enabled = projectedRunContext
       ? projectedRunContext.config?.agentMode !== false
@@ -421,13 +367,21 @@
       }
     }
 
-    if (switchEl) switchEl.checked = enabled;
-    if (menuSwitchEl) menuSwitchEl.checked = enabled;
+    // Der Schalter beschreibt den NAECHSTEN Lauf, `enabled` oben den, der
+    // gerade auf dem Schirm steht. Beides derselbe Wert zu geben hiess: wer
+    // den Schalter nach einer Antwort umlegte, sah ihn sofort zurueck-
+    // springen, obwohl die Einstellung laengst umgestellt war — die Wirkung
+    // zeigte sich erst in einer neuen Sitzung. Bedienelemente folgen deshalb
+    // immer der Einstellung, Ansicht und Body-Klassen dem Lauf.
+    const preference = isAgentModeEnabled();
+    if (switchEl) switchEl.checked = preference;
+    if (menuSwitchEl) menuSwitchEl.checked = preference;
     if (toggleSwitch) {
-      toggleSwitch.title = enabled ? "Disable Agent Mode" : "Enable Agent Mode";
+      toggleSwitch.title = preference ? "Disable Agent Mode" : "Enable Agent Mode";
       toggleSwitch.setAttribute("aria-label", toggleSwitch.title);
     }
-    setAutoConsensusForAgentMode(enabled);
+    setAutoConsensusForAgentMode(preference);
+    renderModeNotice(preference);
     if (panel) panel.setAttribute("aria-hidden", String(!enabled));
 
     // Eingeklappter Zustand: Panel wird zur Kompaktzeile (Titel, beantwortete
@@ -470,13 +424,6 @@
         chip.setAttribute("aria-label", `Choose ${modelInfo.label} model`);
         chip.textContent = "";
         chip.dataset.modelKey = modelInfo.pref.key;
-        // Gespeicherten Fortschritt sofort anlegen, damit der Balken beim
-        // Neuaufbau der Chips (z. B. wenn ein Modell fertig wird) nicht auf 0
-        // zurückspringt.
-        chip.style.setProperty(
-          "--stream-progress",
-          (modelProgress.get(modelInfo.pref.key) || 0).toFixed(3)
-        );
         if (modelInfo.responseState) {
           chip.dataset.responseState = modelInfo.responseState;
         }
@@ -551,6 +498,9 @@
       }
     }
     updateAgentModeUI();
+    // Der Platzhalter im Composer verspricht ein Follow-up nur, solange es
+    // eines gibt (consensus-run.js, isArmed) — der Schalter entscheidet das.
+    window.App?.followup?.render?.();
     if (window.App.runRegistry?.visible?.()) {
       window.App.runRegistry.renderVisible();
     }
@@ -560,7 +510,6 @@
     if (status === "running") {
       if (agentModeStatus !== "running") {
         modelAnswersVisible = false;
-        resetModelProgress();
         // Ein neuer Lauf bringt neue Antworten: die Entscheidung, welche
         // davon ganz aufgeklappt war, gilt fuer die alten.
         document.querySelectorAll(".response-box[data-answer-open]")
@@ -568,17 +517,12 @@
       }
       agentModeStatusMessage = "";
       startAgentModeTimer();
-      if (isAgentModeEnabled()) startAgentProgressTicker();
     } else if (status === "complete" || status === "canceled" || status === "error") {
       stopAgentModeTimer();
-      applyModelProgress(); // fertige Modelle auf 100 % schnappen lassen
-      stopAgentProgressTicker();
     } else if (status === "idle") {
       modelAnswersVisible = false;
       agentModeStatusMessage = "";
       resetAgentModeTimer();
-      resetModelProgress();
-      stopAgentProgressTicker();
     }
     if (message) {
       agentModeStatusMessage = message;
@@ -602,10 +546,8 @@
   function projectAgentModeRun(context) {
     const switched = (projectedRunContext?.runId || null) !== (context?.runId || null);
     projectedRunContext = context || null;
-    stopAgentProgressTicker();
     window.clearInterval(agentModeTimerInterval);
     agentModeTimerInterval = null;
-    resetModelProgress();
 
     if (!context || context.config?.agentMode === false) {
       agentModeStatus = "idle";
@@ -634,25 +576,12 @@
       agentModeStatusMessage = "";
     }
 
-    (context.config.providers || []).forEach(function (provider) {
-      const result = context.modelResults?.[provider.provider] || {};
-      const textLength = String(result.text || result.streamText || "").trim().length;
-      let progress = 0;
-      if (["complete", "error"].includes(result.status)) progress = 1;
-      else if (result.status === "streaming") {
-        progress = Math.min(0.92, 0.12 + (1 - Math.exp(-textLength / 420)) * 0.8);
-      } else if (result.status === "reasoning") progress = 0.04;
-      modelProgress.set(provider.provider, progress);
-      modelStreamStartedAt.set(provider.provider, Number(context.startedAt || Date.now()));
-    });
-
     const startedAt = Number(context.startedAt || context.createdAt || Date.now());
     if (agentModeStatus === "running") {
       agentModeTimerStartedAt = startedAt;
       agentModeTimerElapsedMs = 0;
       updateAgentModeTimerDisplay();
       agentModeTimerInterval = window.setInterval(updateAgentModeTimerDisplay, 1000);
-      startAgentProgressTicker();
     } else {
       agentModeTimerStartedAt = null;
       agentModeTimerElapsedMs = Math.max(0, Number(context.finishedAt || Date.now()) - startedAt);
@@ -724,23 +653,8 @@
     return agentModeStatus === "running";
   };
 
-  // Der gefuehrte Lauf (consensus-progress.js) zeigt dieselben Modell-Balken
-  // ausserhalb des Agent Mode. Statt die Schaetzung zu duplizieren, liest er
-  // hier den bereits berechneten, monoton steigenden Fortschritt — indiziert
-  // nach Response-Box-ID, weil das die ID ist, die er ohnehin in der Hand hat.
   window.App = window.App || {};
   window.App.agentMode = {
-    streamProgressByResponseId() {
-      const out = {};
-      (window.App?.modelPrefs || []).forEach(pref => {
-        const next = computeModelProgress(pref);
-        const value = Math.max(modelProgress.get(pref.key) || 0, next);
-        modelProgress.set(pref.key, value);
-        out[pref.responseId] = value;
-      });
-      return out;
-    },
-    resetStreamProgress: resetModelProgress,
     // Claim- und Difference-Spruenge muessen ein verborgenes Ziel zuerst
     // idempotent aufdecken, ohne dafuer den Agent Mode umzuschalten.
     showModelAnswers() {
