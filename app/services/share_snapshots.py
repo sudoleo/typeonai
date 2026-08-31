@@ -437,6 +437,12 @@ def sanitize_differences_data(data):
             "agree": _sanitize_str_list(claim.get("agree"), 40, 12),
             "dissent": dissent,
         }
+        # Anzeigezustand des Coverage-Judges. Ohne ihn faellt ein duenn
+        # belegter Satz im geteilten Snapshot auf den Support-Zustand zurueck
+        # und behauptet mehr Rueckhalt, als der Lauf gemessen hat.
+        coverage_state = _clip(claim.get("coverage"), 20)
+        if coverage_state in {"supported", "split", "thin"}:
+            sanitized_claim["coverage"] = coverage_state
         sentence_id = claim.get("sentence_id")
         occurrence = claim.get("anchor_occurrence")
         if isinstance(sentence_id, int) and not isinstance(sentence_id, bool) and 1 <= sentence_id <= 80:

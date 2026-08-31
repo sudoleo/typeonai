@@ -1,5 +1,5 @@
 {
-  "sources": "2b935f453283",
+  "sources": "aa1dc575e35e",
   "inputs": [
     "package-lock.json",
     "scripts/build_frontend.mjs",
@@ -98,12 +98,12 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.9680346441c2.js",
+      "src": "/static/dist/app.c2c49655dd62.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.acdc312c3d86.css"
+    "app": "/static/dist/app.7f953d6ba65a.css"
   }
 }

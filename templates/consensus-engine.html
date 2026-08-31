@@ -17,7 +17,7 @@
   <meta name="twitter:description" content="A technical but readable explanation of how consens.io builds consensus and differences analysis.">
   <meta name="twitter:image" content="https://www.consens.io/static/favicon-square.png">
   <title>How the Consensus Engine Works | consens.io</title>
-<link rel="stylesheet" href="/static/css/landing.css?v=20260817-graycount1">
+<link rel="stylesheet" href="/static/css/landing.css?v=20260831-coverage1">
   <link rel="stylesheet" href="/static/css/consensus-engine.css?v=20260804-verdict3">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -62,7 +62,7 @@
             "name": "Why is there a separate judge model?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "A separate judge model checks the consensus for claims and differences. consens.io prefers a different model family than the one that wrote the consensus to reduce self-judging bias."
+              "text": "Two separate judges check the consensus. The Differences Judge finds the substantive disagreements; the Coverage Judge answers, for every single sentence, which models support, contradict, or never addressed it. Both prefer a different model family than the one that wrote the consensus, to reduce self-judging bias."
             }
           },
           {
@@ -70,7 +70,7 @@
             "name": "What does the Differences Engine produce?",
             "acceptedAnswer": {
               "@type": "Answer",
-              "text": "It produces structured data: central claims, which models agree or dissent, substantive differences, severity, verification hints, best matching model, agreement score, and judge metadata."
+              "text": "It produces structured data: one entry per checkable sentence with the models that support or contradict it, substantive differences, severity, verification hints, best matching model, agreement score, and judge metadata."
             }
           }
         ]
@@ -181,7 +181,11 @@
                 </li>
                 <li>
                   <b>Request strict JSON</b>
-                  <span>The judge returns claims, agreement and dissent, difference cards, severity, verification hints, and the closest source model.</span>
+                  <span>The Differences Judge returns difference cards with positions, severity, verification hints, and the closest source model.</span>
+                </li>
+                <li>
+                  <b>Cover every sentence in parallel</b>
+                  <span>A second, cheaper judge runs at the same time on the binding list of numbered sentences and must answer for each one: support, contradiction, or not addressed.</span>
                 </li>
                 <li>
                   <b>Verify and score</b>
@@ -211,8 +215,8 @@
           </article>
           <article class="ce-step" data-step="03">
             <span class="ce-step-number">03</span>
-            <h3>A separate judge checks the consensus.</h3>
-            <p>The Differences Judge extracts key claims, maps which models support or dissent, and preferably runs on a different model family than the synthesis engine.</p>
+            <h3>Two separate judges check the consensus.</h3>
+            <p>The Differences Judge works out the substantive disagreements. In parallel, the Coverage Judge goes through the numbered sentences and records, for each one, which models support it, contradict it, or never addressed it. Both preferably run on a different model family than the synthesis engine.</p>
           </article>
           <article class="ce-step" data-step="04">
             <span class="ce-step-number">04</span>
@@ -246,8 +250,8 @@
           </article>
           <article class="lp-card ce-role-card">
             <p class="lp-eyebrow">Analysis layer</p>
-            <h3>An independent Differences Judge</h3>
-            <p>This judge extracts claims and contradictions from the synthesis. For independence, consens.io prefers a different model family from the Consensus Engine.</p>
+            <h3>Two independent judges</h3>
+            <p>The Differences Judge works out the contradictions; the Coverage Judge belongs to the same pass but has one narrow job, and therefore runs on a cheaper model: a verdict for every sentence, with none allowed to be skipped. For independence, consens.io prefers a different model family from the Consensus Engine for both.</p>
           </article>
         </div>
       </div>
@@ -273,8 +277,8 @@
           </article>
           <article class="ce-diff-stage" data-step="02">
             <span class="ce-step-number">02</span>
-            <h3>The judge must return strict JSON.</h3>
-            <p>The prompt asks for central claims, agreeing models, dissenting quotes, difference cards, contradiction severity, verification hints, and the model closest to the consensus.</p>
+            <h3>Both judges must return strict JSON.</h3>
+            <p>The Differences Judge is asked for difference cards, contradiction severity, verification hints, and the model closest to the consensus. The Coverage Judge is asked for one entry per sentence id, with a stance for every model - and the server rejects a reply that leaves an id out, asking for the missing ones again.</p>
             <p class="ce-tech-note">Types: <code>contradiction</code> for incompatible facts or conclusions, <code>emphasis</code> for different focus or missing context.</p>
           </article>
           <article class="ce-diff-stage" data-step="03">
@@ -296,7 +300,7 @@
             <p class="lp-eyebrow">Structured payload</p>
             <h3>What comes out of the Differences Engine</h3>
             <div class="ce-schema-list">
-              <div><b>claims</b><span>Consensus anchors, agreeing models, dissenting model quotes.</span></div>
+              <div><b>claims</b><span>One entry per checkable sentence: the consensus anchor, the models that support it, the models that contradict it with their quotes, and how far it is covered at all.</span></div>
               <div><b>differences</b><span>Contradiction or emphasis entries with positions and verification hints, each with a <code>consensus_anchor</code>: the verbatim passage in the consensus answer that the disagreement is about.</span></div>
               <div><b>agreement</b><span>A 0-100 score computed from claim support and weighted disagreement penalties.</span></div>
               <div><b>judges</b><span>The provider, model, and tier that actually delivered the analysis.</span></div>
@@ -382,7 +386,7 @@
               <h3>Consensus Answer</h3>
               <p><strong>Most models agree on the main recommendation.</strong></p>
               <p><span class="cx-claim is-unanimous">The answer combines the repeated points and removes duplicated wording</span><button class="claim-badge" type="button" tabindex="-1" aria-label="All 6 models that address this agree"><span class="claim-ratio" aria-hidden="true">6/6</span></button> <span class="cx-claim is-minor" aria-label="The models differ on a detail here">How strong the underlying evidence is turns out to be the open question, because the sources rate the measurement quality differently.</span></p>
-              <p class="consensus-marker-legend">Marked passages are checked key claims. Unmarked text was not compared individually.</p>
+              <p class="consensus-marker-legend">Every checkable sentence was compared against each model: green means supported, amber means the models are split, red marks a contradiction, and grey means they differed only in detail &mdash; or that too few of them addressed the sentence at all. Models agreeing is not proof.</p>
               <details class="consensus-differences consensus-differences-panel" open>
                 <summary class="consensus-differences-summary">
                   <span class="consensus-differences-summary-label">See all differences</span>

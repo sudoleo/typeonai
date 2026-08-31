@@ -2,7 +2,7 @@
    Consensus Insights: Verdict-Header, Claim-Badges, Differences-Karten
    ========================================================================== */
 
-@import url('./components-consensus-visuals.css?v=20260817-graycount1');
+@import url('./components-consensus-visuals.css?v=20260831-coverage1');
 
 /* Karte, die ein Inline-Marker gerade geoeffnet hat: kurzer Wash in der
    Bernstein-Note des Markers, der von selbst verblasst. Bewusst kein Ring -
@@ -152,6 +152,18 @@
 
 .claim-popover-section + .claim-popover-section {
   margin-top: 10px;
+}
+
+/* Die Einordnung unter der Aufstellung: leise, aber immer da. Sie steht
+   abgesetzt hinter einer Haarlinie, damit sie als Fussnote der Karte gelesen
+   wird und nicht als weitere Modellzeile. */
+.claim-popover-note {
+  margin: 12px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light, var(--line));
+  color: var(--sidebar-text-muted, var(--ink-2));
+  font-size: var(--font-size-micro);
+  line-height: var(--line-height-snug, 1.4);
 }
 
 .claim-section-label {

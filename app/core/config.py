@@ -40,6 +40,10 @@ DEFAULT_LIMITS = {
     "pro_deep_search_max_tokens": 8192,
     "consensus_max_tokens": 8192,
     "differences_max_tokens": 8192,
+    # Der Coverage-Judge schreibt eine Zeile pro Konsens-Satz und Modell
+    # (bis zu 80 Saetze x 8 Familien). Das ist mehr Ausgabe als beim
+    # Differences-Judge, aber auf einem guenstigen Standard-Judge.
+    "coverage_max_tokens": 12288,
     # Serverseitige Eingabe-Caps fuer /consensus: Antworten/Frage kommen vom
     # Client und muessen begrenzt werden, bevor sie in den Engine-Prompt
     # fliessen (Kosten-/Abuse-Schutz). Grosszuegig gewaehlt, damit legitime
@@ -96,6 +100,7 @@ MAX_TOKENS = LIMITS["pro_max_tokens"]
 DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
 CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
 DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
+COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
 REASONING_EFFORT_FOR_DEEP = "low"
 GEMINI_MAX_TOKENS = MAX_TOKENS
 GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
@@ -1381,7 +1386,7 @@ def _coerce_limit(value, fallback: int) -> int:
 
 def _sync_limit_constants():
     global MAX_WORDS, DEEP_SEARCH_MAX_WORDS, MAX_TOKENS, DEEP_SEARCH_MAX_TOKENS
-    global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS
+    global CONSENSUS_MAX_TOKENS, DIFFERENCES_MAX_TOKENS, COVERAGE_MAX_TOKENS
     global GEMINI_MAX_TOKENS, GEMINI_DEEP_MAX_TOKENS
 
     MAX_WORDS = LIMITS["free_max_words"]
@@ -1390,6 +1395,7 @@ def _sync_limit_constants():
     DEEP_SEARCH_MAX_TOKENS = LIMITS["pro_deep_search_max_tokens"]
     CONSENSUS_MAX_TOKENS = LIMITS["consensus_max_tokens"]
     DIFFERENCES_MAX_TOKENS = LIMITS["differences_max_tokens"]
+    COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
     GEMINI_MAX_TOKENS = MAX_TOKENS
     GEMINI_DEEP_MAX_TOKENS = DEEP_SEARCH_MAX_TOKENS
 

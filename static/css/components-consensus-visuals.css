@@ -218,6 +218,21 @@
   color: var(--text-color);
 }
 
+/* Duenn belegte Aussage: bewusst noch leiser als die uebrigen Quoten. Sie
+   traegt keine Zahl, sondern einen Strich (siehe makeBadge) - das Badge muss
+   deshalb erkennbar bleiben, ohne Aufmerksamkeit von den Saetzen zu ziehen,
+   an denen wirklich etwas gemessen wurde. */
+.claim-badge.is-thin {
+  color: var(--ink-3, var(--ink-2));
+  opacity: 0.75;
+}
+
+.claim-badge.is-thin:hover,
+.claim-badge.is-thin:focus-visible,
+.claim-badge.is-thin.is-linked-hover {
+  opacity: 1;
+}
+
 .claim-ratio {
   pointer-events: none;
 }
@@ -242,6 +257,12 @@
   --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 24%, transparent);
   --cx-mark-note: color-mix(in srgb, var(--ink) 10%, transparent);
   --cx-mark-note-strong: color-mix(in srgb, var(--ink) 17%, transparent);
+  /* Die duenne Abdeckung ist die LEISESTE Marke von allen: gerade so viel
+     Grau, dass der Satz sich vom unmarkierten Text abhebt - nicht mehr. Wer
+     ueber eine Antwort liest, in der fast jeder Satz eine Marke traegt, soll
+     die gemessenen Saetze sehen und nicht die ungemessenen. */
+  --cx-mark-thin: color-mix(in srgb, var(--ink) 5%, transparent);
+  --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 11%, transparent);
   --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
   --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
   --cx-mark-major: color-mix(in srgb, var(--dispute) 20%, transparent);
@@ -255,6 +276,8 @@
   --cx-mark-agree-strong: color-mix(in srgb, var(--agree) 28%, transparent);
   --cx-mark-note: color-mix(in srgb, var(--ink) 12%, transparent);
   --cx-mark-note-strong: color-mix(in srgb, var(--ink) 19%, transparent);
+  --cx-mark-thin: color-mix(in srgb, var(--ink) 6%, transparent);
+  --cx-mark-thin-strong: color-mix(in srgb, var(--ink) 13%, transparent);
   --cx-mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
   --cx-mark-split-strong: color-mix(in srgb, var(--partial) 34%, transparent);
   --cx-mark-major: color-mix(in srgb, var(--dispute) 21%, transparent);
@@ -272,6 +295,7 @@
    Saetzen muss ein sichtbarer Rest des Wortzwischenraums frei bleiben, sonst
    laufen die Marken zu einem durchgehenden Farbband zusammen und der Absatz
    sieht aus wie eine Flaeche statt wie mehrere angestrichene Saetze. */
+.cx-claim.is-thin,
 .cx-claim.is-unanimous,
 .cx-claim.is-minor,
 .cx-claim.is-split,
@@ -284,6 +308,11 @@
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
   transition: background-color 0.14s ease;
+}
+
+.cx-claim.is-thin {
+  --cx-mark: var(--cx-mark-thin);
+  --cx-mark-strong: var(--cx-mark-thin-strong);
 }
 
 .cx-claim.is-unanimous {

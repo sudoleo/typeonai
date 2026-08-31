@@ -13,9 +13,11 @@ Fixture-Vertrag (wichtig fuer die Zitat-Verifikation in consensus_engine):
 - Alle Antworten ausser Grok enthalten SHARED_FACT woertlich; Grok enthaelt
   DISSENT_FACT. Quotes im Mock-Differences-JSON sind Substrings dieser Saetze,
   sonst leert _verify_differences_data sie.
-- Claims/Differences zeigen ueber die Satznummer ("s") in die Konsensantwort,
-  nicht ueber eine Abschrift. Die Nummern liest der Mock aus dem nummerierten
-  Konsenstext im Prompt (_mock_sentence_number).
+- Differences zeigen ueber die Satznummer ("s") in die Konsensantwort, der
+  Coverage-Judge ueber die Satz-ID ("s3"). Beide liest der Mock aus dem
+  nummerierten Konsenstext im Prompt (_mock_sentence_number).
+- Der Coverage-Mock deckt die verbindliche ID-Liste VOLLSTAENDIG ab; sonst
+  laeuft im Test die Nachforderung an, die es in der Fixture nicht gibt.
 """
 
 import json
@@ -95,8 +97,8 @@ def _mock_sentence_number(prompt: str, needle: str, default: int) -> int:
     return default
 
 
-def _build_mock_differences_json(prompt: str) -> str:
-    """Baut das Judge-JSON aus dem echten Differences-Prompt.
+def _mock_labels(prompt: str):
+    """(labels, dissentierendes Label) aus dem echten Prompt.
 
     Die Anonymisierung (Model A/B/...) wird pro Aufruf zufaellig gemischt;
     der Mock ermittelt das dissentierende Label daher aus dem Prompt selbst:
@@ -105,26 +107,56 @@ def _build_mock_differences_json(prompt: str) -> str:
     labeled = re.findall(r"^- (Model [A-Z]): (.*)$", prompt, flags=re.MULTILINE)
     labels = [label for label, _ in labeled]
     dissent_label = next((label for label, text in labeled if "1887" in text), None)
+    return labels, dissent_label
+
+
+def _build_mock_coverage_json(prompt: str) -> str:
+    """Baut das Coverage-JSON aus dem echten Coverage-Prompt.
+
+    Deckt die verbindliche ID-Liste vollstaendig ab - genau das prueft der
+    Server danach. Der dritte Konsens-Satz ("One model dates ...") wird
+    bewusst als `context_only` eingestuft: so laeuft im Test auch der Pfad
+    durch, auf dem ein Satz ausdruecklich KEINE Marke bekommt.
+    """
+    labels, dissent_label = _mock_labels(prompt)
+    _, _, listed = prompt.partition("Binding list of sentence ids (one entry each, in this order):")
+    ids = re.findall(r'"(s\d+)"', listed.split("\n\n", 1)[0])
+
+    disputed = f"s{_mock_sentence_number(prompt, '1889', 1)}"
+    meta = f"s{_mock_sentence_number(prompt, 'One model dates', 3)}"
+
+    sentences = []
+    for key in ids:
+        if key == meta:
+            sentences.append({
+                "id": key,
+                "classification": "context_only",
+                "models": {label: "not_addressed" for label in labels},
+                "counter_quotes": [],
+            })
+            continue
+        contradicts = key == disputed and bool(dissent_label)
+        sentences.append({
+            "id": key,
+            "classification": "claim",
+            "models": {
+                label: ("contradicts" if contradicts and label == dissent_label else "supports")
+                for label in labels
+            },
+            "counter_quotes": (
+                [{"model": dissent_label, "quote": "was completed in 1887"}]
+                if contradicts else []
+            ),
+        })
+    return json.dumps({"sentences": sentences})
+
+
+def _build_mock_differences_json(prompt: str) -> str:
+    """Baut das Judge-JSON aus dem echten Differences-Prompt."""
+    labels, dissent_label = _mock_labels(prompt)
     agree = [label for label in labels if label != dissent_label]
 
     disputed_sentence = _mock_sentence_number(prompt, "1889", 1)
-    unanimous_sentence = _mock_sentence_number(prompt, "330 metres", 2)
-
-    claims = [
-        {
-            "s": disputed_sentence,
-            "agree": agree or labels,
-            "dissent": (
-                [{"model": dissent_label, "quote": "was completed in 1887"}]
-                if dissent_label else []
-            ),
-        },
-        {
-            "s": unanimous_sentence,
-            "agree": agree or labels,
-            "dissent": [],
-        },
-    ]
 
     differences = []
     if dissent_label and agree:
@@ -143,7 +175,6 @@ def _build_mock_differences_json(prompt: str) -> str:
         })
 
     return json.dumps({
-        "claims": claims,
         "differences": differences,
         "best_model": (agree or labels)[0] if labels else "Model A",
     })
@@ -159,7 +190,9 @@ def _mock_engine_output(prompt: str, json_mode: bool) -> str:
                 "depends_on_previous_turn": True,
                 "resolved_question": "Mock resolved follow-up question.",
             })
-        if '"claims"' in prompt:
+        if '"counter_quotes"' in prompt:
+            return _build_mock_coverage_json(prompt)
+        if '"differences"' in prompt:
             return _build_mock_differences_json(prompt)
         # Fremder Structured-Output-Call (z. B. Resolve-Runde): neutrales,
         # schema-kompatibles Minimal-JSON statt Differences-Payload.

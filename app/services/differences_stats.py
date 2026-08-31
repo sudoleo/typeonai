@@ -95,10 +95,19 @@ def build_differences_stats_doc(
     for claim in differences_data.get("claims") or []:
         if not isinstance(claim, dict):
             continue
-        claims.append({
+        entry = {
             "agree": len(claim.get("agree") or []),
             "dissent": len(claim.get("dissent") or []),
-        })
+        }
+        # Seit dem Coverage-Judge ist ein Claim mit einer einzigen Stimme kein
+        # Ausreisser mehr, sondern ein sichtbarer Zustand. Ohne diese Spalte
+        # liesse sich in der Telemetrie nicht mehr trennen, ob die Abdeckung
+        # breit oder nur zahlreich war. Alt-Payloads ohne Coverage-Feld
+        # behalten die bisherige Zeilenform.
+        coverage = str(claim.get("coverage") or "")
+        if coverage:
+            entry["coverage"] = coverage
+        claims.append(entry)
 
     differences = []
     for diff in differences_data.get("differences") or []:

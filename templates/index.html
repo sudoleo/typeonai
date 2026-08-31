@@ -558,8 +558,15 @@
               <!-- Kernaussagen, deren Anker nicht im Text gefunden wurde -->
               <div id="consensusClaimsFallback" class="consensus-claims-fallback" hidden></div>
               <!-- Verhindert, dass fehlende Markierung als Bestaetigung gelesen wird -->
+              <!-- Seit dem Coverage-Judge (2026-08-31) traegt fast jeder
+                   pruefbare Satz eine Marke. Die Legende muss deshalb nicht
+                   mehr das Unmarkierte erklaeren, sondern die Farben - und
+                   vor allem, dass Zustimmung kein Wahrheitsbeweis ist. -->
               <p id="consensusMarkerLegend" class="consensus-marker-legend" hidden>
-                Marked passages are checked key claims. Unmarked text was not compared individually.
+                Every checkable sentence was compared against each model: green means supported,
+                amber means the models are split, red marks a contradiction, and grey means they
+                differed only in detail — or that too few of them addressed the sentence at all.
+                Models agreeing is not proof.
               </p>
               <!-- Beleg-Fuss: uebernimmt, wenn der Lauf sich ausblendet. Seit
                    2026-07-28 zwei Zeilen statt drei (Grid in shell.css):

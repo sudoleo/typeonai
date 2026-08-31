@@ -1645,8 +1645,11 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   Chat Completions. Strukturierte Aufgaben senden in Streaming- und
   Non-Streaming-Pfaden das jeweilige JSON-Schema als
   `response_format=json_schema` mit `strict=true`; der gemeinsame Parser
-  validiert danach weiterhin die Pflichtfelder `claims`, `differences` und
-  `best_model` und repariert begrenzt abgeschnittenes JSON.
+  validiert danach weiterhin die Pflichtfelder `differences` und
+  `best_model` und repariert begrenzt abgeschnittenes JSON. Die Belegliste
+  (`claims`) verlangt dieses Schema seit 2026-08-31 NICHT mehr: sie kommt aus
+  dem Coverage-Judge (siehe unten). Alt-Payloads mit `claims` laufen weiter
+  durch `_normalize_claims`.
   Judge-Policy (`_resolve_differences_engine`): die Judge-Familie ist immer
   eine ANDERE als die der gewählten Consensus-Engine (Self-Judging-Bias);
   die Stufe folgt der Engine — Standard-Engine → Standard-Judge
@@ -1666,6 +1669,25 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   JSON-Truncation-Repair aus `consensus_parsing.py`, serverseitige Anchor-/Quote-Verifikation gegen
   Konsens- bzw. Modellantworten (nicht belegbare Zitate werden geleert).
   Unparsbares JSON erreicht den Nutzer nie als Rohtext.
+- Coverage-Judge (`coverage_judge.py` + `consensus_engine._run_coverage_judge`,
+  seit 2026-08-31): belegt JEDEN nummerierten Konsens-Satz statt der "3-6
+  zentralen". Läuft PARALLEL zum Differences-Judge in einem eigenen Thread
+  (`_coverage_in_background`, Cancellation wird ausdrücklich mitgebunden), auf
+  einer Fremd-Familie in der STANDARD-Stufe — die Aufgabe ist kontrollierte
+  Klassifikation, kein Denken. Der Zwang gegen stilles Überspringen steckt in
+  drei Schichten: (a) das Structured-Output-Schema führt die Satz-IDs als Enum
+  und JEDES Modell-Label als Pflicht-Property von `models`; (b) der Prompt
+  enthält die verbindliche ID-Liste; (c) der Server vergleicht die Antwort
+  gegen diese Liste (`missing_sentence_ids`) und fordert Fehlende in GENAU
+  einem gezielten Repair-Call nach. Was danach offen bleibt, wird neutral als
+  `coverage: "thin"` gerendert statt weggelassen. Klassifikationen:
+  `claim` (wird markiert) / `not_a_claim` / `too_vague` / `context_only`;
+  Stances je Modell: `supports` / `contradicts` / `not_addressed` / `unclear`.
+  Ergebnis landet als `differences_data.claims` (unveränderte Feldform plus
+  `coverage`) und der Judge als `differences_data.judges.coverage`
+  ({provider, model, tier, attempts, duration_ms, sentences, covered,
+  repaired, missing}). Fällt der Coverage-Judge komplett aus, bleibt der Lauf
+  intakt und die Antwort einfach ohne Marken — besser als jeder Satz grau.
 - Agreement-Score (`consensus_scoring.py::compute_agreement_score`): 0-100 aus Claim-Zustimmungsquoten
   minus severity-gewichteter Widerspruchs-Penalty (major 0.25 / minor 0.10 /
   emphasis 0.05), mit Caps ("very" nur ohne Differenzen; 1 Major → max
@@ -1675,7 +1697,11 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   `severity` ("major"/"minor", Default major); Frontend zeigt Score im
   Verdict-Header; dessen Überschrift und Ampelfarbe folgen ausschließlich dem
   Score, während "critical"/"minor detail" und das betroffene Thema separat
-  den Widerspruchsstatus zeigen,
+  den Widerspruchsstatus zeigen. Claims mit weniger als
+  `MIN_SCORED_CLAIM_SUPPORT` (2) behandelnden Modellen gehen NICHT in den Score
+  ein (`scored_claims`/`thin_claims` weisen das aus): sie sind seit dem
+  Coverage-Judge sichtbar, aber eine einzelne Stimme belegt nichts. Dieselbe
+  Schwelle filtert sie aus der Opinion-Map (und damit aus dem Claim Ledger).
   alte Bookmarks/Snapshots ohne die Felder degradieren aufs bisherige Rendering.
 - Consensus-Fehlerpfad: `query/stream_consensus` versuchen es bei Provider-
   Fehlern (503, Timeout, ...) ein zweites Mal (`CONSENSUS_MAX_ATTEMPTS`);
@@ -2138,6 +2164,7 @@ app/services/llm/
   consensus_engine.py        query/stream_consensus + query/stream_differences, strukturierter Engine-Dispatch
   consensus_parsing.py       JSON-Extraktion und abgesicherte Truncation-Reparatur
   consensus_scoring.py       Deterministischer Agreement-Score und Schwellen
+  coverage_judge.py          Schema/Prompt/Parsing des Coverage-Judges (rein, ohne LLM-Call)
   resolve_engine.py          Resolve-Runde (run_resolve_round, normalize_resolve_positions)
   citations.py               Antwort-Parsing + Quellen (source_response, make_llm_result)
   attachments.py             Attachment-Validierung/Aufbereitung

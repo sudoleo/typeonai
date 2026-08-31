@@ -39,7 +39,8 @@ const limitGroups = [
         title: 'Consensus Limits',
         fields: [
             ['consensus_max_tokens', 'Consensus output tokens'],
-            ['differences_max_tokens', 'Differences output tokens']
+            ['differences_max_tokens', 'Differences output tokens'],
+            ['coverage_max_tokens', 'Coverage output tokens']
         ]
     },
     {

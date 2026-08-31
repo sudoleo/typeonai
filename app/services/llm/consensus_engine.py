@@ -6,6 +6,8 @@ import time
 import difflib
 import logging
 import random
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from typing import Mapping
 
 import requests
@@ -22,8 +24,10 @@ from app.services.llm.engines import (
 )
 from app.services.llm.consensus_scoring import (
     AGREEMENT_LEVEL_THRESHOLDS,
+    MIN_SCORED_CLAIM_SUPPORT,
     compute_agreement_score,
 )
+from app.services.llm import coverage_judge as coverage
 from app.services.llm.consensus_parsing import (
     close_open_json as _close_open_json,
     extract_json_object as _extract_json_object,
@@ -33,6 +37,8 @@ from app.services.llm.consensus_parsing import (
 from app.services.llm.mock_llm import mock_engine_stream, mock_engine_text, mock_llm_enabled
 from app.services.llm.provider_runtime import (
     PROVIDER_HTTP_TIMEOUT,
+    bind_provider_cancellation,
+    current_provider_cancellation,
     managed_provider_resource,
     raise_if_provider_cancelled,
 )
@@ -798,17 +804,34 @@ def _visible_sentence_key(value) -> str:
     return " ".join(text.translate(_VISIBLE_QUOTE_TRANSLATION).lower().split())
 
 
-def _build_differences_prompt(
+@dataclass(frozen=True)
+class _JudgeContext:
+    """Der gemeinsame Unterbau beider Judges.
+
+    Differences- und Coverage-Judge sehen DIESELBE Anonymisierung, dieselbe
+    Reihenfolge und dieselbe Satznummerierung - sonst zeigten ihre Labels und
+    Satz-IDs auf verschiedene Dinge und liessen sich hinterher nicht mehr zu
+    einem Ergebnis zusammenlegen. Deshalb wird der Kontext genau einmal gebaut
+    (inklusive des einmaligen Shuffles) und an beide Prompt-Bauer gereicht.
+    """
+
+    anon_map: dict          # "Model A" -> echter Modellname
+    answers_by_model: dict  # echter Modellname -> gekappter Antworttext
+    responses_text: str     # "- Model A: ..." Zeilen fuer den Prompt
+    labels: tuple           # ("Model A", "Model B", ...) in Prompt-Reihenfolge
+    numbered_answer: str    # Konsensantwort mit "[n] " vor jedem Satz
+    sentences: tuple        # sentences[n-1] = exakter Originalsatz zu "[n]"
+    resolved_question: str
+
+
+def _build_judge_context(
     answers: Mapping[str, str],
     consensus_answer: str,
     excluded_models: list = None,
     resolved_question: str = "",
-):
-    """Baut den Differences-Prompt. Gibt (prompt, anon_map, answers_by_model,
-    sentences) zurück oder None, wenn keine Modellantworten vorliegen.
-    answers_by_model enthält die (gekappten) Antworttexte je echtem Modellnamen
-    für die serverseitige Zitat-Verifikation, sentences die nummerierten Sätze
-    der Konsensantwort für die Auflösung der Claim-Anker."""
+) -> _JudgeContext | None:
+    """Anonymisierte Antworten + nummerierte Konsensantwort. None, wenn keine
+    Modellantwort vorliegt."""
 
     # Leere und explizit abgewählte Antworten filtern.
     model_answers = _model_answer_items(answers, excluded_models)
@@ -830,14 +853,29 @@ def _build_differences_prompt(
         labels.append(anon_label)
         lines.append(f"- {anon_label}: {answers_by_model[name]}")
 
-    responses_text = "\n".join(lines)
+    numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer)
+
+    return _JudgeContext(
+        anon_map=anon_map,
+        answers_by_model=answers_by_model,
+        responses_text="\n".join(lines),
+        labels=tuple(labels),
+        numbered_answer=numbered_answer,
+        sentences=tuple(sentences),
+        resolved_question=str(resolved_question or ""),
+    )
+
+
+def _build_differences_prompt_from(context: _JudgeContext) -> str:
+    labels = list(context.labels)
+    responses_text = context.responses_text
+    numbered_answer = context.numbered_answer
+    resolved_question = context.resolved_question
 
     if len(labels) > 1:
         allowed_list = ", ".join(labels[:-1]) + " or " + labels[-1]
     else:
         allowed_list = labels[0]
-
-    numbered_answer, sentences = _enumerate_consensus_sentences(consensus_answer)
 
     # Nur bei Folgefragen belegt. Der Judge sah die Frage bisher gar nicht und
     # bewertete deshalb Antworten auf verschiedene Lesarten derselben Frage als
@@ -853,19 +891,18 @@ def _build_differences_prompt(
         if resolved_question else ""
     )
 
-    differences_prompt = (
+    return (
         f"{question_preamble}"
         "You compare several anonymized model responses against a consensus answer.\n"
+        "Your ONLY job is the substantive disagreement between the responses. A separate pass "
+        "records which sentences each model supports, so do not produce a support list here — "
+        "spend the whole budget on getting the disagreements and their quotes right.\n"
         "Every sentence of the consensus answer that can carry a checkable statement is prefixed "
         "with its number in square brackets, for example \"[7] \". You refer to those sentences by "
         "number only — never copy their wording.\n"
         "Respond with ONLY one JSON object. No prose before or after it, no markdown fences.\n\n"
         "JSON schema:\n"
         "{\n"
-        # "differences" steht BEWUSST vor "claims": wird die Ausgabe am
-        # Token-Limit abgeschnitten, verliert man dann die redundantere
-        # Haelfte. Die Widersprueche sind der Kern der Analyse und muessen
-        # zuerst dastehen - auch in der Reihenfolge, in der das Modell schreibt.
         '  "differences": [\n'
         "    {\n"
         '      "claim": "the disputed point in one short sentence",\n'
@@ -878,20 +915,13 @@ def _build_differences_prompt(
         '      "verify": "one short sentence saying what exactly the user should double-check"\n'
         "    }\n"
         "  ],\n"
-        '  "claims": [\n'
-        "    {\n"
-        '      "s": 7,\n'
-        '      "agree": ["Model A"],\n'
-        '      "dissent": [{"model": "Model B", "quote": "verbatim short quote from that model\'s response"}]\n'
-        "    }\n"
-        "  ],\n"
         '  "best_model": "Model A"\n'
         "}\n\n"
         "Rules:\n"
         "- \"s\": the bracketed number in front of a sentence of the consensus answer. Use only numbers that "
         "actually appear there; never invent one.\n"
-        "- \"differences\": substantive disagreements between the model responses. Fill this list FIRST, before "
-        "the claims. Use an empty list if there are none. "
+        "- \"differences\": substantive disagreements between the model responses. Use an empty list if there "
+        "are none. "
         "\"type\" is \"contradiction\" when facts or conclusions are incompatible, and \"emphasis\" when models merely "
         "set different focus, omit something, or weight things differently. Be conservative: only incompatible "
         "statements count as a contradiction. \"verify\" is optional.\n"
@@ -900,16 +930,8 @@ def _build_differences_prompt(
         "that leaves the conclusion intact. Omit it for \"emphasis\" differences.\n"
         "- \"s\" inside a difference: the number of the consensus sentence that states the disputed point, so the "
         "reader can see it marked in place. Use 0 if the consensus answer does not state it at all.\n"
-        f"- \"claims\": AFTER the differences, go through the numbered sentences in order and cover EVERY sentence "
-        f"that states something checkable — a fact, a number, a causal statement, a recommendation, a conclusion, "
-        f"or a limitation. Skip a sentence only when it merely introduces, transitions, summarizes the answer "
-        f"itself, or defines a term without asserting anything. Do not restrict yourself to the most important "
-        f"ones; at most {MAX_DIFF_CLAIMS} entries, one per sentence. For each, list under \"agree\" every model "
-        "whose response supports the statement and under \"dissent\" every model whose response contradicts or "
-        "clearly deviates from it, with a short verbatim quote. A model that does not address the sentence appears "
-        "in neither list. Leave the sentence out entirely when fewer than two models address it — a single voice "
-        "is not evidence. Claims never replace a difference: a sentence you listed as disputed above still gets "
-        "its claim entry here.\n"
+        "- Report every distinct disagreement you find, not just the most obvious one, and give each its own "
+        "entry with one position per side.\n"
         "- Quotes must be copied verbatim from the model responses. You may shorten them at the start or end, "
         "but never paraphrase. Keep each quote under 200 characters.\n"
         f"- Use only these model labels: {allowed_list}. Never invent other labels.\n"
@@ -921,7 +943,29 @@ def _build_differences_prompt(
         "Model responses:\n" + responses_text + "\n"
     )
 
-    return differences_prompt, anon_map, answers_by_model, sentences
+
+def _build_differences_prompt(
+    answers: Mapping[str, str],
+    consensus_answer: str,
+    excluded_models: list = None,
+    resolved_question: str = "",
+):
+    """Baut den Differences-Prompt. Gibt (prompt, anon_map, answers_by_model,
+    sentences) zurück oder None, wenn keine Modellantworten vorliegen.
+    answers_by_model enthält die (gekappten) Antworttexte je echtem Modellnamen
+    für die serverseitige Zitat-Verifikation, sentences die nummerierten Sätze
+    der Konsensantwort für die Auflösung der Anker."""
+    context = _build_judge_context(
+        answers, consensus_answer, excluded_models, resolved_question
+    )
+    if context is None:
+        return None
+    return (
+        _build_differences_prompt_from(context),
+        context.anon_map,
+        context.answers_by_model,
+        list(context.sentences),
+    )
 
 
 # Seit dem Satz-Index kostet ein Claim nur noch eine Zahl statt einer
@@ -1196,10 +1240,8 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str):
     return None
 
 
-def _verify_differences_data(data: dict, consensus_answer: str, model_answers: dict) -> None:
-    """Ersetzt gefundene Anchors/Quotes durch den Originaltext (hilft dem
-    Frontend-Matching) und leert Quotes, die in der jeweiligen Modellantwort
-    nicht auffindbar sind - halluzinierte Zitate werden so nie angezeigt."""
+def _span_finder():
+    """Wiederverwendbare Zitatsuche mit Normalisierungs-Cache je Text."""
     prepared = {}
 
     def _find(key: str, text: str, needle: str):
@@ -1211,14 +1253,25 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
         norm, offsets = prepared[key]
         return _locate_span(text, norm, offsets, needle)
 
+    return _find
+
+
+def _verify_claims(claims: list, consensus_answer: str, model_answers: dict, _find=None) -> None:
+    """Anchors gegen die Konsensantwort, Dissens-Zitate gegen die jeweilige
+    Modellantwort. Ein Zitat, das dort nicht auffindbar ist, wird geleert -
+    halluzinierte Zitate erreichen die Oberflaeche nie.
+
+    Laeuft fuer Claims aus BEIDEN Quellen: dem Coverage-Judge (Regelfall) und
+    aelteren Differences-Payloads."""
+    _find = _find or _span_finder()
     consensus_text = str(consensus_answer or "")
-    for claim in data.get("claims") or []:
+    for claim in claims or []:
         span = _find("__consensus__", consensus_text, claim.get("anchor"))
         if span:
             claim["anchor"] = _clip(span, MAX_DIFF_TEXT_CHARS)
         else:
             logging.info(
-                "Differences anchor not found in consensus answer anchor_chars=%d",
+                "Claim anchor not found in consensus answer anchor_chars=%d",
                 len(str(claim.get("anchor") or "")),
             )
         for item in claim.get("dissent") or []:
@@ -1233,6 +1286,15 @@ def _verify_differences_data(data: dict, consensus_answer: str, model_answers: d
                     item["model"], len(str(item.get("quote") or "")),
                 )
                 item["quote"] = ""
+
+
+def _verify_differences_data(data: dict, consensus_answer: str, model_answers: dict) -> None:
+    """Ersetzt gefundene Anchors/Quotes durch den Originaltext (hilft dem
+    Frontend-Matching) und leert Quotes, die in der jeweiligen Modellantwort
+    nicht auffindbar sind - halluzinierte Zitate werden so nie angezeigt."""
+    _find = _span_finder()
+    consensus_text = str(consensus_answer or "")
+    _verify_claims(data.get("claims") or [], consensus_text, model_answers, _find)
 
     for diff in data.get("differences") or []:
         # Der Widerspruchs-Anker zeigt in die KONSENSANTWORT (nicht in eine
@@ -1288,12 +1350,13 @@ def parse_differences_payload(
     if sentences is None and consensus_answer:
         sentences = _enumerate_consensus_sentences(consensus_answer)[1]
     parsed, was_repaired = _extract_json_object(raw, with_repair_flag=True)
-    if parsed is None or not (
-        isinstance(parsed.get("claims"), list) and isinstance(parsed.get("differences"), list)
-    ):
+    if parsed is None or not isinstance(parsed.get("differences"), list):
         # Auch reparierte, aber strukturell unvollständige Objekte (z. B. ohne
         # "differences"-Liste) gelten als unparsbar: fehlende Widersprüche
-        # dürfen nicht als "keine Widersprüche" durchgehen.
+        # dürfen nicht als "keine Widersprüche" durchgehen. "claims" wird hier
+        # NICHT mehr verlangt: die Belegliste liefert seit 2026-08-31 der
+        # Coverage-Judge. Gespeicherte Alt-Payloads und Judges, die sie
+        # trotzdem mitschicken, laufen weiter durch _normalize_claims.
         text = str(raw or "").strip()
         if _looks_like_json(text):
             return None, ""
@@ -1383,11 +1446,14 @@ DIFFERENCES_RETRY_SUFFIX = (
     "matching the schema above. No prose, no markdown fences, no trailing text."
 )
 
-# Feldreihenfolge ist Absicht: "differences" steht vor "claims", damit bei
-# einem gerissenen Token-Budget eher die redundantere Claim-Liste als die
-# Widersprueche fehlt. Alle Modellfamilien erhalten denselben OpenRouter-
-# Structured-Output-Vertrag; dieses Schema wird danach zusätzlich serverseitig
-# validiert.
+# Seit 2026-08-31 OHNE "claims": die vollstaendige Belegliste ist ein eigener
+# Call (coverage_judge). Sie stand hier zwar an zweiter Stelle, damit ein
+# gerissenes Token-Budget eher sie als die Widersprueche traf - aber genau das
+# war das Problem: die redundantere Haelfte war es eben NICHT, sie ist der Kern
+# des Produkts, und sie kam regelmaessig verkuerzt oder gar nicht an. Ohne sie
+# geht das ganze Budget dieses Calls in die Widersprueche.
+# Alle Modellfamilien erhalten denselben OpenRouter-Structured-Output-Vertrag;
+# dieses Schema wird danach zusätzlich serverseitig validiert.
 DIFFERENCES_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -1423,35 +1489,9 @@ DIFFERENCES_JSON_SCHEMA = {
                 "additionalProperties": False,
             },
         },
-        "claims": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    # Nummer des Konsens-Satzes, auf den sich der Claim bezieht
-                    # (siehe _enumerate_consensus_sentences).
-                    "s": {"type": "integer"},
-                    "agree": {"type": "array", "items": {"type": "string"}},
-                    "dissent": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "model": {"type": "string"},
-                                "quote": {"type": "string"},
-                            },
-                            "required": ["model", "quote"],
-                            "additionalProperties": False,
-                        },
-                    },
-                },
-                "required": ["s", "agree", "dissent"],
-                "additionalProperties": False,
-            },
-        },
         "best_model": {"type": "string"},
     },
-    "required": ["differences", "claims", "best_model"],
+    "required": ["differences", "best_model"],
     "additionalProperties": False,
 }
 
@@ -1636,6 +1676,275 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
     return "low"
 
 
+# ---------------------------------------------------------------------------
+# Coverage-Judge: die vollstaendige Belegliste als EIGENER Call.
+#
+# Er laeuft parallel zum Differences-Judge (beide brauchen nur die fertige,
+# nummerierte Konsensantwort), kostet also kaum Wartezeit. Bewusst immer auf
+# der STANDARD-Stufe: die Aufgabe ist kontrollierte Klassifikation nach
+# festem Schema, kein Denken - das teure Pro-Modell bleibt dem Differences-
+# Judge vorbehalten, bei dem die inhaltliche Arbeit liegt.
+# ---------------------------------------------------------------------------
+
+COVERAGE_TEMPERATURE = 0.0
+# Ein Satz pro Konsens-Satz; mehr kann die Zerlegung gar nicht liefern.
+MAX_COVERAGE_CLAIMS = MAX_CONSENSUS_SENTENCES
+
+
+def _coverage_attempts(differences_model: str, api_keys: dict):
+    """Attempt-Plan des Coverage-Judges: Fremd-Familie, Standard-Stufe.
+
+    Einträge sind ((provider, api_model, model_ref), is_retry). Fail-open wie
+    beim Differences-Judge: ohne Fremd-Key bleibt der eigene Standard-Judge."""
+    resolved = _resolve_engine(differences_model)
+    if resolved is None:
+        return None
+    consensus_provider = resolved[0]
+    families = _judge_families(consensus_provider, api_keys, count=2)
+    if not families:
+        engine = _standard_judge_engine(consensus_provider)
+        return [(engine, False), (engine, True)]
+    primary = _standard_judge_engine(families[0])
+    attempts = [(primary, False), (primary, True)]
+    if len(families) > 1:
+        attempts.append((_standard_judge_engine(families[1]), True))
+    return attempts
+
+
+def _call_coverage_engine(engine, api_keys, prompt, schema, is_retry):
+    provider, api_model, model_ref = engine
+    return _call_engine_text(
+        provider, api_model, model_ref, api_keys,
+        system=coverage.COVERAGE_SYSTEM_PROMPT,
+        prompt=prompt + (coverage.COVERAGE_RETRY_SUFFIX if is_retry else ""),
+        max_tokens=cfg.COVERAGE_MAX_TOKENS,
+        temperature=COVERAGE_TEMPERATURE,
+        json_mode=True,
+        effort=_judge_effort(provider, api_model, "standard"),
+        json_schema=schema,
+    )
+
+
+def _repair_coverage(engine, api_keys, context, missing: list) -> dict:
+    """Gezielte Nachforderung der IDs, die im ersten Durchgang fehlten.
+
+    Genau EIN zusaetzlicher Call: was danach noch fehlt, wird neutral
+    behandelt (graue Marke) statt auf Verdacht ein drittes Mal angefragt."""
+    ids = list(missing)[:coverage.MAX_COVERAGE_REPAIR_IDS]
+    if not ids:
+        return {}
+    labels = list(context.labels)
+    prompt = coverage.build_coverage_prompt(
+        labels=labels,
+        responses_text=context.responses_text,
+        numbered_answer=context.numbered_answer,
+        ids=ids,
+        resolved_question=context.resolved_question,
+        missing_only=True,
+    )
+    try:
+        raw = _call_coverage_engine(
+            engine, api_keys, prompt,
+            coverage.build_coverage_schema(labels, ids),
+            is_retry=False,
+        )
+    except Exception as exc:
+        logging.warning("Coverage repair call failed category=%s", safe_exception(exc))
+        return {}
+    return coverage.parse_coverage_payload(raw, labels, ids) or {}
+
+
+def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_model: str):
+    """Belegt jeden nummerierten Satz. Gibt (coverage | None, meta | None).
+
+    None heisst: der Coverage-Judge hat gar nichts geliefert. Dann bleibt es
+    bei dem, was der Differences-Judge an Claims mitgebracht hat (in der Regel
+    nichts) - eine Antwort ohne Marken ist ehrlicher als eine, in der jeder
+    Satz grau als "unbelegt" dasteht, weil ein Provider ausgefallen ist."""
+    ids = coverage.sentence_ids(context.sentences)
+    if not ids:
+        return None, None
+    attempts = _coverage_attempts(differences_model, api_keys)
+    if not attempts:
+        return None, None
+
+    labels = list(context.labels)
+    schema = coverage.build_coverage_schema(labels, ids)
+    prompt = coverage.build_coverage_prompt(
+        labels=labels,
+        responses_text=context.responses_text,
+        numbered_answer=context.numbered_answer,
+        ids=ids,
+        resolved_question=context.resolved_question,
+    )
+
+    skip_retries_for = set()
+    executed = 0
+    for engine, is_retry in attempts:
+        provider, api_model, _model_ref = engine
+        attempt_key = (provider, api_model)
+        if is_retry and attempt_key in skip_retries_for:
+            continue
+        executed += 1
+        started = time.monotonic()
+        try:
+            raw = _call_coverage_engine(engine, api_keys, prompt, schema, is_retry)
+        except Exception as exc:
+            if not _provider_error_is_retryable(exc):
+                skip_retries_for.add(attempt_key)
+            logging.warning(
+                "Coverage attempt failed attempt=%d provider=%s model=%s "
+                "duration_ms=%d category=%s",
+                executed, provider, api_model,
+                int((time.monotonic() - started) * 1000), safe_exception(exc),
+            )
+            continue
+        duration_ms = int((time.monotonic() - started) * 1000)
+        parsed = coverage.parse_coverage_payload(raw, labels, ids)
+        if not parsed:
+            logging.warning(
+                "Coverage output unparsable on %s/%s (attempt %d, %d ms)",
+                provider, api_model, executed, duration_ms,
+            )
+            continue
+
+        missing = coverage.missing_sentence_ids(parsed, ids)
+        repaired = 0
+        if missing:
+            logging.info(
+                "Coverage judge skipped %d of %d sentences; requesting them again",
+                len(missing), len(ids),
+            )
+            fixes = _repair_coverage(engine, api_keys, context, missing)
+            repaired = len(fixes)
+            parsed.update(fixes)
+            missing = coverage.missing_sentence_ids(parsed, ids)
+
+        meta = _judge_metadata(
+            provider, api_model, "standard",
+            attempts=executed, duration_ms=duration_ms,
+        )
+        meta.update({
+            "sentences": len(ids),
+            "covered": len(parsed),
+            "repaired": repaired,
+            "missing": len(missing),
+        })
+        return parsed, meta
+
+    logging.warning("Coverage judge produced no usable result for this run.")
+    return None, None
+
+
+def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
+    """Coverage-Votum -> Claim-Eintraege in der bestehenden Payload-Form.
+
+    Die Form bleibt bewusst identisch zu den frueheren Judge-Claims (anchor,
+    agree, dissent, sentence_id, anchor_occurrence), damit Frontend, Snapshot,
+    Opinion-Map und Score unveraendert weiterlaufen. Neu ist nur "coverage":
+    der Anzeigezustand, der eine duenn belegte Aussage sichtbar macht, statt
+    sie - wie bisher - fallen zu lassen."""
+    sentences = list(context.sentences)
+    anon_map = context.anon_map
+    claims = []
+    for number in range(1, len(sentences) + 1):
+        key = coverage.sentence_id(number)
+        entry = coverage_result.get(key)
+        if entry is not None and entry.get("classification") != "claim":
+            # Ausdruecklich als Nicht-Aussage eingestuft: kein Marker. Das ist
+            # der EINZIGE legitime Weg, einen Satz zu ueberspringen - und er
+            # ist eine Entscheidung, kein Verschwinden.
+            continue
+
+        anchor, sentence_id, occurrence = _sentence_reference(number, sentences)
+        if not anchor:
+            continue
+
+        agree, dissent = [], []
+        stances = (entry or {}).get("models") or {}
+        quotes = (entry or {}).get("quotes") or {}
+        for label in context.labels:
+            real = anon_map.get(label)
+            if not real:
+                continue
+            stance = stances.get(label)
+            if stance in coverage.SUPPORTING_STANCES:
+                agree.append(real)
+            elif stance in coverage.OPPOSING_STANCES:
+                dissent.append({"model": real, "quote": _clip(
+                    quotes.get(label), MAX_DIFF_QUOTE_CHARS
+                )})
+
+        claim = {
+            "anchor": anchor,
+            "agree": agree,
+            "dissent": dissent,
+            "coverage": coverage.coverage_state(
+                len(agree), len(dissent), MIN_SCORED_CLAIM_SUPPORT
+            ),
+        }
+        if sentence_id is not None:
+            claim["sentence_id"] = sentence_id
+            claim["anchor_occurrence"] = occurrence
+        claims.append(claim)
+        if len(claims) >= MAX_COVERAGE_CLAIMS:
+            break
+    return claims
+
+
+def _apply_coverage(data: dict, coverage_result, coverage_meta, context, consensus_answer: str):
+    """Legt das Coverage-Ergebnis in die Differences-Payload und rechnet den
+    Agreement-Score neu. Gibt den neuen Legacy-Freitext zurueck (der
+    Credibility-Satz haengt am Score) oder None, wenn nichts zu tun war."""
+    if not coverage_result:
+        return None
+    claims = _coverage_claims(coverage_result, context)
+    if not claims:
+        return None
+    _verify_claims(claims, consensus_answer, context.answers_by_model)
+    data["claims"] = claims
+    data["agreement"] = compute_agreement_score(data)
+    if coverage_meta:
+        judges = data.setdefault("judges", {})
+        judges["coverage"] = coverage_meta
+    return _legacy_differences_text(data)
+
+
+def _coverage_in_background(context, api_keys, differences_model):
+    """Startet den Coverage-Judge im Nebenläufer und gibt (pool, future).
+
+    Der Aufrufer muss ``pool.shutdown()`` sicherstellen. Die
+    Cancellation-Bindung ist thread-lokal und wird deshalb ausdruecklich in den
+    Worker uebertragen: sonst telefoniert der Coverage-Call noch munter weiter,
+    nachdem der Nutzer den Lauf abgebrochen hat."""
+    cancellation = current_provider_cancellation()
+
+    def _work():
+        if cancellation is None:
+            return _run_coverage_judge(context, api_keys, differences_model)
+        with bind_provider_cancellation(cancellation):
+            return _run_coverage_judge(context, api_keys, differences_model)
+
+    pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="coverage-judge")
+    try:
+        return pool, pool.submit(_work)
+    except Exception:
+        pool.shutdown(wait=False)
+        raise
+
+
+def _collect_coverage(pool, future):
+    """Ergebnis des Nebenläufers einsammeln; ein Fehler dort darf den Lauf
+    niemals kippen."""
+    try:
+        return future.result()
+    except Exception as exc:
+        logging.warning("Coverage judge thread failed category=%s", safe_exception(exc))
+        return None, None
+    finally:
+        pool.shutdown(wait=False)
+
+
 def query_differences(
     answers: Mapping[str, str],
     consensus_answer: str,
@@ -1650,85 +1959,103 @@ def query_differences(
     Läuft mit Structured Output, JSON-Repair, einem Retry und Fallback-Judge;
     der Judge ist immer eine andere Modellfamilie als die Consensus-Engine
     (siehe _resolve_differences_engine) und wird in data["judges"] ausgewiesen.
+    Parallel dazu belegt der Coverage-Judge jeden Satz der Konsensantwort.
     Gibt (legacy_text, structured_data | None) zurück.
     """
-    built = _build_differences_prompt(
-        answers,
-        consensus_answer,
-        excluded_models=excluded_models,
-        resolved_question=resolved_question,
+    context = _build_judge_context(
+        answers, consensus_answer, excluded_models, resolved_question
     )
-    if built is None:
+    if context is None:
         return "Error in comparison: no model responses available.", None
 
-    differences_prompt, anon_map, answers_by_model, sentences = built
+    differences_prompt = _build_differences_prompt_from(context)
+    anon_map = context.anon_map
+    answers_by_model = context.answers_by_model
+    sentences = list(context.sentences)
 
     attempts = _differences_attempts(differences_model, api_keys)
     if attempts is None:
         return "Invalid model selected for difference comparison.", None
 
-    prose_fallback = None
-    last_error = "empty result from differences engine."
-    skip_retries_for = set()
-    executed_attempts = 0
-    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
-        attempt_key = (provider, api_model, judge_tier)
-        if is_retry and attempt_key in skip_retries_for:
-            continue
-        executed_attempts += 1
-        attempt_no = executed_attempts
-        attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
-        attempt_started = time.monotonic()
-        try:
-            raw = _call_engine_text(
-                provider, api_model, model_ref, api_keys,
-                system=DIFFERENCES_SYSTEM_PROMPT,
-                prompt=attempt_prompt,
-                max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                temperature=DIFFERENCES_TEMPERATURE,
-                json_mode=True,
-                effort=_judge_effort(provider, api_model, judge_tier),
-                json_schema=DIFFERENCES_JSON_SCHEMA,
+    coverage_pool, coverage_future = _coverage_in_background(
+        context, api_keys, differences_model
+    )
+    try:
+        prose_fallback = None
+        last_error = "empty result from differences engine."
+        skip_retries_for = set()
+        executed_attempts = 0
+        for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+            attempt_key = (provider, api_model, judge_tier)
+            if is_retry and attempt_key in skip_retries_for:
+                continue
+            executed_attempts += 1
+            attempt_no = executed_attempts
+            attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+            attempt_started = time.monotonic()
+            try:
+                raw = _call_engine_text(
+                    provider, api_model, model_ref, api_keys,
+                    system=DIFFERENCES_SYSTEM_PROMPT,
+                    prompt=attempt_prompt,
+                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                    temperature=DIFFERENCES_TEMPERATURE,
+                    json_mode=True,
+                    effort=_judge_effort(provider, api_model, judge_tier),
+                    json_schema=DIFFERENCES_JSON_SCHEMA,
+                )
+            except Exception as e:
+                last_error = "provider request failed."
+                if not _provider_error_is_retryable(e):
+                    skip_retries_for.add(attempt_key)
+                logging.warning(
+                    "Differences attempt failed attempt=%d provider=%s model=%s "
+                    "duration_ms=%d category=%s",
+                    attempt_no, provider, api_model,
+                    int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
+                )
+                continue
+            duration_ms = int((time.monotonic() - attempt_started) * 1000)
+            if not raw:
+                last_error = "empty result from differences engine."
+                continue
+
+            data, legacy_text = parse_differences_payload(
+                raw, anon_map,
+                consensus_answer=consensus_answer,
+                model_answers=answers_by_model,
+                sentences=sentences,
             )
-        except Exception as e:
-            last_error = "provider request failed."
-            if not _provider_error_is_retryable(e):
-                skip_retries_for.add(attempt_key)
+            if data is not None:
+                data["judges"] = {"differences": _judge_metadata(
+                    provider, api_model, judge_tier,
+                    attempts=attempt_no, duration_ms=duration_ms,
+                )}
+                coverage_result, coverage_meta = _collect_coverage(
+                    coverage_pool, coverage_future
+                )
+                covered_text = _apply_coverage(
+                    data, coverage_result, coverage_meta, context, consensus_answer
+                )
+                return covered_text or legacy_text, data
+            if prose_fallback is None and legacy_text and not _looks_like_json(raw):
+                prose_fallback = legacy_text
+            last_error = "unparsable output from differences engine."
             logging.warning(
-                "Differences attempt failed attempt=%d provider=%s model=%s "
-                "duration_ms=%d category=%s",
-                attempt_no, provider, api_model,
-                int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
+                f"Differences output unparsable on {provider}/{api_model} "
+                f"(attempt {attempt_no}, {duration_ms} ms)"
             )
-            continue
-        duration_ms = int((time.monotonic() - attempt_started) * 1000)
-        if not raw:
-            last_error = "empty result from differences engine."
-            continue
 
-        data, legacy_text = parse_differences_payload(
-            raw, anon_map,
-            consensus_answer=consensus_answer,
-            model_answers=answers_by_model,
-            sentences=sentences,
-        )
-        if data is not None:
-            data["judges"] = {"differences": _judge_metadata(
-                provider, api_model, judge_tier,
-                attempts=attempt_no, duration_ms=duration_ms,
-            )}
-            return legacy_text, data
-        if prose_fallback is None and legacy_text and not _looks_like_json(raw):
-            prose_fallback = legacy_text
-        last_error = "unparsable output from differences engine."
-        logging.warning(
-            f"Differences output unparsable on {provider}/{api_model} "
-            f"(attempt {attempt_no}, {duration_ms} ms)"
-        )
-
-    if prose_fallback:
-        return prose_fallback, None
-    return f"Error in comparison: {last_error}", None
+        # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
+        # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
+        _collect_coverage(coverage_pool, coverage_future)
+        if prose_fallback:
+            return prose_fallback, None
+        return f"Error in comparison: {last_error}", None
+    finally:
+        # Auch bei einem Abbruch mitten in der Attempt-Schleife darf der
+        # Nebenlaeufer-Thread nicht verwaisen.
+        coverage_pool.shutdown(wait=False)
 
 
 def query_consensus_change(old_consensus: str, new_consensus: str, api_keys: dict,
@@ -1974,97 +2301,118 @@ def stream_differences(
     excluded_models: list = None,
     resolved_question: str = "",
 ):
-    built = _build_differences_prompt(
-        answers,
-        consensus_answer,
-        excluded_models=excluded_models,
-        resolved_question=resolved_question,
+    context = _build_judge_context(
+        answers, consensus_answer, excluded_models, resolved_question
     )
-    if built is None:
+    if context is None:
         yield {"type": "final", "text": "Error in comparison: no model responses available.", "data": None}
         return
 
-    differences_prompt, anon_map, answers_by_model, sentences = built
+    differences_prompt = _build_differences_prompt_from(context)
+    anon_map = context.anon_map
+    answers_by_model = context.answers_by_model
+    sentences = list(context.sentences)
 
     attempts = _differences_attempts(differences_model, api_keys)
     if attempts is None:
         yield {"type": "final", "text": "Invalid model selected for difference comparison.", "data": None}
         return
 
-    prose_fallback = None
-    last_error = "empty result from differences engine."
-    skip_retries_for = set()
-    executed_attempts = 0
-    for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
-        attempt_key = (provider, api_model, judge_tier)
-        if is_retry and attempt_key in skip_retries_for:
-            continue
-        executed_attempts += 1
-        attempt_no = executed_attempts
-        attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
-        attempt_started = time.monotonic()
-        parts = []
-        try:
-            for event in _stream_engine_text(
-                provider, api_model, model_ref, api_keys,
-                system=DIFFERENCES_SYSTEM_PROMPT,
-                prompt=attempt_prompt,
-                max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
-                temperature=DIFFERENCES_TEMPERATURE,
-                json_mode=True,
-                effort=_judge_effort(provider, api_model, judge_tier),
-                json_schema=DIFFERENCES_JSON_SCHEMA,
-            ):
-                if event.get("type") == "reasoning":
-                    # Marker, solange der Judge noch denkt: hält die
-                    # SSE-Verbindung aktiv und speist den Frontend-Indikator.
-                    yield {"type": "reasoning"}
-                    continue
-                text = event.get("text") or ""
-                parts.append(text)
-                # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
-                # nur die SSE-Verbindung aktiv (auch während der Retries).
-                yield {"type": "delta", "text": text}
-        except Exception as e:
-            last_error = "provider request failed."
-            if not _provider_error_is_retryable(e):
-                skip_retries_for.add(attempt_key)
-            logging.warning(
-                "Differences stream attempt failed attempt=%d provider=%s model=%s "
-                "duration_ms=%d category=%s",
-                attempt_no, provider, api_model,
-                int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
+    # Beide Judges brauchen nur die fertige, nummerierte Konsensantwort. Der
+    # Coverage-Call laeuft deshalb neben dem gestreamten Differences-Call und
+    # kostet den Nutzer fast keine zusaetzliche Wartezeit.
+    coverage_pool, coverage_future = _coverage_in_background(
+        context, api_keys, differences_model
+    )
+    try:
+        prose_fallback = None
+        last_error = "empty result from differences engine."
+        skip_retries_for = set()
+        executed_attempts = 0
+        for (provider, api_model, model_ref), is_retry, judge_tier in attempts:
+            attempt_key = (provider, api_model, judge_tier)
+            if is_retry and attempt_key in skip_retries_for:
+                continue
+            executed_attempts += 1
+            attempt_no = executed_attempts
+            attempt_prompt = differences_prompt + (DIFFERENCES_RETRY_SUFFIX if is_retry else "")
+            attempt_started = time.monotonic()
+            parts = []
+            try:
+                for event in _stream_engine_text(
+                    provider, api_model, model_ref, api_keys,
+                    system=DIFFERENCES_SYSTEM_PROMPT,
+                    prompt=attempt_prompt,
+                    max_tokens=cfg.DIFFERENCES_MAX_TOKENS,
+                    temperature=DIFFERENCES_TEMPERATURE,
+                    json_mode=True,
+                    effort=_judge_effort(provider, api_model, judge_tier),
+                    json_schema=DIFFERENCES_JSON_SCHEMA,
+                ):
+                    if event.get("type") == "reasoning":
+                        # Marker, solange der Judge noch denkt: hält die
+                        # SSE-Verbindung aktiv und speist den Frontend-Indikator.
+                        yield {"type": "reasoning"}
+                        continue
+                    text = event.get("text") or ""
+                    parts.append(text)
+                    # Roh-JSON wird im Frontend nicht gerendert; die Deltas halten
+                    # nur die SSE-Verbindung aktiv (auch während der Retries).
+                    yield {"type": "delta", "text": text}
+            except Exception as e:
+                last_error = "provider request failed."
+                if not _provider_error_is_retryable(e):
+                    skip_retries_for.add(attempt_key)
+                logging.warning(
+                    "Differences stream attempt failed attempt=%d provider=%s model=%s "
+                    "duration_ms=%d category=%s",
+                    attempt_no, provider, api_model,
+                    int((time.monotonic() - attempt_started) * 1000), safe_exception(e),
+                )
+                continue
+
+            duration_ms = int((time.monotonic() - attempt_started) * 1000)
+            raw = "".join(parts).strip()
+            if not raw:
+                last_error = "empty result from differences engine."
+                continue
+
+            data, legacy_text = parse_differences_payload(
+                raw, anon_map,
+                consensus_answer=consensus_answer,
+                model_answers=answers_by_model,
+                sentences=sentences,
             )
-            continue
+            if data is not None:
+                data["judges"] = {"differences": _judge_metadata(
+                    provider, api_model, judge_tier,
+                    attempts=attempt_no, duration_ms=duration_ms,
+                )}
+                coverage_result, coverage_meta = _collect_coverage(
+                    coverage_pool, coverage_future
+                )
+                covered_text = _apply_coverage(
+                    data, coverage_result, coverage_meta, context, consensus_answer
+                )
+                yield {"type": "final", "text": covered_text or legacy_text, "data": data}
+                return
+            if prose_fallback is None and legacy_text and not _looks_like_json(raw):
+                prose_fallback = legacy_text
+            last_error = "unparsable output from differences engine."
+            logging.warning(
+                f"Differences stream output unparsable on {provider}/{api_model} "
+                f"(attempt {attempt_no}, {duration_ms} ms)"
+            )
 
-        duration_ms = int((time.monotonic() - attempt_started) * 1000)
-        raw = "".join(parts).strip()
-        if not raw:
-            last_error = "empty result from differences engine."
-            continue
-
-        data, legacy_text = parse_differences_payload(
-            raw, anon_map,
-            consensus_answer=consensus_answer,
-            model_answers=answers_by_model,
-            sentences=sentences,
-        )
-        if data is not None:
-            data["judges"] = {"differences": _judge_metadata(
-                provider, api_model, judge_tier,
-                attempts=attempt_no, duration_ms=duration_ms,
-            )}
-            yield {"type": "final", "text": legacy_text, "data": data}
+        # Der Differences-Judge ist durchgefallen; der Coverage-Lauf wird trotzdem
+        # eingesammelt, damit sein Thread nicht verwaist weiterlaeuft.
+        _collect_coverage(coverage_pool, coverage_future)
+        if prose_fallback:
+            yield {"type": "final", "text": prose_fallback, "data": None}
             return
-        if prose_fallback is None and legacy_text and not _looks_like_json(raw):
-            prose_fallback = legacy_text
-        last_error = "unparsable output from differences engine."
-        logging.warning(
-            f"Differences stream output unparsable on {provider}/{api_model} "
-            f"(attempt {attempt_no}, {duration_ms} ms)"
-        )
-
-    if prose_fallback:
-        yield {"type": "final", "text": prose_fallback, "data": None}
-        return
-    yield {"type": "final", "text": f"Error in comparison: {last_error}", "data": None}
+        yield {"type": "final", "text": f"Error in comparison: {last_error}", "data": None}
+    finally:
+        # Bricht der Client mitten im Stream ab (GeneratorExit), wird der
+        # Nebenlaeufer sonst nie abgeraeumt und sein Worker-Thread bleibt
+        # bis zum Prozessende haengen.
+        coverage_pool.shutdown(wait=False)

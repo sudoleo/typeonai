@@ -102,8 +102,18 @@ def _claim_dimensions(differences_data: dict) -> list[dict]:
     if not isinstance(raw_claims, list):
         return []
     dimensions = []
-    for raw in raw_claims[:MAX_DIMENSIONS]:
+    for raw in raw_claims:
+        if len(dimensions) >= MAX_DIMENSIONS:
+            break
         if not isinstance(raw, dict):
+            continue
+        # Seit dem Coverage-Judge stehen auch duenn belegte Saetze in der
+        # Claim-Liste. Fuer die Opinion-Map (und damit fuer das Claim Ledger
+        # der Topic-Seiten) taugen sie nicht: eine einzelne Stimme ist keine
+        # Position, die man ueber Laeufe hinweg verfolgen koennte.
+        if raw.get("coverage") == "thin":
+            continue
+        if len(raw.get("agree") or []) + len(raw.get("dissent") or []) < 2:
             continue
         anchor = _clip(raw.get("anchor"), 180)
         if not anchor:

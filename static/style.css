@@ -16,7 +16,7 @@
 @import url('./css/components-memory-edit.css?v=20260817-quoteask1');
 @import url('./css/components-model-picker.css?v=20260831-kimiglm1');
 @import url('./css/components-feedback.css?v=20260731-inter1');
-@import url('./css/components-consensus-insights.css?v=20260820-claimmath1');
+@import url('./css/components-consensus-insights.css?v=20260831-coverage1');
 @import url('./css/components-watch.css?v=20260802-readingchrome1');
 /* Shell layer — loaded LAST so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */

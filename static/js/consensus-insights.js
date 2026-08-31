@@ -125,6 +125,30 @@
             return window.matchMedia("(max-width: 768px)").matches;
           }
 
+          // --- Die vier Anzeigezustaende einer belegten Aussage --------------
+          // Seit der Coverage-Judge JEDEN Satz beurteilt (2026-08-31), darf
+          // eine duenn belegte Aussage nicht mehr einfach verschwinden - sonst
+          // sieht sie aus wie ungepruefter Fliesstext, obwohl sie sehr wohl
+          // angesehen wurde. Deshalb:
+          //   split      geteilte Zustimmung (mindestens ein Modell widerspricht)
+          //   supported  mindestens zwei Modelle stuetzen, keines widerspricht
+          //   thin       zu wenige Modelle haben die Aussage ueberhaupt behandelt
+          // Der vierte Zustand - der echte inhaltliche Widerspruch - kommt
+          // nicht aus dem Claim, sondern aus der Differences-Analyse und
+          // uebersteuert die Marke (siehe renderInlineMarkers).
+          const MIN_CLAIM_SUPPORT = 2;
+          const COVERAGE_STATES = ["supported", "split", "thin"];
+
+          function claimCoverage(claim) {
+            const state = String(claim?.coverage || "");
+            if (COVERAGE_STATES.includes(state)) return state;
+            // Alt-Snapshots ohne Coverage-Feld: aus den Zahlen ableiten. Die
+            // frueheren Claims trugen immer mindestens zwei Stimmen, landen
+            // hier also nie faelschlich auf "thin".
+            if (claim.dissent.length) return "split";
+            return claim.agree.length >= MIN_CLAIM_SUPPORT ? "supported" : "thin";
+          }
+
           // --- Markdown-Auszeichnung entfernen -------------------------------
           // Anker und Zitate sind woertliche Kopien aus dem MARKDOWN-QUELLTEXT
           // der Antworten ("1. **Weltklasse:** ca. 1.300 Watt"). Gesucht und
@@ -386,15 +410,18 @@
 
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
+            const coverage = claimCoverage(claim);
 
             const header = document.createElement("div");
             header.className = "claim-popover-header";
             const title = document.createElement("span");
             title.className = "claim-popover-title";
             title.id = "claimPopoverTitle";
-            title.textContent = claim.dissent.length
-              ? `${agreeCount} of ${total} models agree`
-              : `All ${total} models agree`;
+            title.textContent = coverage === "thin"
+              ? "Too few models addressed this"
+              : claim.dissent.length
+                ? `${agreeCount} of ${total} models agree`
+                : `All ${total} models agree`;
             const close = document.createElement("button");
             close.type = "button";
             close.className = "claim-popover-close";
@@ -446,6 +473,17 @@
               ));
               pop.appendChild(section);
             }
+
+            // Der Satz, ohne den die ganze Quote missverstanden wird. Er steht
+            // seit 2026-08-31 in JEDER Karte, weil inzwischen fast jede Aussage
+            // eine traegt: "6/6" ist eine Uebereinstimmung zwischen Modellen,
+            // kein Wahrheitsbeweis.
+            const disclaimer = document.createElement("p");
+            disclaimer.className = "claim-popover-note";
+            disclaimer.textContent = coverage === "thin"
+              ? "Too little was said about this to compare. That is not evidence against it — it just was not checked."
+              : "Models agreeing is not proof. They can share the same source or the same blind spot.";
+            pop.appendChild(disclaimer);
 
             const asModal = isMobileViewport();
             pop.classList.toggle("is-modal", asModal);
@@ -846,6 +884,12 @@
             // erhalten. Die sichtbare Erklaerung liefert allein die formatierte
             // Hover-Vorschau, nicht zusaetzlich ein nativer Browser-Tooltip.
             const notAddressed = modelsNotAddressingClaim(claim, modelsCompared).length;
+            if (claimCoverage(claim) === "thin") {
+              const compared = total + notAddressed;
+              return "Too few models addressed this"
+                + (compared ? " — only " + total + " of " + compared : "")
+                + " — open details";
+            }
             return (claim.dissent.length
               ? agreeCount + " of " + total + " models support this"
               : "All " + total + " models that address this agree")
@@ -864,12 +908,19 @@
           function makeBadge(claim, modelsCompared, answerNavigation) {
             const badge = document.createElement("button");
             badge.type = "button";
-            badge.className = "claim-badge" + (claim.dissent.length ? " has-dissent" : "");
+            const coverage = claimCoverage(claim);
+            badge.className = "claim-badge"
+              + (claim.dissent.length ? " has-dissent" : "")
+              + (coverage === "thin" ? " is-thin" : "");
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
             const ratio = document.createElement("span");
             ratio.className = "claim-ratio";
-            ratio.textContent = agreeCount + "/" + total;
+            // Bei duenner Abdeckung steht hier BEWUSST keine Quote: "1/1"
+            // liest sich wie einstimmige Zustimmung, obwohl genau das Gegenteil
+            // gemeint ist. Der Strich sagt "kein belastbares Votum" und ist als
+            // einziger Zustand ohne Zahl auf einen Blick unterscheidbar.
+            ratio.textContent = coverage === "thin" ? "–" : agreeCount + "/" + total;
             ratio.setAttribute("aria-hidden", "true");
             badge.appendChild(ratio);
             badge.setAttribute("aria-haspopup", "dialog");
@@ -923,6 +974,9 @@
           // denselben Satz, gewinnt die staerkere die Linie - sonst stand
           // neben einem gelben 2/4-Badge eine graue Linie.
           const MARK_LEVELS = {
+            // Ganz unten die duenne Abdeckung: eine Aussage, die kaum ein
+            // Modell behandelt hat, darf nie eine staerkere Marke verdraengen.
+            "is-thin": -1,
             "is-unanimous": 0,
             "is-minor": 1,
             "is-split": 2,
@@ -1153,10 +1207,13 @@
             const frag = document.createDocumentFragment();
             const agreeCount = claim.agree.length;
             const total = agreeCount + claim.dissent.length;
+            const coverage = claimCoverage(claim);
             frag.appendChild(previewHead(
-              claim.dissent.length
-                ? agreeCount + " of " + total + " models support this"
-                : "All " + total + " models agree",
+              coverage === "thin"
+                ? "Too few models addressed this"
+                : claim.dissent.length
+                  ? agreeCount + " of " + total + " models support this"
+                  : "All " + total + " models agree",
               claim.dissent.length ? "is-warn" : null
             ));
             if (claim.agree.length) {
@@ -1357,16 +1414,24 @@
               });
             });
 
-            // 2. Claims: is-unanimous ist bewusst dekorationslos (nur Badge),
-            //    dient hier aber als präziser Einhängepunkt für das Badge.
-            //    Ein Claim mit Dissens traegt dieselbe Bernstein-Note wie sein
-            //    Badge (is-split), nur eine Stufe leiser als der Widerspruch.
+            // 2. Claims, in drei Stufen (die vierte, der Widerspruch, ist oben
+            //    schon gesetzt):
+            //      is-split      geteilte Zustimmung — Bernstein, eine Stufe
+            //                    leiser als der Widerspruch
+            //      is-unanimous  gestuetzt — gruen, das Badge traegt die Quote
+            //      is-thin       zu duenn belegt — grau, damit ein Satz, den
+            //                    kaum ein Modell behandelt hat, sichtbar bleibt
+            //                    statt wie ungeprueft auszusehen
             const unanchored = [];
             const claimControls = [];
+            const coverageCounts = { supported: 0, split: 0, thin: 0 };
             claims.forEach(function (claim) {
+              const coverage = claimCoverage(claim);
+              coverageCounts[coverage] = (coverageCounts[coverage] || 0) + 1;
               const result = mark(
                 claim.anchor,
-                claim.dissent.length ? "is-split" : "is-unanimous",
+                coverage === "split" ? "is-split"
+                  : coverage === "thin" ? "is-thin" : "is-unanimous",
                 claim.anchor_occurrence
               );
               if (!result) {
@@ -1464,7 +1529,10 @@
             return {
               claims_anchored: claims.length - unanchored.length,
               claims_unanchored: unanchored.length,
-              diffs_unanchored: diffAnchorMisses
+              diffs_unanchored: diffAnchorMisses,
+              claims_supported: coverageCounts.supported,
+              claims_split: coverageCounts.split,
+              claims_thin: coverageCounts.thin
             };
           }
 
@@ -2338,6 +2406,12 @@
               claims_anchored: marks.claims_anchored ?? null,
               claims_unanchored: marks.claims_unanchored ?? null,
               diffs_unanchored: marks.diffs_unanchored ?? null,
+              // Wie sich die Abdeckung auf die drei Claim-Zustaende verteilt:
+              // ein steigender thin-Anteil heisst, dass die Modelle an der
+              // Konsensantwort vorbeireden - nicht, dass sie streiten.
+              claims_supported: marks.claims_supported ?? null,
+              claims_split: marks.claims_split ?? null,
+              claims_thin: marks.claims_thin ?? null,
               differences: differences.length,
               contradictions: differences.filter(d => d.type === "contradiction").length,
               major_contradictions: differences.filter(d => d.type === "contradiction" && d.severity === "major").length,

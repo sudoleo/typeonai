@@ -560,15 +560,27 @@ class LegacyTextSynthesisTests(unittest.TestCase):
 
     def test_no_differences_is_very_credible(self):
         legacy = _legacy_differences_text({
-            "claims": [], "differences": [], "best_model": "Gemini",
+            "claims": [{"anchor": "a", "agree": FOUR_MODELS, "dissent": []}],
+            "differences": [], "best_model": "Gemini",
             "models_compared": FOUR_MODELS,
         })
         self.assertIn("**very** credible", legacy)
         self.assertIn("No substantive contradictions", legacy)
         self.assertIn("BestModel: Gemini", legacy)
 
+    def test_nothing_measured_is_not_very_credible(self):
+        """Ohne einen einzigen belegten Satz gibt es nichts, worauf sich
+        Zuversicht stuetzen koennte - auch wenn kein Widerspruch etwas
+        abgezogen hat."""
+        legacy = _legacy_differences_text({
+            "claims": [], "differences": [], "best_model": "Gemini",
+            "models_compared": FOUR_MODELS,
+        })
+        self.assertIn("**partially** credible", legacy)
+
     def test_only_emphasis_is_largely_credible(self):
         legacy = _legacy_differences_text({
+            "claims": [{"anchor": "a", "agree": FOUR_MODELS, "dissent": []}],
             "differences": [{"claim": "Different focus on costs.", "type": "emphasis", "positions": []}],
             "best_model": "",
             "models_compared": FOUR_MODELS,
@@ -600,7 +612,8 @@ class AgreementScoreTests(unittest.TestCase):
 
     def test_two_models_cannot_reach_very(self):
         agreement = compute_agreement_score({
-            "claims": [], "differences": [],
+            "claims": [{"anchor": "a", "agree": ["OpenAI", "Gemini"], "dissent": []}],
+            "differences": [],
             "models_compared": ["OpenAI", "Gemini"],
         })
         self.assertEqual(agreement["score"], 75)
@@ -657,7 +670,6 @@ class DifferencesPromptTests(unittest.TestCase):
         self.assertIsNotNone(built)
         prompt, anon_map, answers_by_model, sentences = built
         self.assertIn("JSON", prompt)
-        self.assertIn('"claims"', prompt)
         self.assertIn('"differences"', prompt)
         self.assertIn('"severity"', prompt)
         # Echte Modellnamen tauchen im Prompt nicht auf
@@ -699,23 +711,24 @@ class DifferencesPromptTests(unittest.TestCase):
         self.assertNotIn("resolved against the conversation", base)
         self.assertTrue(with_question.endswith(base))
 
-    def test_differences_are_requested_before_claims(self):
-        """Reisst das Token-Budget, faellt die redundantere Claim-Liste weg -
-        nicht die Widersprueche. Das gilt fuer die Reihenfolge im Prompt UND
-        im Structured-Output-Schema (Gemini generiert in Schema-Reihenfolge)."""
+    def test_differences_judge_no_longer_asks_for_the_claim_list(self):
+        """Die Belegliste ist ein eigener Call (Coverage-Judge). Steht sie hier
+        wieder im Prompt oder im Schema, konkurriert sie erneut mit den
+        Widerspruechen um Aufmerksamkeit und Output-Tokens - genau der Grund,
+        aus dem sie regelmaessig verkuerzt ankam."""
         built = _build_differences_prompt(
             {"openai": "answer one", "mistral": "answer two"},
             consensus_answer="This is the consensus answer.",
             excluded_models=[],
         )
         prompt = built[0]
-        self.assertLess(prompt.index('"differences"'), prompt.index('"claims"'))
+        self.assertNotIn('"claims"', prompt)
+        self.assertNotIn('"agree"', prompt)
 
-        schema_keys = list(DIFFERENCES_JSON_SCHEMA["properties"])
-        self.assertLess(schema_keys.index("differences"), schema_keys.index("claims"))
+        self.assertNotIn("claims", DIFFERENCES_JSON_SCHEMA["properties"])
         self.assertEqual(
             DIFFERENCES_JSON_SCHEMA["required"],
-            ["differences", "claims", "best_model"],
+            ["differences", "best_model"],
         )
 
     def test_long_consensus_is_numbered_sentence_by_sentence(self):
