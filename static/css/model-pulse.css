@@ -79,6 +79,55 @@
   margin-top: 30px;
 }
 
+.pulse-period-filter {
+  display: inline-flex;
+  gap: 3px;
+  margin-top: 18px;
+  padding: 3px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-pill);
+  background: var(--ground);
+}
+
+.pulse-period-filter button {
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+.pulse-period-filter button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.pulse-period-filter button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pulse-period-filter button:disabled {
+  cursor: wait;
+}
+
+.pulse-availability-note {
+  max-width: 62ch;
+  margin-top: 13px !important;
+  padding-left: 11px;
+  border-left: 2px solid var(--accent);
+}
+
+.pulse-availability-note strong {
+  color: var(--ink-2);
+  font-weight: var(--font-weight-semibold);
+}
+
 .pulse-board .lp-model-pulse-row {
   grid-template-columns: 26px 32px minmax(0, 1fr) auto;
   gap: 12px;
@@ -97,8 +146,21 @@
   height: 18px;
 }
 
+.dark-mode .pulse-board .lp-model-pulse-icon img[src*="kimi"],
+.dark-mode .pulse-board .lp-model-pulse-icon img[src*="zai"] {
+  filter: invert(1);
+}
+
 .pulse-board .lp-model-pulse-name {
   font-size: var(--font-size-sm);
+}
+
+.pulse-board .lp-model-pulse-since {
+  display: inline;
+  margin-left: 6px;
+  color: var(--ink-3);
+  font-size: var(--font-size-micro);
+  font-weight: var(--font-weight-medium);
 }
 
 .pulse-board .lp-model-pulse-value {

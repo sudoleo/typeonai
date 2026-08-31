@@ -75,13 +75,10 @@ PROVIDER_CITATION_LABELS = {
     provider.label: provider.citation_label for provider in cfg.PROVIDERS.values()
 }
 # Provider-Logos analog zum Model-Picker auf /app (static/icons/chat_icons/).
+# Aus der Registry abgeleitet, damit neue Familien auch auf Share-Seiten ihr
+# Icon erhalten, ohne hier eine zweite Anbieter-Liste pflegen zu muessen.
 PROVIDER_ICONS = {
-    "OpenAI": "chatgpt.png",
-    "Mistral": "mistral.png",
-    "Anthropic": "claude.png",
-    "Gemini": "gemini-icon.png",
-    "DeepSeek": "deepseek.png",
-    "Grok": "grok.png",
+    provider.label: provider.icon for provider in cfg.PROVIDERS.values()
 }
 # Reverse-Map: Zitations-Label -> Provider-Key (Labels sind eindeutig).
 _CITATION_LABEL_TO_PROVIDER = {v: k for k, v in PROVIDER_CITATION_LABELS.items()}
@@ -300,6 +297,10 @@ _CONSENSUS_ENGINE_MODELS = {
     "DeepSeek-Pro": "deepseek-v4-pro",
     "Grok": cfg.DEFAULT_GROK_MODEL,
     "Grok-Pro": "grok-4.3",
+    "Kimi": cfg.KIMI_BASE_MODEL,
+    "Kimi-Pro": cfg.KIMI_PRO_MODEL,
+    "GLM": cfg.GLM_BASE_MODEL,
+    "GLM-Pro": cfg.GLM_PRO_MODEL,
 }
 
 

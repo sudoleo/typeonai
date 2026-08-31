@@ -4,21 +4,12 @@
 (function () {
   const list = document.getElementById("modelLeaderboardRows");
   const total = document.getElementById("modelLeaderboardTotal");
+  const periodLabel = document.getElementById("modelLeaderboardPeriod");
+  const periodButtons = Array.from(document.querySelectorAll("[data-model-pulse-period]"));
   if (!list || !total) return;
 
   const number = new Intl.NumberFormat(document.documentElement.lang || "en");
-  const icons = [
-    [/anthropic|claude/i, "/static/icons/chat_icons/claude.png"],
-    [/openai|chatgpt/i, "/static/icons/chat_icons/chatgpt.png"],
-    [/google|gemini/i, "/static/icons/chat_icons/gemini-icon.png"],
-    [/mistral/i, "/static/icons/chat_icons/mistral.png"],
-    [/deepseek/i, "/static/icons/chat_icons/deepseek.png"],
-    [/grok|xai/i, "/static/icons/chat_icons/grok.png"]
-  ];
-
-  function iconFor(family) {
-    return icons.find(([pattern]) => pattern.test(family))?.[1] || "/static/favicon.png";
-  }
+  let requestVersion = 0;
 
   function renderEmpty(message) {
     const empty = document.createElement("p");
@@ -29,11 +20,11 @@
     list.setAttribute("aria-busy", "false");
   }
 
-  function renderRows(rows, totalSelections) {
+  function renderRows(rows, totalSelections, period) {
     const maxSelections = Math.max(...rows.map(row => row.selections), 1);
     const fragment = document.createDocumentFragment();
 
-    rows.slice(0, 6).forEach((row, index) => {
+    rows.slice(0, 8).forEach((row, index) => {
       const item = document.createElement("div");
       item.className = "lp-model-pulse-row";
       item.setAttribute("role", "listitem");
@@ -45,7 +36,7 @@
       const iconWrap = document.createElement("span");
       iconWrap.className = "lp-model-pulse-icon";
       const icon = document.createElement("img");
-      icon.src = iconFor(row.family);
+      icon.src = typeof row.icon === "string" ? row.icon : "/static/favicon.png";
       icon.alt = "";
       iconWrap.appendChild(icon);
 
@@ -54,6 +45,12 @@
       const name = document.createElement("span");
       name.className = "lp-model-pulse-name";
       name.textContent = row.family;
+      if (row.available_since) {
+        const available = document.createElement("small");
+        available.className = "lp-model-pulse-since";
+        available.textContent = "tracked since 31 Aug 2026";
+        name.appendChild(available);
+      }
       const meter = document.createElement("span");
       meter.className = "lp-model-pulse-meter";
       meter.style.setProperty("--pulse-share", String((row.selections / maxSelections) * 100));
@@ -75,32 +72,68 @@
     list.setAttribute("role", "list");
     list.classList.remove("is-loading");
     list.setAttribute("aria-busy", "false");
-    total.textContent = `${number.format(totalSelections)} judge selections from real runs.`;
+    total.textContent = totalSelections
+      ? `${number.format(totalSelections)} judge selections ${period === "all" ? "from all real runs" : "since 31 Aug 2026"}.`
+      : `No judge selections recorded ${period === "all" ? "yet" : "since 31 Aug 2026"}.`;
     requestAnimationFrame(() => list.classList.add("is-ready"));
   }
 
-  fetch("/api/model-leaderboard", {
-    headers: { Accept: "application/json" },
-    credentials: "same-origin"
-  })
-    .then(response => {
-      if (!response.ok) throw new Error(`Leaderboard request failed (${response.status})`);
-      return response.json();
-    })
-    .then(data => {
-      const rows = Array.isArray(data.rows)
-        ? data.rows.filter(row => row && typeof row.family === "string" && Number(row.selections) > 0)
-        : [];
-      if (!rows.length) {
-        total.textContent = "The live tally starts with the first recorded selection.";
-        renderEmpty("No best-answer selections have been recorded yet.");
-        return;
-      }
-      renderRows(rows, Number(data.total_selections) || rows.reduce((sum, row) => sum + Number(row.selections), 0));
-    })
-    .catch(error => {
-      console.warn("Model pulse unavailable:", error);
-      total.textContent = "The live tally is temporarily unavailable.";
-      renderEmpty("Model pulse unavailable right now.");
+  function setLoading(period) {
+    list.classList.add("is-loading");
+    list.classList.remove("is-ready");
+    list.setAttribute("aria-busy", "true");
+    periodButtons.forEach(button => {
+      const active = button.dataset.modelPulsePeriod === period;
+      button.setAttribute("aria-pressed", String(active));
+      button.disabled = true;
     });
+    if (periodLabel) {
+      periodLabel.textContent = period === "all" ? "All-time ranking" : "Shared-window ranking";
+    }
+  }
+
+  function loadPeriod(period) {
+    const currentRequest = ++requestVersion;
+    setLoading(period);
+    fetch(`/api/model-leaderboard?period=${encodeURIComponent(period)}`, {
+      headers: { Accept: "application/json" },
+      credentials: "same-origin"
+    })
+      .then(response => {
+        if (!response.ok) throw new Error(`Leaderboard request failed (${response.status})`);
+        return response.json();
+      })
+      .then(data => {
+        if (currentRequest !== requestVersion) return;
+        const rows = Array.isArray(data.rows)
+          ? data.rows.filter(row => row && typeof row.family === "string" && Number(row.selections) >= 0)
+          : [];
+        if (!rows.length) {
+          total.textContent = "The live tally starts with the first recorded selection.";
+          renderEmpty("No model families are available in this view.");
+          return;
+        }
+        renderRows(
+          rows,
+          Number(data.total_selections) || rows.reduce((sum, row) => sum + Number(row.selections), 0),
+          data.period === "all" ? "all" : "since-2026-08-31"
+        );
+      })
+      .catch(error => {
+        if (currentRequest !== requestVersion) return;
+        console.warn("Model pulse unavailable:", error);
+        total.textContent = "The live tally is temporarily unavailable.";
+        renderEmpty("Model pulse unavailable right now.");
+      })
+      .finally(() => {
+        if (currentRequest !== requestVersion) return;
+        periodButtons.forEach(button => { button.disabled = false; });
+      });
+  }
+
+  periodButtons.forEach(button => {
+    button.addEventListener("click", () => loadPeriod(button.dataset.modelPulsePeriod || "all"));
+  });
+
+  loadPeriod("all");
 })();

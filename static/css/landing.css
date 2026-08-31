@@ -1374,10 +1374,12 @@ img { display: block; max-width: 100%; }
 
 .lp-chips img { width: 14px; height: 14px; object-fit: contain; }
 
-/* Monochrome provider marks (ChatGPT, Grok) are black PNGs: invert them in
-   dark mode so they stay visible, matching benchmark.css. */
+/* Monochrome provider marks are dark assets: invert them in dark mode so they
+   stay visible, matching benchmark.css. */
 .dark-mode .lp-chips img[src*="chatgpt"],
-.dark-mode .lp-chips img[src*="grok"] { filter: invert(1); }
+.dark-mode .lp-chips img[src*="grok"],
+.dark-mode .lp-chips img[src*="kimi"],
+.dark-mode .lp-chips img[src*="zai"] { filter: invert(1); }
 
 /* --------------------------------------------------------------------------
    Scene 03 — Consensus + Differences, rebuilt to mirror the real /app
@@ -2396,7 +2398,7 @@ img { display: block; max-width: 100%; }
    -------------------------------------------------------------------------- */
 .lp-logos {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-top: clamp(40px, 5vw, 64px);
 }
@@ -2424,7 +2426,9 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-logo-mark img { filter: grayscale(1) brightness(0) invert(1) opacity(0.52); }
 .lp-logo:hover .lp-logo-mark img { filter: none; opacity: 1; }
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="chatgpt"],
-.dark-mode .lp-logo:hover .lp-logo-mark img[src*="grok"] { filter: invert(1); }
+.dark-mode .lp-logo:hover .lp-logo-mark img[src*="grok"],
+.dark-mode .lp-logo:hover .lp-logo-mark img[src*="kimi"],
+.dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
 
 .lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 
@@ -2585,7 +2589,7 @@ img { display: block; max-width: 100%; }
   .lp-hero.lp-hero--demo { padding-bottom: 32px; }
   .lp-hero-prompt.lp-prompt { margin-top: 24px; }
 
-  /* Six marks in one row say "six providers" as well as six labelled pills
+  /* Eight marks in one row say "eight available providers" as well as labelled pills
      say it over two. The names stay readable to screen readers. */
   .lp-hero-models { gap: 6px; margin-top: 16px; }
   .lp-hero-models span { padding: 7px; }
@@ -2646,9 +2650,9 @@ img { display: block; max-width: 100%; }
   .lp-card h3 { font-size: var(--font-size-base); }
   .lp-card p { font-size: var(--font-size-sm); }
 
-  /* Six tiles two-up were three rows of near-empty boxes, and the hero has
-     already shown these marks. Three-up they are a strip, not a section. */
-  .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
+  /* The hero has already shown these marks; four-up keeps eight providers in
+     a compact two-row strip instead of turning them into a long card list. */
+  .lp-logos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
   .lp-logo { gap: 9px; padding: 16px 6px; }
   .lp-logo-mark { height: 26px; }
   .lp-logo-mark img { height: 24px; }

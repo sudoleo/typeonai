@@ -1129,7 +1129,9 @@ a:hover {
 .dark-mode .mini-response img[src*="chatgpt"],
 .dark-mode .mini-response img[src*="grok"],
 .dark-mode .model-card img[src*="chatgpt"],
-.dark-mode .model-card img[src*="grok"] {
+.dark-mode .model-card img[src*="grok"],
+.dark-mode .model-card img[src*="kimi"],
+.dark-mode .model-card img[src*="zai"] {
   filter: invert(1);
 }
 
@@ -1161,7 +1163,7 @@ a:hover {
 }
 
 .model-grid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .info-card,

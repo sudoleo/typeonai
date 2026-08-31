@@ -16,6 +16,7 @@ from app.core.site import SITE_URL
 from app.core.version import REPO_URL, get_commit_short
 from app.core.security import verify_user_token, extract_id_token, db_firestore
 from firebase_admin import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from app.services import persistence_guard
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, field_validator
 from app.services.llm.provider_runtime import (
@@ -179,6 +180,29 @@ def model_pulse(req: Request):
     return templates.TemplateResponse(request=req, name="model-pulse.html")
 
 
+_MODEL_PULSE_COMPARABLE_SINCE = datetime(2026, 8, 31, tzinfo=timezone.utc)
+_MODEL_PULSE_PERIOD = "since-2026-08-31"
+_LEADERBOARD_FAMILY_BY_PROVIDER = {
+    "openai": "OpenAI / ChatGPT",
+    "mistral": "Mistral",
+    "anthropic": "Anthropic / Claude",
+    "gemini": "Google / Gemini",
+    "deepseek": "DeepSeek",
+    "grok": "xAI / Grok",
+    "kimi": "Moonshot AI / Kimi",
+    "glm": "Z.ai / GLM",
+}
+_LEADERBOARD_FAMILY_VIEW = {
+    family: {
+        "icon": f"/static/icons/chat_icons/{cfg.PROVIDERS[provider].icon}",
+        "available_since": (
+            "2026-08-31" if provider in {"kimi", "glm"} else None
+        ),
+    }
+    for provider, family in _LEADERBOARD_FAMILY_BY_PROVIDER.items()
+}
+
+
 def _leaderboard_family(model: str) -> str:
     """Collapse model/product aliases into the provider families shown publicly."""
     key = str(model or "").strip().lower()
@@ -194,21 +218,67 @@ def _leaderboard_family(model: str) -> str:
         return "DeepSeek"
     if "grok" in key or "xai" in key or "x.ai" in key:
         return "xAI / Grok"
+    if "kimi" in key or "moonshot" in key:
+        return "Moonshot AI / Kimi"
+    if "glm" in key or "z.ai" in key or "z-ai" in key:
+        return "Z.ai / GLM"
     return "Other"
+
+
+def _leaderboard_rows(totals: dict[str, int]) -> list[dict]:
+    """Keep every supported family visible, including families with zero picks."""
+    family_order = {
+        family: index for index, family in enumerate(_LEADERBOARD_FAMILY_VIEW)
+    }
+    families = set(_LEADERBOARD_FAMILY_VIEW) | {
+        family for family, selections in totals.items() if selections > 0
+    }
+    rows = []
+    for family in sorted(
+        families,
+        key=lambda item: (
+            -totals.get(item, 0), family_order.get(item, len(family_order)), item
+        ),
+    ):
+        view = _LEADERBOARD_FAMILY_VIEW.get(family, {})
+        row = {
+            "family": family,
+            "selections": totals.get(family, 0),
+            "icon": view.get("icon", "/static/favicon.png"),
+        }
+        if view.get("available_since"):
+            row["available_since"] = view["available_since"]
+        rows.append(row)
+    return rows
 
 
 @router.get("/api/model-leaderboard")
 @limiter.limit("30/minute")
 def public_model_leaderboard(request: Request):
     """Return anonymized best-answer selections for the public model pulse."""
+    period = str(request.query_params.get("period") or "all").strip().lower()
+    if period not in {"all", _MODEL_PULSE_PERIOD}:
+        raise HTTPException(status_code=400, detail="Unsupported model pulse period")
+
     try:
         totals = {}
-        for snapshot in db_firestore.collection("leaderboard").stream():
-            selections = int(snapshot.to_dict().get("BestModel") or 0)
-            if selections <= 0:
-                continue
-            family = _leaderboard_family(snapshot.id)
-            totals[family] = totals.get(family, 0) + selections
+        if period == "all":
+            for snapshot in db_firestore.collection("leaderboard").stream():
+                selections = int(snapshot.to_dict().get("BestModel") or 0)
+                if selections <= 0:
+                    continue
+                family = _leaderboard_family(snapshot.id)
+                totals[family] = totals.get(family, 0) + selections
+        else:
+            votes = db_firestore.collection(persistence_guard.VOTES_COLLECTION).where(
+                filter=FieldFilter("created_at", ">=", _MODEL_PULSE_COMPARABLE_SINCE)
+            )
+            for snapshot in votes.stream():
+                vote = snapshot.to_dict() or {}
+                if vote.get("vote_type") != "BestModel":
+                    continue
+                family = _leaderboard_family(vote.get("model"))
+                totals[family] = totals.get(family, 0) + 1
     except Exception as exc:
         logging.error(
             "public model leaderboard read failed category=%s",
@@ -216,13 +286,15 @@ def public_model_leaderboard(request: Request):
         )
         raise HTTPException(status_code=503, detail="Model leaderboard is temporarily unavailable")
 
-    rows = [
-        {"family": family, "selections": selections}
-        for family, selections in sorted(totals.items(), key=lambda item: (-item[1], item[0]))
-    ]
+    rows = _leaderboard_rows(totals)
     response = JSONResponse({
         "rows": rows,
         "total_selections": sum(row["selections"] for row in rows),
+        "period": period,
+        "period_start": (
+            _MODEL_PULSE_COMPARABLE_SINCE.date().isoformat()
+            if period == _MODEL_PULSE_PERIOD else None
+        ),
     })
     response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
     return response
