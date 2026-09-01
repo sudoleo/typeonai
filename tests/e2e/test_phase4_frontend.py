@@ -229,6 +229,7 @@ def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, ph
         page.evaluate(
             """() => {
               localStorage.removeItem("consensio.watchFeatureNudge.dismissed.v1");
+              localStorage.removeItem("consensio.watchFeatureNudge.runs.v1");
               window.exitHeroMode();
               const output = document.getElementById("consensusOutput");
               const response = document.getElementById("consensusResponse");
@@ -243,6 +244,9 @@ def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, ph
                   `<p>Consensus answer line ${index + 1}: enough content to make the thread scroll.</p>`
                 ).join("");
               window.App.state.set("lastShareResultId", "phase4-nudge-result", "share");
+              // Der Hinweis kommt erst ab der dritten abgeschlossenen Frage.
+              window.App.watch.showFeatureNudge();
+              window.App.watch.showFeatureNudge();
               window.App.watch.showFeatureNudge();
             }"""
         )

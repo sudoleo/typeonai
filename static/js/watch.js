@@ -2,6 +2,13 @@
 // (create dialog + dashboard) and window.openWatchDashboard (dashboard only).
 (function () {
   const FEATURE_NUDGE_STORAGE_KEY = "consensio.watchFeatureNudge.dismissed.v1";
+  const FEATURE_NUDGE_RUNS_STORAGE_KEY = "consensio.watchFeatureNudge.runs.v1";
+  // Der Hinweis bittet um eine WIEDERKEHRENDE Verpflichtung (woechentlicher
+  // Lauf, E-Mail). Nach der ersten Antwort weiss der Nutzer noch nicht, ob er
+  // das Produkt ueberhaupt will -- der Hinweis war dort reine Werbung. Ab der
+  // dritten Frage ist die Nutzung belegt, und "aktuell halten" beschreibt ein
+  // Beduerfnis, das er selbst schon hat.
+  const FEATURE_NUDGE_MIN_RUNS = 3;
   const VIEW_SWITCH_HINT_STORAGE_KEY = "consensio.watchViewSwitchHint.seen.v1";
   const WATCH_WEEKDAYS = [
     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"
@@ -16,6 +23,22 @@
       return localStorage.getItem(FEATURE_NUDGE_STORAGE_KEY) === "true";
     } catch (_) {
       return false;
+    }
+  }
+
+  // Zaehlt die abgeschlossenen Laeufe ueber Sitzungen hinweg und gibt den
+  // neuen Stand zurueck. Ist der Speicher gesperrt (privater Modus), faellt
+  // der Zaehler auf einen Sitzungswert zurueck -- lieber ein Hinweis pro
+  // Sitzung zu spaet als gar keiner.
+  let featureNudgeRunsFallback = 0;
+  function countFeatureNudgeRun() {
+    featureNudgeRunsFallback += 1;
+    try {
+      const next = (parseInt(localStorage.getItem(FEATURE_NUDGE_RUNS_STORAGE_KEY), 10) || 0) + 1;
+      localStorage.setItem(FEATURE_NUDGE_RUNS_STORAGE_KEY, String(next));
+      return next;
+    } catch (_) {
+      return featureNudgeRunsFallback;
     }
   }
 
@@ -50,15 +73,10 @@
     const top = Math.min(Math.max(edge, desiredTop), maxTop);
     const maxLeft = Math.max(edge, window.innerWidth - edge - width);
     const left = Math.min(Math.max(edge, anchorRect.right - width), maxLeft);
-    const arrowRight = Math.min(
-      Math.max(14, left + width - (anchorRect.left + anchorRect.width / 2) - 5),
-      Math.max(14, width - 24)
-    );
 
     nudge.classList.toggle("is-above", placeAbove);
     nudge.style.left = `${Math.round(left)}px`;
     nudge.style.top = `${Math.round(top)}px`;
-    nudge.style.setProperty("--watch-nudge-arrow-right", `${Math.round(arrowRight)}px`);
     nudge.style.visibility = "visible";
   }
 
@@ -107,6 +125,9 @@
   function showWatchFeatureNudge() {
     if (featureNudgeWasDismissed() || featureNudgeTimer
         || document.getElementById("watchFeatureNudge")) return;
+    // Jeder abgeschlossene Lauf zaehlt -- auch der eines Gastes, damit der
+    // Hinweis nach einer spaeteren Anmeldung nicht wieder bei null anfaengt.
+    if (countFeatureNudgeRun() < FEATURE_NUDGE_MIN_RUNS) return;
     // Only promote an immediately usable action. Guests and failed snapshot
     // persistence keep the normal Watch button without a marketing nudge.
     if (!window.auth?.currentUser || !window.lastShareResultId) return;
@@ -132,9 +153,9 @@
         <button type="button" class="watch-feature-nudge-close" aria-label="Dismiss new feature tip">&#10005;</button>
         <span class="watch-feature-nudge-label">New</span>
         <strong>Keep this answer current</strong>
-        <span class="watch-feature-nudge-copy">We re-run this exact question every week. You hear from us only if the models change their mind — no change, no message.</span>
+        <span class="watch-feature-nudge-copy">We re-run this question on a schedule and tell you when the models change their mind.</span>
         <button type="button" class="watch-nudge-btn" id="watchNudgeStart">Watch this question</button>
-        <span class="watch-nudge-meta">Weekly &middot; e-mail on material change only &middot; stop anytime</span>
+        <span class="watch-nudge-meta">Weekly &middot; e-mail only on a material change &middot; stop anytime</span>
         <button type="button" class="watch-nudge-skip" id="watchNudgeCustomize">Pick a different schedule</button>
       `;
       nudge.querySelector(".watch-feature-nudge-close").addEventListener("click", event => {

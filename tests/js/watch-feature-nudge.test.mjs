@@ -52,13 +52,35 @@ function boot() {
       }
     }
   );
-  return { ...harness, show: () => {
+  // Der Hinweis erscheint erst ab der dritten abgeschlossenen Frage: jeder
+  // Lauf meldet sich, die ersten beiden zaehlen nur.
+  const run = harness => {
     harness.window.App.watch.showFeatureNudge();
     queued?.();
-  } };
+  };
+  return {
+    ...harness,
+    run: () => run(harness),
+    show: () => {
+      run(harness);
+      run(harness);
+      run(harness);
+    }
+  };
 }
 
 describe("watch feature nudge", () => {
+  it("haelt sich bis zur dritten Frage zurueck", () => {
+    const { document, run } = boot();
+
+    run();
+    expect(document.getElementById("watchFeatureNudge")).toBeNull();
+    run();
+    expect(document.getElementById("watchFeatureNudge")).toBeNull();
+    run();
+    expect(document.getElementById("watchFeatureNudge")).not.toBeNull();
+  });
+
   it("portaliert nur den Hinweis ueber den Composer, nie die Antwort", () => {
     const { document, show } = boot();
     show();

@@ -1282,27 +1282,33 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   align-items: center;
 }
 
+/* Der Hinweis gehoert sichtbar zu seinem Knopf: solange er offen ist, liegt
+   der Watch-Knopf auf der naechsthoeheren Flaeche. Das ersetzt den frueheren
+   Pfeil, der ohnehin am `overflow` des Hinweises abgeschnitten wurde. */
 .watch-feature-anchor.has-feature-nudge .watch-consensus-pill {
-  background: color-mix(in srgb, var(--accent) 9%, var(--sidebar-hover));
-  color: color-mix(in srgb, var(--accent) 74%, var(--text-color));
+  background: var(--well);
+  color: var(--text-color);
 }
 
+/* Schwebende Ebene wie Menue, Modal und Claim-Popover: eine Flaeche (--raise),
+   eine Haarlinie, ein Schatten (--lift) -- kein Farbverlauf, kein Glanz.
+   Innen genau eine Spalte mit gleichmaessigem Rhythmus. */
 .watch-feature-nudge {
-  --watch-nudge-surface: color-mix(in srgb, var(--bg-color) 18%, #ffffff);
   position: fixed;
   z-index: 70;
   top: 0;
   left: 0;
   box-sizing: border-box;
-  display: block;
-  width: min(258px, calc(100vw - 28px));
-  padding: 13px 34px 13px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
-  border-radius: var(--radius-sm);
-  background:
-    linear-gradient(145deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 58%),
-    var(--watch-nudge-surface);
-  box-shadow: 0 12px 30px rgba(25, 26, 28, .15), inset 0 1px 0 color-mix(in srgb, #fff 62%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 7px;
+  width: min(272px, calc(100vw - 28px));
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--raise);
+  box-shadow: var(--lift);
   color: var(--text-color);
   text-align: left;
   white-space: normal;
@@ -1311,110 +1317,92 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   animation: watchFeatureNudgeIn .28s cubic-bezier(.22, 1, .36, 1) both;
 }
 
-.watch-feature-nudge::before {
-  content: "";
-  position: absolute;
-  top: -5px;
-  right: var(--watch-nudge-arrow-right, 23px);
-  width: 9px;
-  height: 9px;
-  border-top: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
-  border-left: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
-  background: var(--watch-nudge-surface);
-  transform: rotate(45deg);
-}
-
 .dark-mode .watch-feature-nudge {
-  --watch-nudge-surface: color-mix(in srgb, var(--bg-color) 84%, #262626);
+  border-color: var(--line-soft);
 }
 
 /* Nach unten ist im Fuss selten Platz: dort steht der Composer. Reicht es
-   nicht, klappt der Hinweis nach oben auf (watch.js misst beim Einblenden)
-   und der Pfeil wandert an die Unterkante. */
+   nicht, klappt der Hinweis nach oben auf (watch.js misst beim Einblenden). */
 .watch-feature-nudge.is-above {
   animation-name: watchFeatureNudgeInUp;
 }
 
-.watch-feature-nudge.is-above::before {
-  top: auto;
-  bottom: -5px;
-  border-top: 0;
-  border-left: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
-  border-right: 1px solid color-mix(in srgb, var(--accent) 24%, var(--sidebar-border));
-}
-
+/* Augenbraue statt Chip: die Auszeichnung liegt auf dem Wort, nie auf einer
+   Flaeche dahinter. */
 .watch-feature-nudge-label {
-  display: inline-flex;
-  align-items: center;
-  min-height: 18px;
-  margin: 0 7px 5px 0;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  color: color-mix(in srgb, var(--accent) 78%, var(--text-color));
+  margin-bottom: -2px;
+  padding-right: 26px;
+  color: var(--sidebar-text-muted);
   font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-bold);
+  font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-wide);
   line-height: var(--line-height-solid);
   text-transform: uppercase;
-  vertical-align: 1px;
 }
 
 .watch-feature-nudge strong {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-bold);
+  padding-right: 22px;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: var(--tracking-tight);
   line-height: var(--line-height-heading);
 }
 
 .watch-feature-nudge-copy {
-  display: block;
-  margin-top: 2px;
   color: var(--sidebar-text-muted);
-  font-size: var(--font-size-micro);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
   line-height: var(--line-height-ui);
+  text-wrap: pretty;
 }
 
-/* Die Aktion liegt IM Hinweis: ein voll breiter Knopf, darunter in einer
-   Zeile die drei Fakten, die ihn ehrlich machen (Rhythmus, Anlass, Ausstieg).
-   Der Weg in den Dialog bleibt als leiser Textlink daneben. */
+/* Die Aktion liegt IM Hinweis: ein voll breiter Knopf in der Sprache aller
+   primaeren Knoepfe (--button-bg/--button-text), darunter die drei Fakten,
+   die ihn ehrlich machen (Rhythmus, Anlass, Ausstieg). Der Weg in den Dialog
+   bleibt als leiser Textlink darunter. */
 .watch-nudge-btn {
-  display: block;
   width: 100%;
-  margin-top: 10px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
+  margin-top: 3px;
+  padding: 9px 12px;
+  border: 0;
   border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--accent) 88%, var(--text-color));
-  color: var(--bg-color);
+  background: var(--button-bg);
+  color: var(--button-text);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-heading);
   cursor: pointer;
-  transition: background-color .15s ease, opacity .15s ease;
+  transition: opacity .15s ease, transform .15s ease;
 }
 
 .watch-nudge-btn:hover:not(:disabled) {
-  background: var(--text-color);
+  opacity: .9;
+  transform: translateY(-1px);
+}
+
+.watch-nudge-btn:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
 }
 
 .watch-nudge-btn:disabled {
-  opacity: .65;
+  opacity: .6;
+  transform: none;
   cursor: default;
 }
 
 .watch-nudge-meta {
-  display: block;
-  margin-top: 6px;
   color: var(--sidebar-text-muted);
   font-size: var(--font-size-micro);
   line-height: var(--line-height-ui);
+  /* Die drei Fakten brechen sonst mit einem einzelnen Wort in die zweite
+     Zeile. */
+  text-wrap: pretty;
 }
 
 .watch-nudge-skip {
-  display: inline-block;
-  margin-top: 7px;
+  align-self: flex-start;
+  margin-top: 1px;
   padding: 0;
   border: 0;
   background: none;
@@ -1422,32 +1410,37 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-medium);
   text-decoration: underline;
-  text-underline-offset: 2px;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
   cursor: pointer;
+  transition: color .15s ease, text-decoration-color .15s ease;
 }
 
 .watch-nudge-skip:hover {
   color: var(--text-color);
+  text-decoration-color: currentColor;
+}
+
+.watch-nudge-skip:focus-visible {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 .watch-feature-nudge-label.is-active {
-  background: color-mix(in srgb, var(--agree) 16%, transparent);
-  color: color-mix(in srgb, var(--agree) 82%, var(--text-color));
+  color: var(--agree);
 }
 
 /* Gleiche Sprache wie die Close-Buttons der Modals (`.auth-modal .close`):
    quadratisch, flaechenlos, gedaempft, Hover fuellt dezent. Zwei Dinge liessen
    ihn vorher als graue Pille erscheinen: die fehlende Ausnahme in der
    `button:not(...)`-Kette (components-input.css) und ein aus zwei gedrehten
-   Pseudo-Elementen gebautes Kreuz. Jetzt: ein echtes Glyph, an der oberen
-   Kante der Ueberschriftszeile ausgerichtet. */
+   Pseudo-Elementen gebautes Kreuz. Jetzt: ein echtes Glyph, auf der Hoehe der
+   Augenbraue. */
 .watch-feature-nudge-close {
   position: absolute;
-  /* top = Innenabstand des Hinweises: die Box beginnt auf derselben Kante wie
-     die erste Zeile, ihr Zentrum liegt damit auf der Mitte der
-     Ueberschriftszeile („NEW  Keep this answer current"). */
-  top: 13px;
-  right: 10px;
+  top: 7px;
+  right: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1455,11 +1448,11 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   background: none;
   color: var(--sidebar-text-muted);
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   line-height: var(--line-height-solid);
   cursor: pointer;
   transition: background-color .15s ease, color .15s ease;
@@ -1467,7 +1460,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 
 .watch-feature-nudge-close:hover,
 .watch-feature-nudge-close:focus-visible {
-  background: var(--sidebar-hover);
+  background: var(--well);
   color: var(--text-color);
   outline: none;
 }
