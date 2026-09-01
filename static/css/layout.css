@@ -986,18 +986,37 @@ body:has(.sidebar.active) .brand-float {
   align-items: stretch;
 }
 
+/* Die Kopfzeile des Popups traegt seit der Stufenmarke zwei Dinge: die
+   Adresse (kuerzt sich) und rechts den Namen der Stufe (kuerzt sich nie). */
 .email-popup .user-email {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   max-width: 210px;
   margin: 0 0 8px;
   padding: 2px 5px 9px;
-  overflow: hidden;
   border-bottom: 1px solid rgba(0, 0, 0, 0.09);
   color: var(--text-color);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
+}
+
+.email-popup .user-email-address {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.account-tier-label {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* .pro-badge setzt display:inline-flex und schlaegt damit das
+   hidden-Attribut, das nur aus dem UA-Stylesheet kommt. */
+.account-tier-label[hidden] {
+  display: none;
 }
 
 .email-popup .top-bar-about {
@@ -1033,6 +1052,51 @@ body:has(.sidebar.active) .brand-float {
 .dark-mode .email-popup .top-bar-about:hover,
 .dark-mode .email-popup .top-bar-about:focus-visible {
   background: #363636;
+}
+
+/* --- Die Kontostufe am Kuerzel -------------------------------------------
+   Pro und Plus brauchen eine Kennzeichnung, die immer sichtbar ist. Statt
+   einer weiteren Zeile in der engen Fusszeile faerbt sie das Element, das den
+   Account schon vertritt. Kein zusaetzlicher Punkt, kein zweiter Ring aussen
+   herum: der Kreis WIRD gold, statt einen goldenen Rand um Gruen zu bekommen.
+   Ausgeschrieben steht die Stufe eine Klick-Tiefe weiter im Popup.
+   Gesetzt von renderAccountTierMark() in static/js/user-tier.js. */
+.email-icon.is-pro {
+  background-color: color-mix(in srgb, #c9a232 18%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #d4af37 52%, var(--sidebar-border));
+  color: color-mix(in srgb, #8a6b1a 80%, var(--text-color));
+}
+
+.email-icon.is-pro:hover {
+  background-color: color-mix(in srgb, #c9a232 28%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #d4af37 76%, var(--sidebar-border));
+  box-shadow: 0 3px 10px color-mix(in srgb, #c9a232 24%, transparent);
+}
+
+/* Plus bleibt in der Farbe des Hauses -- Gold gehoert zu den teuren Modellen,
+   und die hat Plus gerade nicht. Es traegt denselben Kreis, nur mit einem
+   Rand, den man sieht. */
+.email-icon.is-plus {
+  background-color: color-mix(in srgb, #1d9e75 36%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #1d9e75 66%, var(--sidebar-border));
+}
+
+.email-icon.is-plus:hover {
+  background-color: color-mix(in srgb, #1d9e75 46%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, #1d9e75 84%, var(--sidebar-border));
+}
+
+.dark-mode .email-icon.is-plus {
+  background-color: color-mix(in srgb, #1d9e75 44%, var(--sidebar-bg));
+}
+
+.dark-mode .email-icon.is-pro {
+  background-color: color-mix(in srgb, #c9a232 22%, var(--sidebar-bg));
+  color: color-mix(in srgb, #e8c76a 82%, var(--text-color));
+}
+
+.dark-mode .email-icon.is-pro:hover {
+  background-color: color-mix(in srgb, #c9a232 32%, var(--sidebar-bg));
 }
 
 

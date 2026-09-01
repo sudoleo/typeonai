@@ -16,6 +16,14 @@
     // Anhaenge und Resolve" (Plus und Pro -> true). Wer nur eines der beiden
     // liest, sperrt Plus im Zweifel wie Free statt wie Pro.
     userTier: { owner: "userTier", initial: "free" },
+    // accountTier ist NICHT dasselbe wie userTier. userTier ist die Stufe, die
+    // gerade auf dem Schirm gilt -- run-view.js und query-send.js stellen sie
+    // auf die Stufe des sichtbaren Laufs, damit Modellauswahl und Gates zu dem
+    // passen, was da steht. accountTier ist die Stufe des KONTOS und hat genau
+    // zwei Schreiber (/user_status und /usage in firebase.js). Die Marke am
+    // Konto-Kuerzel haengt an dieser hier: sonst wechselt sie die Farbe, sobald
+    // jemand einen alten Free-Lauf oeffnet.
+    accountTier: { owner: "userTier", initial: "free" },
     isUserPro: { owner: "userTier", initial: false },
     isUserPlus: { owner: "userTier", initial: false },
     currentMaxLimit: { owner: "userTier", initial: null },

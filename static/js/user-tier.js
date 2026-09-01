@@ -3,7 +3,8 @@
 // Tier-/Pro-UI: Badge, "Why limits"-Link, Deep-Search-Sperre, Premium-Modell-
 // Optionen je nach Pro/Plus/Free/ausgeloggt. In eigene IIFE gekapselt.
 // Extrahiert aus templates/index.html (initApp-Closure).
-// Exporte: window.updateUserTierUI, window.updatePremiumModelsState.
+// Exporte: window.updateUserTierUI, window.updatePremiumModelsState,
+// window.App.accountTier ({set, render}) fuer die Marke am Konto-Kuerzel.
 // window.App.normalizeTier kommt aus app-state.js (head-Bundle).
 // Abhaengigkeiten: window.setCurrentUsageLimits (optional waehrend Init), window.restoreModelSelections,
 // window.syncCustomModelPickers, window.App.updateDeepThinkText,
@@ -166,6 +167,50 @@
     }
   }
 
+  // === Die Kontostufe am Konto-Kuerzel ======================================
+  // Pro und Plus brauchen eine Kennzeichnung, die IMMER da ist -- das
+  // #proBadge im Kontingent-Panel sieht nur, wer den Ring anklickt. Statt
+  // einer weiteren Zeile in der ohnehin engen Fusszeile traegt sie das
+  // Element, das den Account schon vertritt: der Kreis mit dem Kuerzel
+  // wechselt die Farbe. Ausgeschrieben wird die Stufe erst im Konto-Popup,
+  // eine Klick-Tiefe weiter -- dezent heisst hier "erkennbar, aber ohne
+  // eigene Flaeche".
+  //
+  // Quelle ist accountTier, nicht userTier: userTier folgt dem sichtbaren
+  // LAUF (run-view.js), und ein alter Free-Lauf haette die Marke am Konto
+  // sonst ausgeknipst.
+  function renderAccountTierMark() {
+    const tier = normalizeTier(window.accountTier);
+
+    // Das Kuerzel wird von firebase.js bei jedem Login neu geschrieben; wer
+    // die Marke setzt, muss deshalb nach jedem Rendern noch einmal ran.
+    const icon = document.getElementById("emailIcon");
+    if (icon) {
+      icon.classList.toggle("is-pro", tier === TIER_PRO);
+      icon.classList.toggle("is-plus", tier === TIER_PLUS);
+    }
+
+    const label = document.getElementById("accountTierLabel");
+    if (label) {
+      label.hidden = tier === TIER_FREE;
+      // is-subtle ist die Gold-Variante und gehoert deshalb nur Pro: bliebe sie
+      // an Plus, faerbte .dark-mode .pro-badge.is-subtle den Text gold und
+      // schlaege dabei .pro-badge.is-plus.
+      label.classList.toggle("is-subtle", tier === TIER_PRO);
+      label.classList.toggle("is-plus", tier === TIER_PLUS);
+      if (tier !== TIER_FREE) label.textContent = tier === TIER_PRO ? "Pro" : "Plus";
+    }
+  }
+
+  // Nur die beiden Konto-Endpunkte rufen das: /user_status beim Laden und
+  // /usage als zweiter, autoritativer Schnappschuss. Ein Lauf darf hier nicht
+  // hineinschreiben.
+  function setAccountTier(tierValue) {
+    window.App.state.set("accountTier", normalizeTier(tierValue), "userTier");
+    renderAccountTierMark();
+  }
+
   window.updateUserTierUI = updateUserTierUI;
   window.updatePremiumModelsState = updatePremiumModelsState;
+  window.App.accountTier = { set: setAccountTier, render: renderAccountTierMark };
 })();

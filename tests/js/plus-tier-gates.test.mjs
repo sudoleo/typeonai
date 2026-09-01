@@ -12,6 +12,8 @@
  * darf die Anzeige deshalb nur anheben, nie senken.
  */
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
@@ -132,3 +134,47 @@ describe("attachment gate per tier", () => {
 function tierSignalFor(usage) {
   return usage.tier ?? (usage.isProUser === true ? "pro" : null);
 }
+
+/**
+ * Der Anfang der Kette: firebase.js.
+ *
+ * Genau hier ist die Plus-Stufe zuletzt verloren gegangen. Die Umstellung auf
+ * drei Stufen hat jeden Aufrufer tier-bewusst gemacht -- ausser den beiden in
+ * firebase.js, die /user_status und /usage auswerten. Die reichten weiter
+ * `data.is_pro` durch, und weil das Flag fuer Plus false ist, stand jedes
+ * Plus-Konto direkt nach dem Laden wieder auf Free: kein Anhang, kein Resolve.
+ *
+ * firebase.js laedt das Firebase-SDK von gstatic und laesst sich deshalb nicht
+ * in jsdom booten. Geprueft wird darum die Quelle: kein Aufruf der beiden
+ * Tier-Senken darf ein is_pro-Flag als Stufe uebergeben.
+ */
+describe("firebase.js feeds the tier, not the pro flag", () => {
+  const source = readFileSync(
+    new URL("../../static/firebase.js", import.meta.url),
+    "utf8"
+  );
+
+  const TIER_SINKS = ["updateUserTierUI", "setCurrentUsageLimits"];
+
+  // Das erste Argument jedes Aufrufs. Die Pruefungen auf die Existenz der
+  // Funktion (`typeof window.x === "function"`) haben keine oeffnende Klammer
+  // direkt hinter dem Namen und fallen damit heraus.
+  function firstArguments(name) {
+    return source
+      .split(name + "(")
+      .slice(1)
+      .map(rest => rest.split(/[,)]/)[0].trim());
+  }
+
+  it.each(TIER_SINKS)("never passes an is_pro flag to %s", (name) => {
+    const args = firstArguments(name);
+    expect(args.length).toBeGreaterThan(0);
+    args.forEach(arg => expect(arg).not.toMatch(/is_?[Pp]ro/));
+  });
+
+  it("reads data.tier with the pro flag only as a fallback", () => {
+    // `data.tier ?? data.is_pro`: ein aelterer Server ohne "tier" darf weiter
+    // Pro erkennen, aber nur als Rueckfall.
+    expect(source).toMatch(/data\.tier\s*\?\?/);
+  });
+});

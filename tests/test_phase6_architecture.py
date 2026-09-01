@@ -18,6 +18,12 @@ def source(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _visuals_cache_key(stylesheet: str):
+    """Der ?v=-Token, mit dem ein Blatt components-consensus-visuals.css holt."""
+    match = re.search(r"components-consensus-visuals\.css\?v=([^'\")\s]+)", stylesheet)
+    return match.group(1) if match else None
+
+
 def test_public_site_origin_is_neutral_validated_core_configuration():
     assert normalize_public_site_url(None) == "https://www.consens.io"
     assert normalize_public_site_url("https://preview.example/") == "https://preview.example"
@@ -202,8 +208,18 @@ def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
     # Die Punkte neben den Marken sind seit 2026-08-15 ersatzlos weg
     # (User-Vorgabe); nichts darf sie unbemerkt wieder einfuehren.
     assert ".cx-marker" not in shared
-    assert "components-consensus-visuals.css?v=20260831-coverage1" in source("static/css/landing.css")
-    assert "components-consensus-visuals.css?v=20260831-coverage1" in source("static/css/components-consensus-insights.css")
+    # Beide Blaetter binden das gemeinsame ein, und zwar mit DEMSELBEN
+    # Cache-Key. Das Datum steht hier bewusst nicht mehr fest verdrahtet: ob
+    # ein Token aktuell ist, prueft
+    # test_all_active_local_assets_have_current_consistent_cache_keys, und ein
+    # hartes Datum machte aus jedem faelligen Bump einen Testfehler an einer
+    # Stelle, die davon gar nicht handelt.
+    keys = {
+        _visuals_cache_key(source(path))
+        for path in ("static/css/landing.css", "static/css/components-consensus-insights.css")
+    }
+    assert None not in keys, "a stylesheet imports the shared visuals without a cache key"
+    assert len(keys) == 1, f"the shared visuals are imported with different cache keys: {keys}"
     all_static = "\n".join(
         path.read_text(encoding="utf-8")
         for path in (ROOT / "static").rglob("*")

@@ -366,49 +366,44 @@ async function checkUserStatusOnLoad(user, token, generation) {
 
       // 2. UI AKTUALISIEREN
 
+      // "is_pro" ist seit der Plus-Stufe kein vollstaendiger Status mehr: es
+      // heisst nur "Frontier-Modelle und Deep Think" und ist fuer Plus false.
+      // Wer hier weiterhin nur das Flag durchreicht, macht aus jedem
+      // Plus-Konto beim Laden ein Free-Konto. /user_status liefert "tier".
+      const tier = data.tier ?? data.is_pro;
+
       // A) Der saubere Weg (falls vorhanden):
       if (typeof window.updateUserTierUI === "function") {
-          window.updateUserTierUI(data.is_pro, true);
+          window.updateUserTierUI(tier, true);
       }
+      // Die Stufe des KONTOS -- getrennt von der Stufe auf dem Schirm, die ein
+      // geoeffneter Lauf mitbringt. Sie faerbt das Konto-Kuerzel.
+      window.App?.accountTier?.set?.(tier);
       if (typeof window.setCurrentUsageLimits === "function") {
-          window.setCurrentUsageLimits(data.is_pro, data);
+          window.setCurrentUsageLimits(tier, data);
       } else {
           window.App.state.set("currentMaxLimit", data.limit, "userTier");
           window.App.state.set("currentDeepLimit", data.deep_limit, "userTier");
       }
 
-      // B) FALLBACK (Hier war der Fehler):
-      const badge = document.getElementById("proBadge");
-      const upgradeLink = document.getElementById("upgradeLink");
-      const premiumOptions = document.querySelectorAll('.premium-option');
-      if (data.is_pro) {
-          // === IST PRO ===
-          if (badge) badge.style.display = "inline-block";
-          if (upgradeLink) upgradeLink.style.display = "none";
-
-          premiumOptions.forEach(option => {
-              option.disabled = false;
-              option.textContent = option.textContent
-                  .replace(/^Pro:\s*/i, '')
-                  .replace(' (Pro only)', '')
-                  .trim();
-          });
-
-      } else {
-          // === IST FREE ===
-          if (badge) badge.style.display = "none";
-          if (upgradeLink) upgradeLink.style.display = "inline-flex";
-
-          premiumOptions.forEach(option => {
-              option.disabled = true;
-              option.textContent = option.textContent
-                  .replace(/^Pro:\s*/i, '')
-                  .replace(' (Pro only)', '')
-                  .trim();
-
-          });
+      // B) FALLBACK -- nur wenn es den sauberen Weg oben nicht gibt. Frueher
+      // lief er immer und schrieb danach das Ergebnis von updateUserTierUI
+      // wieder um: Plus verlor sein Badge und bekam den Free-Hinweis.
+      if (typeof window.updateUserTierUI !== "function") {
+        const badge = document.getElementById("proBadge");
+        const upgradeLink = document.getElementById("upgradeLink");
+        const isPro = data.is_pro === true;
+        if (badge) badge.style.display = isPro ? "inline-block" : "none";
+        if (upgradeLink) upgradeLink.style.display = isPro ? "none" : "inline-flex";
+        document.querySelectorAll('.premium-option').forEach(option => {
+          option.disabled = !isPro;
+          option.textContent = option.textContent
+            .replace(/^Pro:\s*/i, '')
+            .replace(' (Pro only)', '')
+            .trim();
+          if (option.disabled && option.selected) option.parentNode.selectedIndex = 0;
+        });
       }
-      
     }
   } catch (error) {
     console.error("Fehler beim User-Status Check:", error);
@@ -556,7 +551,12 @@ onIdTokenChanged(auth, async (user) => {
         <span id="emailIcon" class="email-icon" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-label="Open account menu">${emailInitial}</span>
         <div id="emailPopup" class="email-popup" role="menu" hidden>
           <div class="popup-content">
-            <span class="user-email">${user.email}</span>
+            <span class="user-email">
+              <span class="user-email-address">${user.email}</span>
+              <!-- Die Aufloesung zur Farbe am Kuerzel: hier steht der Name der
+                   Stufe. user-tier.js fuellt und blendet ihn (Free: leer). -->
+              <span id="accountTierLabel" class="pro-badge account-tier-label" hidden></span>
+            </span>
             <a id="sharedLinksButton" class="top-bar-about" role="menuitem">Shared links</a>
             <a id="watchedLinksButton" class="top-bar-about" role="menuitem">Watched</a>
             <a id="logoutButton" class="top-bar-about" role="menuitem">Logout</a>
@@ -564,6 +564,10 @@ onIdTokenChanged(auth, async (user) => {
         </div>
       </div>
     `;
+    // innerHTML hat #emailIcon gerade ersetzt: die Klasse, die die Kontostufe
+    // traegt, ist mit dem alten Knoten weg und muss neu gesetzt werden.
+    window.App?.accountTier?.render?.();
+
     const emailIcon = document.getElementById("emailIcon");
     const emailPopup = document.getElementById("emailPopup");
     const logoutButton = document.getElementById("logoutButton");
@@ -682,6 +686,7 @@ onIdTokenChanged(auth, async (user) => {
         if (typeof window.updateUserTierUI === "function") {
             window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
         }
+        window.App?.accountTier?.set?.("free");
         publishAuthState(null);
       }
     });
@@ -711,12 +716,15 @@ async function fetchUsageData(token, uid, generation) {
     // recover in the same session when the earlier /user_status request had a
     // transient failure.
     const isPro = data.is_pro === true;
+    // Auch hier gilt: "is_pro" allein macht aus Plus ein Free-Konto.
+    const tier = data.tier ?? isPro;
     window.App.state.set("isUserPro", isPro, "userTier");
     if (typeof window.updateUserTierUI === "function") {
-      window.updateUserTierUI(isPro, true);
+      window.updateUserTierUI(tier, true);
     }
+    window.App?.accountTier?.set?.(tier);
     if (typeof window.setCurrentUsageLimits === "function") {
-      window.setCurrentUsageLimits(isPro, data);
+      window.setCurrentUsageLimits(tier, data);
     } else {
       const totalLimit = Number(data.total_limit);
       const deepTotalLimit = Number(data.deep_total_limit);

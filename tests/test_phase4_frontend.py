@@ -129,8 +129,14 @@ def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
     usage = section(firebase, "async function fetchUsageData", "window.refreshUsageData")
 
     assert 'window.App.state.set("isUserPro", isPro, "userTier")' in usage
-    assert "window.updateUserTierUI(isPro, true)" in usage
-    assert "window.setCurrentUsageLimits(isPro, data)" in usage
+    # Die Stufe, nicht das Flag: "is_pro" ist seit Plus nur noch "darf teure
+    # Modelle" und false fuer Plus. Wer es hier als Stufe durchreicht, macht
+    # aus jedem Plus-Konto ein Free-Konto -- genau so sind die Anhaenge
+    # verschwunden.
+    assert "const tier = data.tier ?? isPro" in usage
+    assert "window.updateUserTierUI(tier, true)" in usage
+    assert "window.setCurrentUsageLimits(tier, data)" in usage
+    assert 'window.App?.accountTier?.set?.(tier)' in usage
 
 
 def test_auth_bootstrap_watchdog_precedes_firebase_and_clears_stale_skeletons():
