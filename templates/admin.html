@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="/static/style.css?v=20260901-watchnudge1">
     <link rel="stylesheet" href="/static/css/admin.css?v=20260901-plustier1">
 
-    <script type="module" src="/static/js/admin.js?v=20260901-plustier1"></script>
+    <script type="module" src="/static/js/admin.js?v=20260901-watchtier1"></script>
 </head>
 <body class="dark-mode">
     <header class="top-bar">
@@ -369,7 +369,7 @@
                     Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
                 </p>
                 <h4>Watch models by user tier</h4>
-                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for each tier. At least two answer providers are required. Premium models stay listed for Free but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. Free is the tier the Scheduled Publisher watches run on; every other watch follows its owner's account tier.</p>
+                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for the Free/Plus profile and the Pro profile. Plus deliberately uses the same model profile as Free; only its limits and optional daily interval differ. At least two answer providers are required. Premium models stay listed for Free/Plus but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. The Scheduled Publisher also uses the Free/Plus profile; personal watches follow the owner's current tier.</p>
                 <div id="watchModelConfig" class="watch-model-grid"></div>
                 <div class="watch-admin-toolbar">
                     <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>

@@ -151,6 +151,20 @@ def test_pending_account_deletion_fences_api_run_creation():
     assert db.documents == before
 
 
+def test_pending_account_deletion_fences_worker_transition():
+    repo, db = make_repo()
+    run, _ = create(repo)
+    repo.mark_reserved(run["run_id"])
+    db.documents[(persistence_guard.ACCOUNT_DELETION_JOBS_COLLECTION, "user-1")] = {
+        "status": "pending"
+    }
+
+    with pytest.raises(persistence_guard.AccountDeletionInProgress):
+        repo.claim_running(run["run_id"], "worker")
+
+    assert repo.get(run["run_id"])["status"] == "reserved"
+
+
 def test_only_one_concurrent_worker_can_claim_running():
     repo, _db = make_repo()
     run, _ = create(repo)

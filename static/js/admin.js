@@ -247,7 +247,7 @@ function renderWatchModelConfig() {
         currentConsensus[select.dataset.watchConsensusTier] = select.value;
     });
     container.innerHTML = '';
-    ['Provider', 'Free Watch', 'Pro Watch'].forEach(text => {
+    ['Provider', 'Free / Plus Watch', 'Pro Watch'].forEach(text => {
         const head = document.createElement('div');
         head.className = 'watch-model-head';
         head.textContent = text;

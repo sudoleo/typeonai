@@ -13,8 +13,21 @@ from app.core.observability import safe_exception
 logger = logging.getLogger(__name__)
 
 MAX_ATTACHMENTS = 2
-MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB pro Datei
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024  # 5 MB pro Datei (Eingang)
 MAX_ATTACHMENT_BASE64_CHARS = 4 * ((MAX_ATTACHMENT_BYTES + 2) // 3)
+
+# Was nach der Aufbereitung noch an die Provider gehen darf. Ein Anhang geht
+# an bis zu sechs Familien GLEICHZEITIG raus und base64 legt ein Drittel
+# obendrauf: aus 5 MB werden 40 MB Ausgang plus die Bildtokens in jedem der
+# sechs Prompts. Deshalb wird jedes Bild auf Providergroesse gebracht
+# (shrink_image) und ein grosses PDF geht nur noch als extrahierter Text raus.
+IMAGE_MAX_EDGE = 1568           # laengste Kante nach dem Verkleinern
+IMAGE_TARGET_BYTES = 900_000    # Zielgroesse der Neukodierung
+IMAGE_JPEG_QUALITIES = (85, 70, 55)
+MAX_IMAGE_BYTES = 1_500_000     # harte Grenze NACH dem Verkleinern
+IMAGE_MAX_PIXELS = 40_000_000   # Schutz vor kleinen Dateien mit riesiger Dekodierung
+PDF_NATIVE_MAX_BYTES = 2 * 1024 * 1024
+MAX_ATTACHMENT_TOTAL_BYTES = 6 * 1024 * 1024
 MAX_PDF_EXTRACT_CHARS = 24000
 MAX_TEXT_EXTRACT_CHARS = 24000
 MAX_DOCX_ENTRIES = 256
@@ -99,6 +112,10 @@ _DOCX_ALLOWED_PREFIXES = ("_rels/", "docProps/", "word/", "customXml/")
 
 
 class InvalidDocx(ValueError):
+    pass
+
+
+class ImagePixelLimitExceeded(ValueError):
     pass
 
 
@@ -187,6 +204,112 @@ def _looks_like_text(raw: bytes) -> bool:
     return True
 
 
+def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
+    """Bild auf Providergroesse bringen: laengste Kante ``IMAGE_MAX_EDGE``,
+    Zielgroesse ``IMAGE_TARGET_BYTES``.
+
+    Kleine Bilder bleiben unangetastet -- ein Screenshot soll seine
+    PNG-Schaerfe behalten. Alles darueber wird skaliert und als JPEG neu
+    kodiert: ein 4-MB-Handyfoto traegt bei 1568 px keine Information weniger,
+    kostet aber ein Vielfaches, weil es in JEDEN der sechs Prompts geht.
+
+    Bei jedem Fehler (kein Pillow, kaputte Datei, Decompression Bomb) bleibt
+    das Original stehen; die Groessenpruefung im Aufrufer faengt es dann ab --
+    lieber eine ehrliche Absage als ein stiller Riesen-Upload.
+    """
+    try:
+        from PIL import Image
+    except ImportError:  # pragma: no cover - Pillow fehlt nur in Alt-Umgebungen
+        logger.warning("Pillow is not installed; image attachments are not shrunk.")
+        return raw, mime
+
+    try:
+        source = Image.open(io.BytesIO(raw))
+    except Image.DecompressionBombError as exc:
+        raise ImagePixelLimitExceeded("image pixel budget exceeded") from exc
+    except Exception as exc:
+        logger.info("Image attachment could not be decoded category=%s", safe_exception(exc))
+        return raw, mime
+
+    if source.width * source.height > IMAGE_MAX_PIXELS:
+        source.close()
+        raise ImagePixelLimitExceeded("image pixel budget exceeded")
+
+    try:
+        source.load()
+    except Image.DecompressionBombError as exc:
+        source.close()
+        raise ImagePixelLimitExceeded("image pixel budget exceeded") from exc
+    except Exception as exc:
+        source.close()
+        logger.info("Image attachment could not be decoded category=%s", safe_exception(exc))
+        return raw, mime
+
+    with source:
+        if max(source.size) <= IMAGE_MAX_EDGE and len(raw) <= IMAGE_TARGET_BYTES:
+            return raw, mime
+
+        image = source
+        ratio = IMAGE_MAX_EDGE / max(image.size)
+        if ratio < 1:
+            image = image.resize(
+                (max(1, round(image.width * ratio)), max(1, round(image.height * ratio))),
+                Image.LANCZOS,
+            )
+
+        # JPEG kennt keinen Alphakanal. Fuer das Modell zaehlt das sichtbare
+        # Bild, also kommt die Transparenz auf Weiss.
+        if image.mode in ("RGBA", "LA", "P"):
+            image = image.convert("RGBA")
+            flattened = Image.new("RGB", image.size, (255, 255, 255))
+            flattened.paste(image, mask=image.split()[-1])
+            image = flattened
+        elif image.mode != "RGB":
+            image = image.convert("RGB")
+
+        smallest = None
+        for quality in IMAGE_JPEG_QUALITIES:
+            buffer = io.BytesIO()
+            try:
+                image.save(buffer, format="JPEG", quality=quality, optimize=True)
+            except Exception as exc:
+                logger.warning(
+                    "Image attachment could not be re-encoded category=%s", safe_exception(exc)
+                )
+                return raw, mime
+            encoded = buffer.getvalue()
+            if smallest is None or len(encoded) < len(smallest):
+                smallest = encoded
+            if len(encoded) <= IMAGE_TARGET_BYTES:
+                break
+
+    if smallest is None or len(smallest) >= len(raw):
+        return raw, mime
+    return smallest, "image/jpeg"
+
+
+def pdf_text_for(attachment: dict) -> str | None:
+    """Extrahierter PDF-Text, einmal pro Anhang. Der Text wird von bis zu
+    sechs Familien gebraucht und pypdf ist zu teuer fuer sechs Laeufe."""
+    if "pdf_text" not in attachment:
+        attachment["pdf_text"] = extract_pdf_text(attachment.get("raw", b""))
+    return attachment["pdf_text"]
+
+
+def pdf_goes_native(attachment: dict) -> bool:
+    """Ob das PDF als Datei an die Provider geht -- oder nur als Text.
+
+    Nativ heisst: die kompletten Bytes gehen base64-kodiert an jede
+    PDF-faehige Familie. Ueber ``PDF_NATIVE_MAX_BYTES`` wiegt das den Aufwand
+    nicht auf, solange sich Text extrahieren laesst. Laesst er sich NICHT
+    extrahieren (Scan), geht die Datei weiter nativ raus: sonst bekaeme das
+    Modell gar nichts.
+    """
+    if len(attachment.get("raw", b"")) <= PDF_NATIVE_MAX_BYTES:
+        return True
+    return not pdf_text_for(attachment)
+
+
 def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     """Liest und validiert `attachments` aus dem Request-Body.
 
@@ -270,12 +393,56 @@ def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
                 detail=f"Attachment '{name}' has an unsupported file type. Allowed: {ATTACHMENT_TYPES_LABEL}.",
             )
 
+        if mime in IMAGE_MIMES:
+            try:
+                shrunk, shrunk_mime = shrink_image(raw, mime)
+            except ImagePixelLimitExceeded:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Image '{name}' has too many pixels to process safely. "
+                        "Please resize it before attaching."
+                    ),
+                ) from None
+            if len(shrunk) > MAX_IMAGE_BYTES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Image '{name}' could not be prepared for the models. "
+                        f"Please attach an image under {MAX_IMAGE_BYTES // 1024} KB "
+                        "or save it as PNG/JPG first."
+                    ),
+                )
+            if shrunk is not raw:
+                logger.info(
+                    "Attachment image shrunk: %s -> %s bytes",
+                    len(raw),
+                    len(shrunk),
+                )
+                raw = shrunk
+                mime = shrunk_mime
+                b64_data = base64.b64encode(raw).decode("ascii")
+                stem, dot, _extension = name.rpartition(".")
+                name = (stem if dot and stem else name) + ".jpg"
+
         parsed.append({
             "name": name,
             "mime": mime,
             "data": b64_data,
             "raw": raw,
         })
+
+    # Die Einzelgrenzen sagen nichts ueber die Summe: zwei Dateien am oberen
+    # Rand ergeben zusammen wieder einen Prompt, der jede Familie erschlaegt.
+    total = sum(len(att["raw"]) for att in parsed)
+    if total > MAX_ATTACHMENT_TOTAL_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "The attachments are too large together. The limit is "
+                f"{MAX_ATTACHMENT_TOTAL_BYTES // (1024 * 1024)} MB per question."
+            ),
+        )
 
     return parsed
 
@@ -390,7 +557,7 @@ def attachment_fallback_text(attachment: dict, *, include_images_note: bool = Tr
         )
 
     if mime == "application/pdf":
-        text = extract_pdf_text(attachment.get("raw", b""))
+        text = pdf_text_for(attachment)
         if text:
             return (
                 f"--- Attached document: {name} (extracted text) ---\n"
@@ -419,7 +586,7 @@ def build_attachment_question_suffix(attachments: list[dict], provider_key: str)
     parts = []
     for att in attachments:
         mime = att.get("mime", "")
-        if mime == "application/pdf" and provider_key in PROVIDER_PDF_SUPPORT:
+        if mime == "application/pdf" and provider_key in PROVIDER_PDF_SUPPORT and pdf_goes_native(att):
             continue
         if mime in IMAGE_MIMES and provider_key in PROVIDER_IMAGE_SUPPORT:
             continue
@@ -440,7 +607,7 @@ def native_attachments_for_provider(attachments: list[dict], provider_key: str) 
     native = []
     for att in attachments:
         mime = att.get("mime", "")
-        if mime == "application/pdf" and provider_key in PROVIDER_PDF_SUPPORT:
+        if mime == "application/pdf" and provider_key in PROVIDER_PDF_SUPPORT and pdf_goes_native(att):
             native.append(att)
         elif mime in IMAGE_MIMES and provider_key in PROVIDER_IMAGE_SUPPORT:
             native.append(att)

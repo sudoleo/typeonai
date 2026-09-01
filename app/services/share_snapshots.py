@@ -1121,16 +1121,27 @@ def create_share_for_watch_query(uid, question, *, visibility="private", db=None
 
 def revoke_share(share_id, uid, is_admin=False, db=None):
     db = db if db is not None else db_firestore
-    data = get_share(share_id, db=db)
-    if data is None:
-        raise ShareError("not_found", "Share not found.")
-    if data.get("owner_uid") != uid and not is_admin:
-        raise ShareError("forbidden", "You can only revoke your own shares.")
-    db.collection(SHARES_COLLECTION).document(share_id).update({
-        "status": "revoked",
-        "indexed": False,
-        "revoked_at": firestore.SERVER_TIMESTAMP,
-    })
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+
+    def revoke(transaction):
+        snapshot = share_ref.get(transaction=transaction)
+        data = snapshot.to_dict() if snapshot.exists else None
+        if data is None:
+            raise ShareError("not_found", "Share not found.")
+        if data.get("owner_uid") != uid and not is_admin:
+            raise ShareError("forbidden", "You can only revoke your own shares.")
+        owner_uid = str(data.get("owner_uid") or "").strip()
+        if owner_uid:
+            persistence_guard.ensure_account_write_allowed(
+                uid=owner_uid, db=db, transaction=transaction
+            )
+        transaction.update(share_ref, {
+            "status": "revoked",
+            "indexed": False,
+            "revoked_at": firestore.SERVER_TIMESTAMP,
+        })
+
+    _run_transaction(db, revoke)
     # Scheduler-Metadaten sofort entfernen; kompakte History bleibt bis zum
     # regulaeren Share-Hard-Delete erhalten. Follower ebenfalls sofort weg –
     # eine widerrufene Seite darf keine Mails mehr ausloesen.
@@ -1200,49 +1211,61 @@ def moderate_share(
     nimmt den Share aus der priorisierten Review-Liste.
     """
     db = db if db is not None else db_firestore
-    data = get_share(share_id, db=db)
-    if data is None:
-        raise ShareError("not_found", "Share not found.")
-    if action is not None and action not in MODERATION_ACTIONS:
-        raise ShareError("bad_request", "Unknown moderation action.")
-    if action is None and indexed is None:
-        raise ShareError("bad_request", "Nothing to moderate: pass action and/or indexed.")
-    if indexed is True and str(data.get("visibility") or "public") != "public":
-        raise ShareError("bad_request", "Private pages cannot be indexed.")
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
 
-    status = data.get("status")
-    updates = {"needs_review": False, "reviewed_at": firestore.SERVER_TIMESTAMP}
-    if actor_uid:
-        updates["reviewed_by"] = _clip(actor_uid, 128)
-    if actor_key_id:
-        updates["reviewed_by_api_key_id"] = _clip(actor_key_id, 64)
-    if source:
-        updates["review_source"] = _clip(source, 40)
-    if action == "block":
-        if status == "revoked":
-            raise ShareError("bad_request", "Share is already revoked.")
-        updates["status"] = "blocked"
-        updates["indexed"] = False
-        updates["blocked_at"] = firestore.SERVER_TIMESTAMP
-        status = "blocked"
-    elif action == "unblock":
-        if status != "blocked":
-            raise ShareError("bad_request", "Only blocked shares can be unblocked.")
-        updates["status"] = "active"
-        status = "active"
+    def moderate(transaction):
+        snapshot = share_ref.get(transaction=transaction)
+        data = snapshot.to_dict() if snapshot.exists else None
+        if data is None:
+            raise ShareError("not_found", "Share not found.")
+        if action is not None and action not in MODERATION_ACTIONS:
+            raise ShareError("bad_request", "Unknown moderation action.")
+        if action is None and indexed is None:
+            raise ShareError("bad_request", "Nothing to moderate: pass action and/or indexed.")
+        if indexed is True and str(data.get("visibility") or "public") != "public":
+            raise ShareError("bad_request", "Private pages cannot be indexed.")
 
-    if indexed is not None:
-        if bool(indexed) and status != "active":
-            raise ShareError("bad_request", "Only active shares can be indexed.")
-        updates["indexed"] = bool(indexed)
-        updates["indexed_at"] = firestore.SERVER_TIMESTAMP if indexed else None
+        status = data.get("status")
+        updates = {"needs_review": False, "reviewed_at": firestore.SERVER_TIMESTAMP}
+        if actor_uid:
+            updates["reviewed_by"] = _clip(actor_uid, 128)
+        if actor_key_id:
+            updates["reviewed_by_api_key_id"] = _clip(actor_key_id, 64)
+        if source:
+            updates["review_source"] = _clip(source, 40)
+        if action == "block":
+            if status == "revoked":
+                raise ShareError("bad_request", "Share is already revoked.")
+            updates["status"] = "blocked"
+            updates["indexed"] = False
+            updates["blocked_at"] = firestore.SERVER_TIMESTAMP
+            status = "blocked"
+        elif action == "unblock":
+            if status != "blocked":
+                raise ShareError("bad_request", "Only blocked shares can be unblocked.")
+            updates["status"] = "active"
+            status = "active"
 
-    # Jede Index-Entscheidung bzw. ein Block erledigt eine offene
-    # Nutzer-Anfrage ("Request Google listing") – Flag zuruecksetzen.
-    if indexed is not None or action == "block":
-        updates["index_requested"] = False
+        if indexed is not None:
+            if bool(indexed) and status != "active":
+                raise ShareError("bad_request", "Only active shares can be indexed.")
+            updates["indexed"] = bool(indexed)
+            updates["indexed_at"] = firestore.SERVER_TIMESTAMP if indexed else None
 
-    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
+        # Jede Index-Entscheidung bzw. ein Block erledigt eine offene
+        # Nutzer-Anfrage ("Request Google listing") – Flag zuruecksetzen.
+        if indexed is not None or action == "block":
+            updates["index_requested"] = False
+
+        owner_uid = str(data.get("owner_uid") or "").strip()
+        if owner_uid:
+            persistence_guard.ensure_account_write_allowed(
+                uid=owner_uid, db=db, transaction=transaction
+            )
+        transaction.update(share_ref, updates)
+        return data, updates
+
+    data, updates = _run_transaction(db, moderate)
     invalidate_share_cache(share_id)
     merged = dict(data)
     merged.update(updates)
@@ -1301,38 +1324,47 @@ def request_share_indexing(share_id, uid, want=True, db=None):
     Google-Index (oder zieht die Anfrage zurück). Setzt NIE ``indexed`` –
     die Freigabe bleibt eine Admin-Entscheidung in moderate_share()."""
     db = db if db is not None else db_firestore
-    data = get_share(share_id, db=db)
-    if data is None:
-        raise ShareError("not_found", "Share not found.")
-    if data.get("owner_uid") != uid:
-        raise ShareError("forbidden", "You can only manage your own pages.")
-    state = {
-        "indexed": bool(data.get("indexed")),
-        "index_requested": bool(data.get("index_requested")),
-        "index_eligible": bool(data.get("index_eligible")),
-    }
-    if str(data.get("visibility") or "public") != "public":
-        raise ShareError("bad_request", "Only public pages can be listed on Google.")
-    if data.get("status") != "active":
-        raise ShareError("bad_request", "Only active pages can be listed on Google.")
-    if state["indexed"]:
-        # Bereits gelistet: nichts zu tun, Anfrage-Flag bleibt aus.
+    share_ref = db.collection(SHARES_COLLECTION).document(share_id)
+
+    def request(transaction):
+        snapshot = share_ref.get(transaction=transaction)
+        data = snapshot.to_dict() if snapshot.exists else None
+        if data is None:
+            raise ShareError("not_found", "Share not found.")
+        if data.get("owner_uid") != uid:
+            raise ShareError("forbidden", "You can only manage your own pages.")
+        state = {
+            "indexed": bool(data.get("indexed")),
+            "index_requested": bool(data.get("index_requested")),
+            "index_eligible": bool(data.get("index_eligible")),
+        }
+        if str(data.get("visibility") or "public") != "public":
+            raise ShareError("bad_request", "Only public pages can be listed on Google.")
+        if data.get("status") != "active":
+            raise ShareError("bad_request", "Only active pages can be listed on Google.")
+        if state["indexed"]:
+            # Bereits gelistet: nichts zu tun, Anfrage-Flag bleibt aus.
+            return state
+
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction
+        )
+        updates = {"index_requested": bool(want)}
+        if want:
+            updates["index_requested_at"] = firestore.SERVER_TIMESTAMP
+            updates["needs_review"] = True
+        else:
+            # Zurückgezogen: Review-Priorisierung nur aufheben, wenn sie nicht
+            # von der Report-Schwelle stammt.
+            reports = data.get("reports_count")
+            reports = reports if isinstance(reports, int) and reports > 0 else 0
+            if reports < AUTO_NOINDEX_REPORTS:
+                updates["needs_review"] = False
+        transaction.update(share_ref, updates)
+        state["index_requested"] = bool(want)
         return state
 
-    updates = {"index_requested": bool(want)}
-    if want:
-        updates["index_requested_at"] = firestore.SERVER_TIMESTAMP
-        updates["needs_review"] = True
-    else:
-        # Zurückgezogen: Review-Priorisierung nur aufheben, wenn sie nicht
-        # von der Report-Schwelle stammt.
-        reports = data.get("reports_count")
-        reports = reports if isinstance(reports, int) and reports > 0 else 0
-        if reports < AUTO_NOINDEX_REPORTS:
-            updates["needs_review"] = False
-    db.collection(SHARES_COLLECTION).document(share_id).update(updates)
-    state["index_requested"] = bool(want)
-    return state
+    return _run_transaction(db, request)
 
 
 def list_shares_for_admin(db=None, only_reported=False, max_items=500):

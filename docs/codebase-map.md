@@ -621,9 +621,14 @@ der Python-Staleness-Test auch indirekte Änderungen erkennt.
   Modellantwort-Bookmarks verschiebt `rewriteSourceTags` ausserdem einen
   eindeutigen, reinen `[S…]`-Block vor dem ersten Wort hinter die erste
   vollstaendige Aussage; der Consensus-Renderpfad ruft diese Reparatur nicht auf.
-- **`attachments.js`** — Attachment-UI/Payload (Pro), inklusive Bild-Paste im
+- **`attachments.js`** — Attachment-UI/Payload (ab Plus), inklusive Bild-Paste im
   Fragefeld und Drag-and-drop aller unterstützten Dateitypen auf den
-  Input-Container. Solange ein echter
+  Input-Container. Bilder bis 15 MB werden vor der Base64-Kodierung auf
+  höchstens 1568 px Kantenlänge als JPEG verkleinert; kleine Screenshots
+  bleiben unverändert. Der Server wiederholt die Aufbereitung innerhalb
+  seines 5-MB-Eingangslimits, prüft vor dem Dekodieren zusätzlich ein festes
+  Pixelbudget und korrigiert bei einer JPEG-Konvertierung MIME und Dateiendung.
+  Solange ein echter
   Anhang für die nächste Frage bereitliegt, wird DeepSeek temporär mit einem
   sichtbaren Kompatibilitätshinweis deaktiviert, weil dessen Chat-API keine
   Datei-/Bild-Inputs akzeptiert; `query-send.js` erzwingt dieselbe Sperre
@@ -1809,12 +1814,18 @@ true})`) ueberschreibt den Default dauerhaft.
 
 ### Attachments (ab Plus)
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
-validiert: max **2** Dateien, je **5 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
+validiert: max **2** Dateien, serverseitig je **5 MB** und zusammen höchstens
+**6 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
 (TXT umfasst auch die UI-Endungen MD und CSV). Word- und Textdateien werden
 serverseitig als begrenzter Text extrahiert und als Text-Fallback an alle
-Provider angehängt. Bild-Support:
-openai/anthropic/gemini/grok; PDF-Support: openai/anthropic/gemini (sonst
-Text-Fallback/PDF-Extraktion). **In Firestore landen nie Datei-Bytes**, nur
+Provider angehängt. Große Bilder dürfen clientseitig bis 15 MB ausgewählt
+werden, werden aber vor dem Upload auf höchstens 1568 px und ungefähr 900 kB
+gebracht; serverseitig gelten zusätzlich 40 Mio. Pixel vor dem Dekodieren und
+1,5 MB nach der Aufbereitung. Bild-Support:
+openai/anthropic/gemini/grok/kimi/glm; PDF-Support:
+openai/anthropic/gemini. PDFs über 2 MB werden für alle Familien als einmal
+extrahierter Text verwendet; nur nicht extrahierbare Scans bleiben für
+PDF-fähige Familien nativ. **In Firestore landen nie Datei-Bytes**, nur
 Metadaten (Name/Typ/Größe) — siehe `bookmarks.py::sanitize_attachment_meta`.
 Bilder können zusätzlich zum Dateiauswahldialog per Paste im `#questionInput`
 angehängt werden. Drag-and-drop auf `.chat-input-container` akzeptiert wie der

@@ -823,6 +823,20 @@ class ShareFlowTests(unittest.TestCase):
         snapshots.revoke_share(created["share_id"], "other-user", is_admin=True, db=self.db)
         self.assertEqual(self.db.stores[snapshots.SHARES_COLLECTION][created["share_id"]]["status"], "revoked")
 
+    def test_revoke_is_fenced_during_account_deletion(self):
+        result_id = self._store_pending()
+        created = snapshots.create_share_from_pending(self.uid, result_id,
+                                                      db=self.db, consume_quota=lambda: True)
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(snapshots.persistence_guard.AccountDeletionInProgress):
+            snapshots.revoke_share(created["share_id"], self.uid, db=self.db)
+
+        self.assertEqual(
+            self.db.stores[snapshots.SHARES_COLLECTION][created["share_id"]]["status"],
+            "active",
+        )
+
     def test_report_share_increments_and_aggregates(self):
         result_id = self._store_pending()
         created = snapshots.create_share_from_pending(self.uid, result_id,
@@ -918,6 +932,15 @@ class ModerationAndCleanupTests(unittest.TestCase):
             snapshots.moderate_share(blocked_id, indexed=True, db=self.db)
         # De-Indexieren bleibt auch für nicht-aktive erlaubt
         snapshots.moderate_share(blocked_id, indexed=False, db=self.db)
+
+    def test_moderation_is_fenced_during_account_deletion(self):
+        share_id = self._make_share()
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(snapshots.persistence_guard.AccountDeletionInProgress):
+            snapshots.moderate_share(share_id, indexed=True, db=self.db)
+
+        self.assertFalse(self._share(share_id)["indexed"])
 
     def test_moderate_validates_input(self):
         share_id = self._make_share()
@@ -1884,6 +1907,16 @@ class IndexingRequestTests(unittest.TestCase):
         self.assertFalse(stored["index_requested"])
         self.assertFalse(stored["needs_review"])
 
+    def test_indexing_request_is_fenced_during_account_deletion(self):
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(snapshots.persistence_guard.AccountDeletionInProgress):
+            snapshots.request_share_indexing(self.share_id, self.uid, want=True, db=self.db)
+
+        self.assertFalse(
+            self.db.stores[snapshots.SHARES_COLLECTION][self.share_id].get("index_requested", False)
+        )
+
     def test_only_owner_public_active_can_request(self):
         with self.assertRaisesRegex(ShareError, "own pages"):
             snapshots.request_share_indexing(self.share_id, "intruder", db=self.db)
@@ -2088,6 +2121,25 @@ class ApiRunPublishingServiceTests(unittest.TestCase):
             )
         self.assertEqual(raised.exception.code, "duplicate")
         self.assertEqual(raised.exception.details["canonical_share_id"], canonical_id)
+
+    def test_api_indexing_is_fenced_during_account_deletion(self):
+        published = snapshots.create_share_from_api_run(
+            self.uid, self._run(), db=self.db, consume_quota=lambda: True
+        )
+        self.db.stores["account_deletion_jobs"][self.uid] = {"status": "pending"}
+
+        with self.assertRaises(snapshots.persistence_guard.AccountDeletionInProgress):
+            snapshots.set_api_share_indexing(
+                published["share_id"],
+                self.uid,
+                indexed=True,
+                actor_key_id="f" * 64,
+                db=self.db,
+            )
+
+        self.assertFalse(
+            self.db.stores[snapshots.SHARES_COLLECTION][published["share_id"]]["indexed"]
+        )
 
 
 class ShareSeoEnhancementTests(unittest.TestCase):

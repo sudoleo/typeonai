@@ -603,6 +603,8 @@ class ExistingModelFlowTests(unittest.TestCase):
         template = (ROOT / "templates" / "admin.html").read_text(encoding="utf-8")
         module = (ROOT / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         self.assertIn('id="watchModelConfig"', template)
+        self.assertIn("Plus deliberately uses the same model profile as Free", template)
+        self.assertIn("Free / Plus Watch", module)
         self.assertIn("watch_models: { free: {}, pro: {} }", module)
         self.assertIn("watch_consensus_models: { free: '', pro: '' }", module)
         self.assertIn("data.watch_models[select.dataset.watchTier]", module)

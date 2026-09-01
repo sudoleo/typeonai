@@ -119,25 +119,37 @@ def set_tier(identifier: str, tier, *, admin_uid: str, note: str = "", db=None) 
     note = str(note or "").strip()[:MAX_NOTE_CHARS]
     now = _utcnow()
 
-    # Ein in Loeschung befindliches Konto bekommt keine neue Stufe: der Sweep
-    # wuerde das Feld sonst als Waise zuruecklassen. Bewusst ohne Transaktion --
-    # das hier ist eine manuelle Adminaktion, keine nebenlaeufige Nutzermutation;
-    # das enge Rennen zwischen "Admin tippt" und "Nutzer loescht" ist die
-    # Komplexitaet einer Transaktion nicht wert.
-    persistence_guard.ensure_account_write_allowed(uid=uid, db=db, now=now)
+    user_ref = db.collection(USERS_COLLECTION).document(uid)
+    tier_patch = {
+        "tier": target_tier,
+        "tier_updated_at": now,
+        "tier_updated_by": str(admin_uid or ""),
+        "tier_note": note,
+    }
 
-    previous = _profile(uid, db)
+    def persist(transaction):
+        # The tombstone read and profile write must commit as one unit. This
+        # closes the race where account deletion starts between a pre-check and
+        # the admin's profile update.
+        persistence_guard.ensure_account_write_allowed(
+            uid=uid, db=db, transaction=transaction, now=now
+        )
+        try:
+            snapshot = user_ref.get(transaction=transaction)
+        except TypeError:
+            snapshot = user_ref.get()
+        previous = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        if transaction is None:
+            user_ref.set(tier_patch, merge=True)
+        else:
+            try:
+                transaction.set(user_ref, tier_patch, merge=True)
+            except TypeError:
+                transaction.set(user_ref, tier_patch)
+        return previous
+
+    previous = persistence_guard._run_transaction(db, persist)
     previous_tier = normalize_tier(previous.get("tier"))
-
-    db.collection(USERS_COLLECTION).document(uid).set(
-        {
-            "tier": target_tier,
-            "tier_updated_at": now,
-            "tier_updated_by": str(admin_uid or ""),
-            "tier_note": note,
-        },
-        merge=True,
-    )
     # Erst nach dem Schreiben: sonst koennte ein paralleler Request den alten
     # Wert sofort wieder in den Cache legen.
     invalidate_tier_cache(uid)

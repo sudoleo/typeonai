@@ -1312,11 +1312,12 @@ def test_two_runs_finish_reverse_order_behind_a_saved_bookmark(
             assert consensus_body["turnId"] == expected["turnId"]
             assert consensus_body["previousQuestion"] == ""
             assert consensus_body["previousTurn"] is None
-            assert all(
-                slug in source["url"] for source in consensus_body["sources"]
-            )
-            assert question in consensus_body["modelResponses"]["OpenAI"]
-            assert question in consensus_body["modelResponses"]["Mistral"]
+            # The compatibility fallback intentionally sends only identifiers
+            # and small legacy text copies. Sources and model answers are
+            # materialized server-side from the owner-bound completed run.
+            assert "sources" not in consensus_body
+            assert "modelResponses" not in consensus_body
+            assert all(slug in source["url"] for source in expected["sources"])
             assert bookmark_state[expected["bookmarkId"]]["responses"][
                 "consensus"
             ] == f"Consensus for {question}"
@@ -1413,7 +1414,12 @@ def test_disabled_agent_mode_is_six_answers_only(browser, phase4_server):
             " && el.classList.contains('direct-comparison-active')"
             " && !el.classList.contains('agent-mode-enabled')"
         )
-        expect(page.locator("#threadAsk")).to_be_hidden()
+        # Direct comparison still has no consensus pipeline, but since the
+        # 2026-08-31 thread contract it keeps the submitted question visible.
+        expect(page.locator("#threadAsk")).to_be_visible()
+        expect(page.locator("#threadAskText")).to_contain_text(
+            "Give me six direct answers only."
+        )
         expect(page.locator("#consensusRun")).to_be_hidden()
         expect(page.locator("#consensusOutput")).to_be_hidden()
         expect(page.locator("#consensusAnswerBody .cx-claim")).to_have_count(0)
@@ -1436,7 +1442,10 @@ def test_attachment_filter_blocks_one_model_run_before_prepare(browser, phase4_s
         )
         page.evaluate(
             """() => {
+              // Attachments are Plus/Pro-gated independently from the
+              // isUserPro frontier-model flag.
               window.App.state.set("isUserPro", true, "userTier");
+              window.App.state.set("isUserPlus", true, "userTier");
               for (const id of [
                 "selectOpenAI", "selectMistral", "selectClaude",
                 "selectGemini", "selectDeepSeek", "selectGrok"
@@ -1498,6 +1507,20 @@ def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
               document.getElementById("selectOpenAI").checked = true;
               document.getElementById("selectMistral").checked = true;
               document.getElementById("questionInput").value = "What changed since yesterday?";
+              window.setAgentMode(true, {persist: true});
+              window.App.runRegistry.selectConversationBasis({
+                bookmarkId: "followup-bookmark",
+                chatId: "a".repeat(32),
+                turnId: "b".repeat(32),
+                question: "Previous question",
+                consensus: "Previous consensus",
+                currentTurn: {
+                  turn_id: "b".repeat(32),
+                  question: "Previous question",
+                  consensus: "Previous consensus",
+                },
+                title: "Previous question",
+              });
               window.App.followup.offer("Previous question", "Previous consensus");
               let release;
               const pending = new Promise(resolve => { release = resolve; });
@@ -1512,7 +1535,15 @@ def test_cancel_during_token_resolution_keeps_followup_and_creates_no_usage_run(
         page.evaluate("() => window.__releaseSlowToken()")
         page.wait_for_function("() => window.__slowSendDone === true")
 
-        assert page.evaluate("() => window.App.followup.isArmed()") is True
+        # The selected Registry basis is the continuation authority. The
+        # compatibility followup projection may be rebuilt while the canceled
+        # run is removed, so it is not the state to assert here.
+        selected_basis = page.evaluate(
+            "() => window.App.runRegistry.getSelectedConversationBasis()"
+        )
+        assert selected_basis["key"] == "chat:" + "a" * 32
+        assert selected_basis["question"] == "Previous question"
+        assert selected_basis["consensus"] == "Previous consensus"
         assert page.evaluate("() => !!window.App.followup.spentExchange") is False
         assert page.evaluate("() => window.App.usageRun?.current?.key || null") is None
         assert page.evaluate("() => window.isQueryRequestRunning()") is False

@@ -18,9 +18,18 @@
     }
   }
 
-  // --- ATTACHMENTS (Pro Feature) ---
+  // --- ATTACHMENTS (Plus/Pro feature) ---
   const ATTACH_MAX_FILES = 2;
   const ATTACH_MAX_BYTES = 5 * 1024 * 1024;
+  // Bilder werden vor dem Hochladen verkleinert, deshalb darf HIER mehr
+  // reinkommen als rausgeht: ein Handyfoto hat 4-8 MB und soll nicht abgelehnt
+  // werden, nur weil es aus der Kamera kommt. Was den Server erreicht, ist die
+  // verkleinerte Fassung -- der Server erzwingt das noch einmal selbst.
+  const IMAGE_MAX_INPUT_BYTES = 15 * 1024 * 1024;
+  // Gleiche Werte wie in app/services/llm/attachments.py.
+  const IMAGE_MAX_EDGE = 1568;
+  const IMAGE_TARGET_BYTES = 900 * 1024;
+  const IMAGE_JPEG_QUALITY = 0.82;
   const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   // Die kanonischen Typen, die auch der Server kennt. Was der Browser sonst
   // noch meldet (text/markdown, text/csv, ...), fuehrt canonicalMime hierher
@@ -498,6 +507,79 @@
       return "image-" + Date.now() + (index ? "-" + (index + 1) : "") + "." + imageExtension(mime);
     }
 
+    // Ein Bild auf Providergroesse bringen, BEVOR es base64-kodiert im Request
+    // landet. Dieselbe Datei geht an bis zu sechs Familien gleichzeitig raus;
+    // bei 1568 px laengster Kante sieht keine davon weniger als vorher, der
+    // Upload ist aber ein Bruchteil. Kleine Bilder bleiben unangetastet (ein
+    // Screenshot behaelt seine PNG-Schaerfe).
+    // Loest immer auf: `null` heisst "unveraendert weiterverwenden".
+    function shrinkImage(file, mime) {
+      return new Promise(function (resolve) {
+        if (mime.indexOf("image/") !== 0 || typeof document.createElement("canvas").toBlob !== "function") {
+          resolve(null);
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = function () {
+          URL.revokeObjectURL(url);
+          const longest = Math.max(image.naturalWidth, image.naturalHeight);
+          if (!longest || (longest <= IMAGE_MAX_EDGE && file.size <= IMAGE_TARGET_BYTES)) {
+            resolve(null);
+            return;
+          }
+          const ratio = Math.min(1, IMAGE_MAX_EDGE / longest);
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+          canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(null);
+            return;
+          }
+          // JPEG kennt kein Alpha: Transparenz kommt auf Weiss statt auf
+          // Schwarz, sonst wird aus einem PNG-Logo eine dunkle Flaeche.
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+          canvas.toBlob(function (blob) {
+            resolve(blob && blob.size < file.size ? { blob: blob, mime: "image/jpeg" } : null);
+          }, "image/jpeg", IMAGE_JPEG_QUALITY);
+        };
+        image.onerror = function () {
+          URL.revokeObjectURL(url);
+          resolve(null);
+        };
+        image.src = url;
+      });
+    }
+
+    // Aus "urlaub.png" wird nach der Neukodierung "urlaub.jpg": der Name darf
+    // nicht laenger einen Typ behaupten, den die Datei nicht mehr hat.
+    function renameToJpeg(name) {
+      return String(name || "image").replace(/\.[^.\/]+$/, "") + ".jpg";
+    }
+
+    function readAsBase64(blob) {
+      return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.onload = function () {
+          resolve(String(reader.result || "").split(",", 2)[1] || "");
+        };
+        reader.onerror = function () {
+          reject(new Error("The file could not be read."));
+        };
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    // Bilder duerfen groesser reinkommen, weil sie verkleinert wieder
+    // rausgehen. Alles andere laesst sich nicht schrumpfen und behaelt die
+    // harte Grenze.
+    function maxInputBytes(mime) {
+      return mime.indexOf("image/") === 0 ? IMAGE_MAX_INPUT_BYTES : ATTACH_MAX_BYTES;
+    }
+
     function addFiles(files, options) {
       const source = options && options.source ? options.source : "picker";
       const imagesOnly = !!(options && options.imagesOnly);
@@ -522,8 +604,11 @@
           }
           return;
         }
-        if (file.size > ATTACH_MAX_BYTES) {
-          alert("'" + attachmentName(file, mime, source, index) + "' is too large for the configured upload limit.");
+        const sizeLimit = maxInputBytes(mime);
+        if (file.size > sizeLimit) {
+          alert("'" + attachmentName(file, mime, source, index) + "' is "
+            + formatFileSize(file.size) + ". The limit is "
+            + Math.round(sizeLimit / (1024 * 1024)) + " MB per file.");
           return;
         }
         if (window.pendingAttachments.length + pendingFileReads >= ATTACH_MAX_FILES) {
@@ -535,27 +620,30 @@
         }
 
         pendingFileReads += 1;
-        const reader = new FileReader();
-        reader.onload = function () {
-          pendingFileReads = Math.max(0, pendingFileReads - 1);
-          const result = String(reader.result || "");
-          const base64Data = result.split(",", 2)[1] || "";
-          if (!base64Data) return;
-          if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
-          window.pendingAttachments.push({
-            name: attachmentName(file, mime, source, index),
-            mime: mime,
-            size: file.size,
-            data: base64Data
+        const name = attachmentName(file, mime, source, index);
+        shrinkImage(file, mime).then(function (shrunk) {
+          const payload = shrunk ? shrunk.blob : file;
+          return readAsBase64(payload).then(function (base64Data) {
+            pendingFileReads = Math.max(0, pendingFileReads - 1);
+            if (!base64Data) return;
+            if (window.pendingAttachments.length >= ATTACH_MAX_FILES) return;
+            window.pendingAttachments.push({
+              name: shrunk ? renameToJpeg(name) : name,
+              mime: shrunk ? shrunk.mime : mime,
+              size: payload.size,
+              data: base64Data
+            });
+            renderAttachmentChips();
+            trackAppEvent("app_attachment_added", {
+              mime: shrunk ? shrunk.mime : mime,
+              source: source,
+              shrunk: shrunk ? 1 : 0
+            });
           });
-          renderAttachmentChips();
-          trackAppEvent("app_attachment_added", { mime: mime, source: source });
-        };
-        reader.onerror = function () {
+        }).catch(function () {
           pendingFileReads = Math.max(0, pendingFileReads - 1);
           alert("The file could not be read. Please try again.");
-        };
-        reader.readAsDataURL(file);
+        });
       });
     }
 

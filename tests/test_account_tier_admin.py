@@ -194,6 +194,29 @@ def test_an_account_being_deleted_gets_no_tier():
     assert fake.stores["users"] == {}
 
 
+def test_set_tier_checks_deletion_fence_inside_profile_transaction(db):
+    seen = {}
+
+    class Transaction:
+        def set(self, ref, data, merge=False):
+            ref.set(data, merge=merge)
+
+    def run_transaction(_db, operation):
+        return operation(Transaction())
+
+    def guard(**kwargs):
+        seen.update(kwargs)
+
+    with patch.object(account_tier.persistence_guard, "_run_transaction", run_transaction), \
+         patch.object(account_tier.persistence_guard, "ensure_account_write_allowed", guard), \
+         patch.object(account_tier, "invalidate_tier_cache"), \
+         auth_user():
+        account_tier.set_tier("uid-1", "plus", admin_uid="admin-uid")
+
+    assert seen["uid"] == "uid-1"
+    assert isinstance(seen["transaction"], Transaction)
+
+
 def test_lookup_accepts_an_email(db):
     with patch.object(account_tier.auth, "get_user_by_email",
                       return_value=SimpleNamespace(uid="uid-1")), \

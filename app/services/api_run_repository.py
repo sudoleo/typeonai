@@ -195,6 +195,11 @@ class FirestoreApiRunRepository:
             if not snap.exists:
                 return False
             data = snap.to_dict() or {}
+            uid = str(data.get("uid") or "").strip()
+            if uid:
+                persistence_guard.ensure_account_write_allowed(
+                    uid=uid, db=self._db, transaction=tx
+                )
             lease_expires_at = data.get("lease_expires_at")
             if data.get("status") != "running" or not isinstance(
                 lease_expires_at, datetime
@@ -336,6 +341,11 @@ class FirestoreApiRunRepository:
             if not snap.exists:
                 raise ApiRunNotFound("Run not found")
             data = snap.to_dict() or {}
+            uid = str(data.get("uid") or "").strip()
+            if uid:
+                persistence_guard.ensure_account_write_allowed(
+                    uid=uid, db=self._db, transaction=tx
+                )
             status = data.get("status")
             if status == target:
                 return self._with_id(snap), False
