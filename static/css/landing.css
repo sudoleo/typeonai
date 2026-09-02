@@ -1379,6 +1379,7 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-chips img[src*="chatgpt"],
 .dark-mode .lp-chips img[src*="grok"],
 .dark-mode .lp-chips img[src*="kimi"],
+.dark-mode .lp-chips img[src*="meta.svg"],
 .dark-mode .lp-chips img[src*="zai"] { filter: invert(1); }
 
 /* --------------------------------------------------------------------------
@@ -2403,6 +2404,12 @@ img { display: block; max-width: 100%; }
   margin-top: clamp(40px, 5vw, 64px);
 }
 
+/* Neun Familien gehen im Viererraster nicht auf. Bleibt genau eine Marke
+   uebrig, wird sie ueber die beiden mittleren Spalten zentriert, statt allein
+   an der linken Kante zu haengen. Die Kachel hat keine eigene Flaeche, das
+   Spannen aendert also nur ihre Position. */
+.lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
+
 .lp-logo {
   display: flex;
   flex-direction: column;
@@ -2428,6 +2435,7 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="chatgpt"],
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="grok"],
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="kimi"],
+.dark-mode .lp-logo:hover .lp-logo-mark img[src*="meta.svg"],
 .dark-mode .lp-logo:hover .lp-logo-mark img[src*="zai"] { filter: invert(1); }
 
 .lp-logo span { color: var(--text-secondary); font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
@@ -2493,6 +2501,9 @@ img { display: block; max-width: 100%; }
   .lp-hero { grid-template-columns: 1fr; gap: 36px; }
   .lp-card-grid { grid-template-columns: 1fr; gap: 14px; }
   .lp-logos { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Dreispaltig geht die Reihe auf; die Zentrierung der Basis wuerde
+     hier die falsche Kachel spannen. */
+  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
   .lp-watch-story { grid-template-columns: 1fr; }
   .lp-watch-notification { width: min(100%, 430px); justify-self: end; margin-top: -12px; transform: none; }
 
@@ -2653,6 +2664,7 @@ img { display: block; max-width: 100%; }
   /* The hero has already shown these marks; four-up keeps eight providers in
      a compact two-row strip instead of turning them into a long card list. */
   .lp-logos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
+  .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
   .lp-logo { gap: 9px; padding: 16px 6px; }
   .lp-logo-mark { height: 26px; }
   .lp-logo-mark img { height: 24px; }

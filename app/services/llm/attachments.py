@@ -103,8 +103,12 @@ def normalize_attachment_meta(raw) -> list[dict]:
 # Provider, die Bilder bzw. PDFs nativ als Content-Block verarbeiten können.
 # Alle anderen erhalten einen Text-Fallback (PDF-Extraktion bzw. Hinweis).
 PROVIDER_IMAGE_SUPPORT = {
-    "openai", "anthropic", "gemini", "grok", "kimi", "glm"
+    "openai", "anthropic", "gemini", "grok", "kimi", "glm", "meta"
 }
+# Meta steht bewusst nicht hier: Muse Spark 1.3 verarbeitet PDFs nativ, das
+# freie Muse Glimmer 30B nur Text und Bilder. Bis die PDF-Faehigkeit wie bei
+# Anhaengen auf Modellebene aufgeloest wird, bekommt die ganze Familie den
+# Text-Fallback (PDF-Extraktion) statt eines Blocks, den Glimmer ablehnt.
 PROVIDER_PDF_SUPPORT = {"openai", "anthropic", "gemini"}
 
 _DOCX_ALLOWED_EXACT = {"[Content_Types].xml"}

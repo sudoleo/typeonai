@@ -191,13 +191,21 @@ _LEADERBOARD_FAMILY_BY_PROVIDER = {
     "grok": "xAI / Grok",
     "kimi": "Moonshot AI / Kimi",
     "glm": "Z.ai / GLM",
+    "meta": "Meta / Muse",
+}
+# Familien, die spaeter dazugekommen sind, tragen ihr Startdatum. Der
+# gemeinsame Vergleichszeitraum (_MODEL_PULSE_PERIOD) bleibt der aelteste
+# dieser Termine; juengere Familien werden mit ihrem eigenen Datum
+# ausgewiesen, damit ein niedriger Stand nicht wie ein Ergebnis aussieht.
+_LEADERBOARD_AVAILABLE_SINCE = {
+    "kimi": "2026-08-31",
+    "glm": "2026-08-31",
+    "meta": "2026-09-02",
 }
 _LEADERBOARD_FAMILY_VIEW = {
     family: {
         "icon": f"/static/icons/chat_icons/{cfg.PROVIDERS[provider].icon}",
-        "available_since": (
-            "2026-08-31" if provider in {"kimi", "glm"} else None
-        ),
+        "available_since": _LEADERBOARD_AVAILABLE_SINCE.get(provider),
     }
     for provider, family in _LEADERBOARD_FAMILY_BY_PROVIDER.items()
 }
@@ -222,6 +230,8 @@ def _leaderboard_family(model: str) -> str:
         return "Moonshot AI / Kimi"
     if "glm" in key or "z.ai" in key or "z-ai" in key:
         return "Z.ai / GLM"
+    if "meta" in key or "muse" in key:
+        return "Meta / Muse"
     return "Other"
 
 

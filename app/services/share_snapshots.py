@@ -301,6 +301,8 @@ _CONSENSUS_ENGINE_MODELS = {
     "Kimi-Pro": cfg.KIMI_PRO_MODEL,
     "GLM": cfg.GLM_BASE_MODEL,
     "GLM-Pro": cfg.GLM_PRO_MODEL,
+    "Meta": cfg.MUSE_BASE_MODEL,
+    "Meta-Pro": cfg.MUSE_PRO_MODEL,
 }
 
 

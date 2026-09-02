@@ -24,7 +24,7 @@
     const maxSelections = Math.max(...rows.map(row => row.selections), 1);
     const fragment = document.createDocumentFragment();
 
-    rows.slice(0, 8).forEach((row, index) => {
+    rows.slice(0, 9).forEach((row, index) => {
       const item = document.createElement("div");
       item.className = "lp-model-pulse-row";
       item.setAttribute("role", "listitem");

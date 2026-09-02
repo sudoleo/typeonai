@@ -50,6 +50,7 @@ class RegistryCoverageTests(unittest.TestCase):
             ("grok", cfg.ALLOWED_GROK_MODELS),
             ("kimi", cfg.ALLOWED_KIMI_MODELS),
             ("glm", cfg.ALLOWED_GLM_MODELS),
+            ("meta", cfg.ALLOWED_META_MODELS),
         ):
             with self.subTest(provider=provider):
                 self.assertIs(alias, cfg.PROVIDERS[provider].models)
@@ -97,6 +98,25 @@ class RegistryCoverageTests(unittest.TestCase):
         self.assertTrue(cfg.MODEL_CONFIGS[cfg.GLM_BASE_MODEL].accepts_attachments)
         self.assertFalse(cfg.MODEL_CONFIGS[cfg.GLM_PRO_MODEL].accepts_attachments)
         self.assertFalse(cfg.MODEL_CONFIGS[cfg.DEEPSEEK_FLASH_MODEL].accepts_attachments)
+
+    def test_meta_is_the_ninth_family_with_muse_as_its_product_name(self):
+        meta = cfg.PROVIDERS["meta"]
+        self.assertEqual(meta.openrouter_prefix, "meta/")
+        self.assertEqual(meta.base_model, cfg.MUSE_BASE_MODEL)
+        self.assertEqual(meta.pro_model, cfg.MUSE_PRO_MODEL)
+        # Wie bei Anthropic/Claude traegt die Familie zwei Namen: "Meta" ist
+        # der Consensus-Alias, "Muse" das Produkt im DOM.
+        self.assertEqual(meta.ask_endpoint, "/ask_muse")
+        self.assertEqual(meta.response_id, "museResponse")
+        self.assertEqual(meta.checkbox_id, "selectMuse")
+        # Der billige Contributor-Tarif darf nie erlaubt sein: dort fliessen
+        # Prompts in Metas Produkte, was der ZDR-Zusage widerspricht.
+        self.assertNotIn("muse-spark-1.3-contributor", meta.models)
+        self.assertEqual(
+            cfg.MODEL_CONFIGS[cfg.MUSE_PRO_MODEL].request_config,
+            {"reasoning": {"effort": "low"}},
+        )
+        self.assertTrue(cfg.MODEL_CONFIGS[cfg.MUSE_BASE_MODEL].accepts_attachments)
 
 
 class ConsumerCoverageTests(unittest.TestCase):

@@ -168,6 +168,14 @@ KIMI_BASE_MODEL = "kimi-k2.6"
 KIMI_PRO_MODEL = "kimi-k3"
 GLM_BASE_MODEL = "glm-5.3-flash"
 GLM_PRO_MODEL = "glm-5.3"
+# Meta Superintelligence Labs fuehrt seine Modelle bei OpenRouter unter
+# "meta/" als Muse-Reihe. Basis ist das offene, destillierte Glimmer 30B
+# (0,30/1,20 $ je Mio. Token), Pro das multimodale Spark 1.3 (1,25/4,25 $).
+# Der billigere "muse-spark-1.3-contributor"-Tarif ist bewusst NICHT
+# aufgenommen: dort duerfen Prompts und Antworten in Metas Produkte
+# einfliessen, was der ZDR-Zusage in Terms/Privacy widerspricht.
+MUSE_BASE_MODEL = "muse-glimmer-30b"
+MUSE_PRO_MODEL = "muse-spark-1.3"
 
 # ---------------------------------------------------------------------------
 # Provider-Registry: die eine Quelle fuer alles, was je Modellfamilie gilt.
@@ -320,6 +328,12 @@ PROVIDERS: dict[str, ProviderConfig] = {
             icon="zai.svg", icon_class="mono-logo", citation_label="Z.ai GLM",
             attachment_models=(GLM_BASE_MODEL,),
         ),
+        _provider(
+            "meta", "Meta", "meta/", MUSE_BASE_MODEL, MUSE_PRO_MODEL,
+            {MUSE_BASE_MODEL, MUSE_PRO_MODEL},
+            dom_key="muse", title="Muse", short_label="Muse",
+            icon="meta.svg", icon_class="mono-logo", citation_label="Meta Muse",
+        ),
     )
 }
 
@@ -403,7 +417,8 @@ DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
 # Anzeige-Reihenfolge der Familien-Aliasse im Consensus-Picker. Familien ohne
 # Eintrag haengen in Registry-Reihenfolge hinten an.
 _CONSENSUS_ALIAS_ORDER = [
-    "grok", "openai", "anthropic", "mistral", "gemini", "deepseek", "kimi", "glm"
+    "grok", "openai", "anthropic", "mistral", "gemini", "deepseek", "kimi", "glm",
+    "meta",
 ]
 
 
@@ -569,6 +584,7 @@ ALLOWED_DEEPSEEK_MODELS = PROVIDERS["deepseek"].models
 ALLOWED_GROK_MODELS = PROVIDERS["grok"].models
 ALLOWED_KIMI_MODELS = PROVIDERS["kimi"].models
 ALLOWED_GLM_MODELS = PROVIDERS["glm"].models
+ALLOWED_META_MODELS = PROVIDERS["meta"].models
 
 MISTRAL_REASONING_MODELS = {
     DEFAULT_MISTRAL_MODEL,
@@ -733,6 +749,8 @@ MODEL_LABEL_OVERRIDES = {
     KIMI_PRO_MODEL: "Kimi K3",
     GLM_BASE_MODEL: "GLM 5.3 Flash",
     GLM_PRO_MODEL: "GLM 5.3",
+    MUSE_BASE_MODEL: "Muse Glimmer 30B",
+    MUSE_PRO_MODEL: "Muse Spark 1.3",
 }
 
 MODEL_CONFIGS: dict[str, ModelConfig] = {}
@@ -746,6 +764,11 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     KIMI_PRO_MODEL: {"reasoning": {"enabled": False}},
     GLM_BASE_MODEL: {"reasoning": {"effort": "low"}},
     GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
+    # Muse denkt zwingend (OpenRouter meldet reasoning.mandatory=true); die
+    # Modelle kennen kein Abschalten, nur einen Aufwand. "low" haelt die als
+    # Output abgerechneten Reasoning-Tokens klein.
+    MUSE_BASE_MODEL: {"reasoning": {"effort": "low"}},
+    MUSE_PRO_MODEL: {"reasoning": {"effort": "low"}},
 }
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
@@ -795,6 +818,7 @@ def _fallback_label(model_id: str) -> str:
         "grok": "Grok",
         "kimi": "Kimi",
         "glm": "GLM",
+        "muse": "Muse",
     }
     if family not in family_labels:
         return raw

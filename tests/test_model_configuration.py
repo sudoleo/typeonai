@@ -353,6 +353,7 @@ class ModelConfigurationTests(unittest.TestCase):
                 cfg.DEFAULT_GEMINI_MODEL,
                 cfg.KIMI_PRO_MODEL,
                 cfg.GLM_PRO_MODEL,
+                cfg.MUSE_PRO_MODEL,
             }),
         )
 
@@ -393,6 +394,21 @@ class ModelConfigurationTests(unittest.TestCase):
             model_override="grok-4.3", max_output_tokens=123,
         )
         self.assertEqual(high["payload"]["reasoning"], {"effort": "high"})
+
+    def test_muse_reasoning_is_pinned_low_because_it_cannot_be_disabled(self):
+        base = build_provider_payload(
+            "meta", question="q", system_prompt="s",
+            model_override=cfg.MUSE_BASE_MODEL, max_output_tokens=123,
+        )
+        pro = build_provider_payload(
+            "meta", question="q", system_prompt="s",
+            model_override=cfg.MUSE_PRO_MODEL, max_output_tokens=123,
+        )
+
+        self.assertEqual(base["api_model"], "meta/muse-glimmer-30b")
+        self.assertEqual(base["payload"]["reasoning"], {"effort": "low"})
+        self.assertEqual(pro["api_model"], "meta/muse-spark-1.3")
+        self.assertEqual(pro["payload"]["reasoning"], {"effort": "low"})
 
     def test_kimi_and_glm_payload_policies_are_applied(self):
         kimi = build_provider_payload(

@@ -72,6 +72,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             "grok": "x-ai/",
             "kimi": "moonshotai/",
             "glm": "z-ai/",
+            "meta": "meta/",
         }
         for provider, model_ids in cfg._provider_allowed_sets().items():
             for model_id in model_ids:

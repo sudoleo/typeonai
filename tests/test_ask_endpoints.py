@@ -201,6 +201,35 @@ def test_glm_attachment_support_depends_on_the_effective_model():
     assert run.call_count == 1
 
 
+def test_ask_muse_serves_the_meta_family_and_gates_its_pro_model():
+    """Die Route heisst nach dem Produkt, die Familie nach dem Anbieter."""
+    client = make_client()
+    p1, p2 = auth_patches(tier="plus")
+    with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
+        free = client.post(
+            "/ask_muse",
+            headers=AUTH_HEADER,
+            json={
+                "question": "describe it",
+                "model": cfg.MUSE_BASE_MODEL,
+                "useOwnKeys": True,
+                "openrouter_key": "sk-user-key",
+                "attachments": [PNG_ATTACHMENT],
+            },
+        )
+        premium = client.post(
+            "/ask_muse",
+            headers=AUTH_HEADER,
+            json={"question": "hello", "model": cfg.MUSE_PRO_MODEL},
+        )
+
+    assert free.status_code == 200
+    assert run.call_args.args[0].key == "meta"
+    # Glimmer liest Bilder, ist also kein Anhang-Sonderfall wie DeepSeek.
+    assert len(run.call_args.kwargs["attachments"]) == 1
+    assert premium.status_code == 403
+
+
 def test_megabyte_style_one_word_question_is_rejected_before_provider_work():
     client = make_client()
     p1, p2 = auth_patches()

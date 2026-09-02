@@ -35,12 +35,16 @@
       <sub>Grok</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/glm.png" height="28" alt="GLM">
+      <img src="static/icons/chat_icons/zai.svg" height="28" alt="GLM"><br>
       <sub>GLM</sub>
     </td>
     <td align="center" width="90">
-      <img src="static/icons/kimi.png" height="28" alt="Kimi">
+      <img src="static/icons/chat_icons/kimi.svg" height="28" alt="Kimi"><br>
       <sub>Kimi</sub>
+    </td>
+    <td align="center" width="90">
+      <img src="static/icons/chat_icons/meta.svg" height="28" alt="Meta Muse"><br>
+      <sub>Muse</sub>
     </td>
   </tr>
 </table>
@@ -58,7 +62,7 @@ The project explores whether model diversity and aggregation can improve the rob
 3. Agreement and disagreement between the responses are analyzed.
 4. A synthesis model produces a consolidated answer while preserving relevant differences.
 
-consens.io currently integrates models from **OpenAI, Anthropic, Google, Mistral AI, DeepSeek, xAI, Zhipu AI / GLM, and Moonshot AI / Kimi**.
+consens.io currently integrates models from **OpenAI, Anthropic, Google, Mistral AI, DeepSeek, xAI, Zhipu AI / GLM, Moonshot AI / Kimi, and Meta (Muse)**.
 
 ## Research
 

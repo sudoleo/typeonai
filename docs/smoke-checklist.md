@@ -105,7 +105,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       wieder aus.
 - [ ] Senden während Lauf abbrechen (Stop) funktioniert.
 - [ ] Modell per Checkbox ein-/ausschließen blendet die Antwortbox korrekt ein/aus.
-- [ ] Der Custom-Picker listet alle acht Familien (inkl. Kimi und GLM); sind
+- [ ] Der Custom-Picker listet alle neun Familien (inkl. Kimi, GLM und Muse); sind
       sechs gewaehlt, ist die siebte sichtbar gesperrt. Eine Familie abwaehlen
       gibt die gesperrten wieder frei, und jede Handauswahl schaltet die
       Kopfzeile von Daily/Balanced/High Quality auf die Custom-Anzeige um.
@@ -116,6 +116,11 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       eingeschaltetes Deep Think pausiert GLM auch dann, wenn im Picker noch
       Flash steht (Deep Think faehrt das Pro-Modell). Kimi bleibt in beiden
       Faellen waehlbar.
+- [ ] Muse liefert eine echte Antwort: Muse Glimmer 30B als Free-Modell und
+      Muse Spark 1.3 als Pro-Modell. Spark braucht dafuer die einmalige
+      18+-Bestaetigung des OpenRouter-Kontos
+      (https://openrouter.ai/settings/preferences); fehlt sie, meldet der Lauf
+      fuer Muse einen Fehler, waehrend die uebrigen Familien normal antworten.
 - [ ] Quellen-Chips / Evidence-Links erscheinen und sind klickbar.
 - [ ] „Ask about this“ auf einem markierten Abschnitt einer Antwort: das Zitat
       steht über dem Eingabefeld, der Fokus liegt im Feld, das × entfernt es

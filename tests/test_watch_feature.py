@@ -1130,7 +1130,7 @@ class SchedulerSafetyTests(unittest.TestCase):
     def test_watch_preserves_its_provider_and_fallback_engine_order(self):
         expected = [
             "openai", "mistral", "gemini", "anthropic", "deepseek", "grok",
-            "kimi", "glm",
+            "kimi", "glm", "meta",
         ]
         configured = {
             "anthropic": "anthropic-model",
@@ -1141,6 +1141,7 @@ class SchedulerSafetyTests(unittest.TestCase):
             "deepseek": "deepseek-model",
             "kimi": "kimi-model",
             "glm": "glm-model",
+            "meta": "meta-model",
         }
 
         def pipeline(**kwargs):

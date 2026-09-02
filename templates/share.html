@@ -25,7 +25,7 @@
   <meta name="twitter:description" content="{{ meta_description }}">
   {% if og_is_card %}<meta name="twitter:image" content="{{ og_image }}">{% endif %}
   <script type="application/ld+json">{{ jsonld | safe }}</script>
-<link rel="stylesheet" href="/static/css/public-pages.css?v=20260901-kimiglm1">
+<link rel="stylesheet" href="/static/css/public-pages.css?v=20260902-meta1">
   <link rel="stylesheet" href="/static/css/public-shell.css?v=20260826-cardfoot">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.17.0/dist/katex.min.css" integrity="sha384-vlBdW0r3AcZO/HboRPznQNowvexd3fY8qHOWkBi5q7KGgqJ+F48+DceybYmrVbmB" crossorigin="anonymous">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
@@ -199,7 +199,7 @@
         <div class="share-models-group">
           <span class="share-models-label">Consensus</span>
           <span class="share-model-chip is-consensus" title="Consensus model: {{ consensus_model_view.label }}{% if consensus_model_view.model %} – {{ consensus_model_view.model }}{% endif %}">
-            {% if consensus_model_view.icon %}<img src="{{ consensus_model_view.icon }}" alt="{{ consensus_model_view.label }}" class="share-model-icon{% if consensus_model_view.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
+            {% if consensus_model_view.icon %}<img src="{{ consensus_model_view.icon }}" alt="{{ consensus_model_view.label }}" class="share-model-icon{% if consensus_model_view.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
             <span class="share-model-name">{{ consensus_model_view.model or consensus_model_view.label }}{% if consensus_model_view.pro %}<span class="share-model-pro">Pro</span>{% endif %}</span>
           </span>
         </div>
@@ -210,7 +210,7 @@
           <ul class="share-models-list">
             {% for m in consulted_models %}
             <li class="share-model-chip" title="{{ m.label }}{% if m.model %} – {{ m.model }}{% endif %}">
-              {% if m.icon %}<img src="{{ m.icon }}" alt="{{ m.label }}" class="share-model-icon{% if m.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
+              {% if m.icon %}<img src="{{ m.icon }}" alt="{{ m.label }}" class="share-model-icon{% if m.provider in ('OpenAI', 'Grok', 'Kimi', 'GLM', 'Meta') %} is-mono{% endif %}" width="18" height="18" loading="lazy">{% endif %}
               <span class="share-model-name">{{ m.model or m.label }}</span>
             </li>
             {% endfor %}

@@ -147,6 +147,7 @@
 }
 
 .dark-mode .pulse-board .lp-model-pulse-icon img[src*="kimi"],
+.dark-mode .pulse-board .lp-model-pulse-icon img[src*="meta.svg"],
 .dark-mode .pulse-board .lp-model-pulse-icon img[src*="zai"] {
   filter: invert(1);
 }

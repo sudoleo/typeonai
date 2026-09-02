@@ -411,7 +411,10 @@ class SanitizerTests(unittest.TestCase):
 
     def test_consulted_models_view_maps_icon_and_model(self):
         view = snapshots.consulted_models_view(
-            ["OpenAI: gpt-5.1", "Google Gemini", "Grok", "Moonshot AI Kimi", "Z.ai GLM"]
+            [
+                "OpenAI: gpt-5.1", "Google Gemini", "Grok", "Moonshot AI Kimi",
+                "Z.ai GLM", "Meta Muse",
+            ]
         )
         self.assertEqual(view[0]["provider"], "OpenAI")
         self.assertEqual(view[0]["model"], "GPT-5.1")
@@ -422,6 +425,8 @@ class SanitizerTests(unittest.TestCase):
         self.assertTrue(view[1]["icon"].endswith("gemini-icon.png"))
         self.assertTrue(view[3]["icon"].endswith("kimi.svg"))
         self.assertTrue(view[4]["icon"].endswith("zai.svg"))
+        self.assertTrue(view[5]["icon"].endswith("meta.svg"))
+        self.assertEqual(view[5]["provider"], "Meta")
         # Unbekanntes Label bleibt erhalten, aber ohne Icon:
         unknown = snapshots.consulted_models_view(["FooAI: x"])
         self.assertEqual(unknown[0]["provider"], "")
@@ -444,6 +449,11 @@ class SanitizerTests(unittest.TestCase):
         self.assertEqual(glm["provider"], "GLM")
         self.assertTrue(glm["icon"].endswith("zai.svg"))
         self.assertTrue(glm["model"])
+        muse = snapshots.consensus_model_view("Meta-Pro")
+        self.assertEqual(muse["provider"], "Meta")
+        self.assertTrue(muse["icon"].endswith("meta.svg"))
+        self.assertEqual(muse["model"], "Muse Spark 1.3")
+        self.assertTrue(muse["pro"])
         self.assertIsNone(snapshots.consensus_model_view(""))
 
 

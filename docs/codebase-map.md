@@ -19,10 +19,10 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 
 - **Backend**: Python, FastAPI (`fastapi==0.128.8`), via `uvicorn` ausgeliefert.
   SSE-Streaming über `StreamingResponse`. Rate-Limiting via `slowapi`.
-- **LLM-Modelle**: acht Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
-  DeepSeek, Grok, Kimi, GLM), alle über einen OpenRouter-Chat-Completions-
-  Transport mit ZDR. Ein Lauf wählt davon höchstens sechs. Provider-Label-
-  Konvention: Claude = `Anthropic`.
+- **LLM-Modelle**: neun Registry-Familien (OpenAI, Mistral, Anthropic, Gemini,
+  DeepSeek, Grok, Kimi, GLM, Meta/Muse), alle über einen OpenRouter-Chat-
+  Completions-Transport mit ZDR. Ein Lauf wählt davon höchstens sechs.
+  Provider-Label-Konvention: Claude = `Anthropic`, Muse = `Meta`.
 - **Auth & Daten**: Firebase Auth (ID-Token) + Firestore (`firebase-admin`).
 - **Frontend**: kein Framework. Jinja2-Templates + Vanilla-JS-Module unter
   `static/js/`, überwiegend als klassische `<script defer>`-Tags. `window.App`
@@ -79,7 +79,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle acht Familien einschließlich Nullständen, Kimi/GLM mit Verfügbarkeitsdatum). Der gemeinsame Zeitraum wird aus den datierten, deduplizierten `model_votes` ab 31.08.2026 aggregiert; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing, auch mit aktiver Session direkt erreichbar), `/model-pulse` (öffentliche, erklärte Best-answer-Rangliste), `/app` (Haupt-App), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms`, `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Der gemeinsame Zeitraum wird aus den datierten, deduplizierten `model_votes` ab 31.08.2026 aggregiert; `/feedback`, `/vote`, `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Ein Best-answer-Vote muss an ein noch gültiges, owner-gebundenes `result_id` gebunden sein, zum serverseitigen Gewinner passen und kann pro Lauf genau einmal zählen. |
 | `chat.py` | Kern-LLM-Flow: `/prepare`, die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`), `/consensus`, `/resolve`. `/prepare` und die `/ask_*`-Endpoints akzeptieren weiter das optionale Legacy-`context`-Feld für nicht migrierte Bookmark-Fortsetzungen. Additiv laden `/ask_*` das owner-gebundene Tripel `chat_id`/`turn_id`/`context_version_id`; Legacy- und Versionskontext zusammen werden abgewiesen. Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. `/consensus` akzeptiert optional Chat-/Turn-IDs plus `turn_sources` und die exakt am Turn verknüpfte `context_version_id`, prüft alles owner-gebunden vor dem Judge und finalisiert nach Consensus, Differences und Share-`result_id` in Streaming- wie JSON-Pfad über `ChatStore`. Sendet der Browser die stabile `bookmarkId`, schreibt `/consensus` den autoritativen Bookmark-Snapshot vor seinem erfolgreichen Final-Event und liefert kompakte `bookmark_meta`; ein separater Browser-Request ist nur noch Fallback. Ein bereits completed Turn wird mit Consensus, Differences, Quellen und Modellantworten owner-geschützt wiedergegeben, ohne Engine-/Differences-/Share-/Statistik-/Completion- oder Usage-Write; ohne IDs bleibt der Legacy-Vertrag unverändert. |
 | `chat_history.py` | Additive, owner-gebundene Chat-Persistenz: `POST/GET /chats`, `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann), `POST/GET /chats/{chat_id}/turns`, das vollständige `GET /chats/{chat_id}/turns/{turn_id}` sowie `POST /chats/{chat_id}/turns/{turn_id}/context` für eine idempotente autoritative Context-Version. Das UID-Budget `build_context` liegt ausschließlich auf diesem POST, nicht auf dem Turn-GET. Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`, Create-Turn ist über `client_request_id` idempotent. `ChatStore.complete_turn`/`fail_turn` lesen Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptieren ausschließlich einen weiterhin `active` Chat; eine nach dem `deleting`-Marker eintreffende Completion kann deshalb keine Modellantwort-Waisen erzeugen. Completion bleibt per Payload-Fingerprint idempotent. Es gibt bewusst keinen öffentlichen Completion-/Fail-Write-Endpoint. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Bei einer aktiven Fortsetzung erzeugt der Browser den pending Turn nach `/prepare` vor Context und Fan-out; Turn 1 entsteht erst bei der Consensus-Anforderung. Finalisiert wird weiterhin ausschließlich serverseitig über `/consensus`. |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Der Endpoint liefert keine Konfigurationsdetails zurück. |
@@ -167,11 +167,12 @@ Landing-Schritt `#watch`: Eine kompakte Baseline→Change→Telegram-Visualisier
 erklärt Consensus Watch und verlinkt direkt auf `/app/watches`; derselbe Anker
 ist in der öffentlichen Navigation erreichbar. Eine schmale Live-Zeile direkt
 im Landing-Hero verlinkt auf die eigenständige Seite `/model-pulse`; dort liest
-`static/js/model-pulse.js` `/api/model-leaderboard`, zeigt alle acht
+`static/js/model-pulse.js` `/api/model-leaderboard`, zeigt alle neun
 familienaggregierten, anonymisierten Best-answer-Auswahlen aus echten Runs und
 bietet wegen der am 31.08.2026 ergänzten Familien Kimi/GLM neben All-time einen
-gemeinsamen Zeitraum ab diesem Datum. Es trennt dieses Judge-Signal ausdrücklich
-vom kontrollierten Accuracy-Benchmark.
+gemeinsamen Zeitraum ab diesem Datum; später ergänzte Familien (Meta/Muse ab
+02.09.2026) tragen ihr eigenes Startdatum in der Zeile. Es trennt dieses
+Judge-Signal ausdrücklich vom kontrollierten Accuracy-Benchmark.
 `/benchmark` verlinkt im Hero zurück auf diese zweite Perspektive. Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`. **Seit 2026-07-25 spiegeln alle
 Marketing-Mockups die Inline-Confidence-Darstellung der App** (Scene 03 in
@@ -2389,7 +2390,8 @@ CLI mit `firebase deploy --only firestore:rules,firestore:indexes`):
     nicht persistiert.
   - `chats/{chat_id}/turns/{turn_id}/model_answers/{provider}` speichert pro
     erfolgreicher Antwort genau ein Dokument. Die einzige Pfad-Allowlist ist
-    `openai|mistral|anthropic|gemini|deepseek|grok`; Dokumentfelder sind
+    die Provider-Registry (`cfg.PROVIDER_LABEL_BY_ID`, aktuell
+    `openai|mistral|anthropic|gemini|deepseek|grok|kimi|glm|meta`); Dokumentfelder sind
     `schema_version`, kanonischer `provider`, begrenztes `model_label` und
     `answer`, über den Share-Sanitizer normalisierte `sources`, `created_at` und
     `updated_at`. Leere/fehlgeschlagene Antworten erzeugen kein Dokument. Turn,
@@ -2823,7 +2825,22 @@ Antworten mit 400 ab. Weniger als sechs bleibt wie bisher moeglich.
 `attachment_models` legt die Fähigkeit pro Modell fest (`None` = alle, leeres
 Set = keines). DeepSeek bleibt mit Anhang stumm; bei GLM kann 5.3 Flash Anhänge
 lesen, während das effektive Deep-Think-Modell GLM 5.3 text-only ist. Frontend
-und Backend prüfen deshalb das tatsächlich gewählte/eingesetzte Modell.
+und Backend prüfen deshalb das tatsächlich gewählte/eingesetzte Modell. Meta
+liest beide Modelle Bilder (`PROVIDER_IMAGE_SUPPORT`), steht aber bewusst nicht
+in `PROVIDER_PDF_SUPPORT`: nur Muse Spark 1.3 verarbeitet PDFs nativ, das freie
+Muse Glimmer 30B nicht — die Familie bekommt deshalb den Text-Fallback.
+
+**Betriebsvoraussetzung Meta:** `meta/muse-spark-1.3` ist bei OpenRouter
+attestierungspflichtig und antwortet ohne die einmalige 18+-Bestätigung des
+Kontos mit `403 … missing_attestation_types: [age_18plus]`
+(https://openrouter.ai/settings/preferences). `meta/muse-glimmer-30b` läuft
+ohne diese Bestätigung. Beide Modelle erfüllen `provider: {"zdr": true}`;
+Muse denkt zwingend, deshalb steht `reasoning.effort` fest auf `low` und ein
+zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
+(siehe `_responses_empty_result`). Der Contributor-Tarif
+`meta/muse-spark-1.3-contributor` ist bewusst nicht aufgenommen: Meta darf
+dort Prompts und Antworten für seine Produkte verwenden, was der ZDR-Zusage in
+Terms/Privacy widerspricht.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
 (`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
