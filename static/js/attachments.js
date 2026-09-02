@@ -156,7 +156,17 @@
       trigger.setAttribute("aria-expanded", String(open));
       trigger.classList.toggle("is-open", open);
       if (inputContainer) inputContainer.classList.toggle("attach-menu-open", open);
+      // Genau EIN Popup im Composer: der Modell-Picker stoppt auf seinem
+      // Trigger die Propagation, also erreicht ihn unser document-Listener nie
+      // — er muss hier ausdruecklich zugemacht werden.
+      if (open) window.App?.collapseExpandedModelPicker?.();
     }
+
+    // Andere Composer-Popups schliessen dieses Menue ueber window.App.
+    window.App = window.App || {};
+    window.App.closeAttachMenu = function () {
+      if (!menu.hidden) setMenuOpen(false);
+    };
 
     trigger.addEventListener("click", function (event) {
       event.stopPropagation();

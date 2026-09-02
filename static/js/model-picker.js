@@ -870,6 +870,11 @@
       collapseExpandedModelPicker(expandedModelPicker);
     }
 
+    // Genau EIN Popup im Composer: das (+)-Menue stoppt auf seinem Trigger die
+    // Propagation, also erreicht es unser document-Listener nie — es muss hier
+    // ausdruecklich zugemacht werden.
+    window.App?.closeAttachMenu?.();
+
     // Einstiegs-View: aktive Preset-Nutzer sehen die Presets, Custom-Nutzer
     // landen ohne Umweg in ihrer Aufstellung. Nie in einer Modell-Liste —
     // die ist immer nur eine Ebene tiefer, die man selbst geoeffnet hat.
