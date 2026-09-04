@@ -1051,7 +1051,9 @@ def _consensus_api_model(consensus_model: str) -> str:
 
 # Platzhalter fuer die pro Frage eingesetzten, dynamischen Teile des
 # Consensus-Prompts (Frage + sechs Kandidatenantworten). Das uebrige Geruest
-# (Synthese-Anweisungen) ist ueber alle Fragen/Runs konstant = der V0-Prompt.
+# (Synthese-Anweisungen) ist innerhalb eines Runs konstant. Der gespeicherte
+# Text haelt den jeweils produktiven Prompt-Stand reproduzierbar fest; alte
+# Benchmark-Laeufe behalten ihren damaligen V0/V1/V2-Stand.
 _CONSENSUS_TEMPLATE_PLACEHOLDERS = (
     "{QUESTION}", "{ANSWER_OPENAI}", "{ANSWER_MISTRAL}", "{ANSWER_ANTHROPIC}",
     "{ANSWER_GEMINI}", "{ANSWER_DEEPSEEK}", "{ANSWER_GROK}",

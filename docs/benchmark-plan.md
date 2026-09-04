@@ -796,3 +796,28 @@ dieses Signal aus dem Antworttext. Siehe
   unverändert; sie beschreiben V1. Das oben dokumentierte Prompt-Template
   (Abschnitt „Prompt-Transparenz") beschreibt weiterhin den V0/V1-Stand und
   wird bewusst nicht überschrieben.
+
+### Prompt-Version V3 — journalistische Einordnung ohne Cutoff-Veto (2026-09-04)
+
+**Was sich geändert hat:** Die pauschale Aufforderung, mögliche Fehler der
+Experten selbst zu identifizieren und auszuschließen, ist entfallen. Die
+Synthese wird stattdessen als interessierter, unabhängiger Journalist gerahmt:
+Sie versteht die Beiträge, wägt Argumente und vorhandene Belege ab und bildet
+eine eigene begründete Einschätzung, ohne einer Mehrheit mechanisch zu folgen.
+
+Die eigene Einschätzung bleibt damit ausdrücklich erlaubt. Gleichzeitig muss
+die Synthese Schlussfolgerungen von bloßem Modellgedächtnis unterscheiden:
+Bei zeitabhängigen Fakten ist fehlende Vertrautheit kein Gegenbeweis, und
+aktuelle Informationen aus den Antworten dürfen nicht allein deshalb verworfen
+werden, weil sie nach dem Wissensstand der Synthese liegen könnten.
+
+Die Source-ID-Grenze bleibt bestehen: Die Synthese darf weiterhin keine
+`[S…]`-IDs erfinden. Quellen-Tags werden nun aber als Provenienz des gelieferten
+Materials und nicht als Grenze des eigenen Denkens beschrieben. Eine begründete
+Schlussfolgerung darf ohne Tag stehen; eine unbelegte Erinnerung darf dagegen
+keine belegte, zeitabhängige Information verwerfen. Relevante Tags für aktuelle
+Fakten sollen nicht mehr aus bloßer Kürze entfallen.
+
+**Konsequenz für den Benchmark:** Der produktive Prompt-Stand ist ab hier
+**V3**. Neue Runs dürfen nicht mit Ergebnissen der früheren Prompt-Stände
+gepoolt werden.

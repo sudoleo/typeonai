@@ -1489,8 +1489,11 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   sind inhaltlich unverändert. `window.App.differencesPanel.{setSynthesizing,
   expandForFallback}` steuert offen/zu: während der Synthese offen (Spinner),
   danach zu (strukturierte Karten) bzw. offen (Freitext-Fallback).
-  Der Consensus-Prompt glättet Uneinigkeit nicht mehr weg (Prompt-Version
-  **V2**, siehe `docs/benchmark-plan.md`), der Verdict-Header nennt das
+  Der Consensus-Prompt glättet Uneinigkeit nicht mehr weg und rahmt die
+  Synthese als journalistische, eigenständige Abwägung statt als mechanisches
+  Mehrheitsvotum. Eigenes Modellgedächtnis darf dabei aktuelle, in den
+  Antworten belegte Informationen nicht allein wegen möglicher Cutoff-Lücken
+  verwerfen (Prompt-Version **V3**, siehe `docs/benchmark-plan.md`). Der Verdict-Header nennt das
   strittige **Thema** statt einer Zählung (deterministisch aus
   `differences[].claim`, kein zusätzlicher LLM-Call). Hintergrund und
   Entscheidungen: `docs/consensus-inline-confidence-brief.md`.

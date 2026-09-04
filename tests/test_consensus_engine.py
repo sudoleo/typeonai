@@ -102,6 +102,21 @@ class ConsensusFollowUpQuestionTests(unittest.TestCase):
 
 
 class ConsensusPromptAnonymizationTests(unittest.TestCase):
+    def test_prompt_uses_journalistic_judgment_without_cutoff_veto(self):
+        prompt = build_prompt()
+        self.assertIn("interested, independent journalist", prompt)
+        self.assertIn("form your own reasoned assessment", prompt)
+        self.assertIn("rather than mechanically following a majority", prompt)
+        self.assertIn("lack of familiarity is not evidence", prompt)
+        self.assertNotIn("Experts can also make mistakes", prompt)
+
+    def test_prompt_preserves_current_source_provenance_without_limiting_reasoning(self):
+        prompt = build_prompt()
+        self.assertIn("not as a limit on your reasoning", prompt)
+        self.assertIn("never use an uncited recollection", prompt)
+        self.assertIn("do not omit them merely for brevity", prompt)
+        self.assertNotIn("Use citations sparingly", prompt)
+
     def test_prompt_forbids_false_memory_persistence_claims(self):
         prompt = build_prompt()
         self.assertIn("persistent state changes happen only through separate explicit controls", prompt)
