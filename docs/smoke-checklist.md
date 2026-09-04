@@ -94,6 +94,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 - [ ] Antworten alle ausgewählten `/ask_*` mit HTTP-/Netzfehler, endet der Lauf
       sichtbar und in Analytics als Fehler; kein Consensus startet. Nach dem
       ersten echten Lauf enthält `#consensusMarkerLegend` weiterhin seinen Text.
+      Der dezente „Hide checks“-Link blendet Satzfarben, Quoten und die lange Erklärung
+      aus, lässt „Show checks“ stehen und stellt alles auch nach einem Reload
+      wieder her.
 - [ ] Ohne Agent Mode bleibt die Oberfläche im direkten Vergleich: kein
       Pipeline-Block, kein Thread-Kopf und kein `/consensus`-Request; alle sechs
       Antworten streamen sichtbar in ihre Boxen, Consensus, Differences und

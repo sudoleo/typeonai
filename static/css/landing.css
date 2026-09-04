@@ -234,17 +234,30 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Hero — tighter top spacing
    -------------------------------------------------------------------------- */
-/* Hero band fills the monitor height: the grey section below starts at the
-   bottom of the viewport, not partway up the screen. */
-.lp-section--hero { padding: clamp(16px, 2.5vw, 32px) 0 0; }
-@media (min-width: 760px) {
-  .lp-section--hero {
-    min-height: calc(100svh - 54px);
-    display: flex;
-    align-items: center;
-  }
-  .lp-section--hero > .lp-hero { width: min(var(--maxw), calc(100% - 44px)); }
+/* Hero band fills the screen height — on every device, not just on a monitor.
+   The phone used to end the hero wherever its content happened to stop, which
+   left a third of "01 · Ask" standing in the first screen: two openings at
+   once, and neither of them finished. The next section now starts at the fold,
+   where scrolling reveals it.
+
+   min-height, not height: a landscape phone is shorter than the content, and
+   there the band simply grows instead of clipping. */
+.lp-section--hero {
+  padding: clamp(16px, 2.5vw, 32px) 0 0;
+  /* Three units, on purpose. vh is the fallback for browsers without the new
+     ones. dvh is the live value: it shrinks when a phone shows its address
+     bar and grows when the bar slides away, so the band is always exactly the
+     screen you can see — which is the whole promise of a full-screen hero and
+     the reason svh alone was wrong here (it sizes to the *smallest* viewport,
+     so a retracted bar left a strip of the next section showing). */
+  min-height: calc(100vh - 54px);
+  min-height: calc(100dvh - 54px);
+  display: flex;
+  align-items: center;
 }
+
+/* A flex child does not get .lp-shell's auto margins, so it repeats them. */
+.lp-section--hero > .lp-hero { width: min(var(--maxw), calc(100% - 44px)); }
 
 .lp-hero {
   display: grid;
@@ -287,10 +300,17 @@ img { display: block; max-width: 100%; }
 .lp-hero-proof strong { color: var(--text-primary); font-weight: var(--font-weight-semibold); }
 
 /* --------------------------------------------------------------------------
-   Demo-first hero: headline above a functional-looking input field.
-   The whole field links into /app?demo=1 (demo.js auto-runs the scripted
-   demo there); the Try-the-demo pill sits inside the field, the six provider
-   chips sit directly below it.
+   Demo-first hero: a functional-looking input field, centred on an otherwise
+   empty first screen. The whole field links into /app?demo=1 (demo.js
+   auto-runs the scripted demo there) and the Try-the-demo pill sits inside it.
+   Below the field, in this order: the nine provider marks, the claim, and —
+   on a screen with room for it — the pulse line on the bottom edge.
+
+   Nothing sits above the field any more. The claim used to open the page at
+   68px, which meant the first thing a visitor read was a promise and the
+   second was the thing that keeps it; that order is now reversed. Both
+   "Open the app" and "See Watches" are gone as well: they duplicated the
+   navigation two centimetres higher up.
    -------------------------------------------------------------------------- */
 .lp-hero.lp-hero--demo {
   display: flex;
@@ -298,8 +318,6 @@ img { display: block; max-width: 100%; }
   align-items: center;
   text-align: center;
 }
-
-.lp-hero--demo .lp-hero-copy { max-width: 920px; }
 
 .lp-prompt.lp-hero-prompt {
   display: flex;
@@ -334,7 +352,15 @@ img { display: block; max-width: 100%; }
   outline-offset: 3px;
 }
 
-.lp-hero-prompt .lp-prompt-text { min-height: 27px; font-size: var(--font-size-base); }
+/* The field is a fixed object, not a box that grows with what is typed into
+   it. The loop types five questions of very different lengths; reserving the
+   tallest of them up front (two lines) means the field, the marks and the
+   claim below stay exactly where they are while the caret runs. One line of
+   empty space is a cheap price for a hero that never jumps. */
+.lp-hero-prompt .lp-prompt-text {
+  min-height: calc(2 * var(--line-height-ui) * 1em);
+  font-size: var(--font-size-base);
+}
 .lp-hero-prompt .lp-attach { cursor: inherit; }
 
 .lp-hero-prompt-bar {
@@ -369,15 +395,93 @@ img { display: block; max-width: 100%; }
 .dark-mode .lp-demo-btn { color: #141414; }
 .lp-hero-prompt:hover .lp-demo-btn { background: var(--accent-hover); }
 
-.lp-hero-models { justify-content: center; gap: 8px; margin-top: 20px; }
-
-.lp-hero-note {
-  margin: 16px auto 0;
-  max-width: 56ch;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-ui);
+/* The marks lose their pills here. A pill is a label, and nine labels under
+   the field are a paragraph the eye has to read; nine bare marks are a single
+   image that says "these nine answer" in one glance. The names stay in the
+   accessibility tree at every width, which is what the pills were carrying. */
+.lp-hero-models {
+  --mark-size: 22px;
+  justify-content: center;
+  align-items: center;
+  gap: clamp(12px, 1.6vw, 18px);
+  margin-top: clamp(18px, 2.4vw, 26px);
 }
+
+/* Both selectors carry .lp-chips: the shared chip rules further down the file
+   would otherwise win on equal specificity and put the pill back. */
+.lp-chips.lp-hero-models span {
+  /* A fixed square per mark, so the rhythm of the row comes from the boxes and
+     not from how wide each logo happens to draw itself. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--mark-size) + 4px);
+  height: calc(var(--mark-size) + 4px);
+  gap: 0;
+  padding: 0;
+  background: none;
+}
+
+/* One material for all nine. Five of these assets are black glyphs and four
+   are full-colour logos, which is why the row read as a sticker sheet rather
+   than as one statement: nine different weights, nine different hues, on a
+   page that is otherwise monochrome. brightness(0) throws the colour away and
+   keeps the alpha silhouette, so every mark becomes the same ink; the opacity
+   puts the row a step behind the field it belongs to. Dark mode inverts the
+   same silhouettes instead of the old per-asset invert list. */
+.lp-chips.lp-hero-models img {
+  width: calc(var(--mark-size) * var(--mark-scale, 1));
+  height: calc(var(--mark-size) * var(--mark-scale, 1));
+  filter: brightness(0) opacity(0.58);
+}
+
+.dark-mode .lp-chips.lp-hero-models img {
+  filter: brightness(0) invert(1) opacity(0.66);
+}
+
+/* Equal boxes are not equal marks: a filled block carries more weight at the
+   same size than a hairline loop. These four are corrected by eye against the
+   ChatGPT ring, which is the row's reference. They are factors rather than
+   pixels, so one --mark-size below resizes the whole row and keeps the
+   balance. */
+.lp-chips.lp-hero-models img[src*="mistral"] { --mark-scale: 0.85; } /* solid block, 1.4:1 wide */
+.lp-chips.lp-hero-models img[src*="zai"] { --mark-scale: 0.86; }     /* heaviest glyph */
+.lp-chips.lp-hero-models img[src*="kimi"] { --mark-scale: 0.95; }    /* dense, two shapes */
+.lp-chips.lp-hero-models img[src*="meta.svg"] { --mark-scale: 1.14; }/* open stroke, low x-height */
+
+.lp-hero-models .lp-chip-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+/* The h1, one voice below the display size it used to have. At --ink-2 and
+   18px it was the quietest thing on a nearly empty screen and simply got
+   skipped; at full ink, one step up the scale and a medium weight it is the
+   loudest *text* on the page, while the field stays the loudest *object*.
+   It opens the hero, so the gap to the field is the field's own top margin —
+   no margin of its own to double up with. */
+.lp-hero-claim {
+  margin: 0 auto;
+  max-width: 40ch;
+  color: var(--ink);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-heading);
+  letter-spacing: var(--tracking-tight);
+  text-wrap: balance;
+}
+
+/* The two sentences are one thought each, so the line break belongs between
+   them and not inside "what the world / believes". Inline blocks do that on
+   their own at every width: both sentences share a line where there is room,
+   otherwise the second one takes the next line. */
+.lp-hero-claim span { display: inline-block; }
 
 .lp-hero-pulse {
   width: min(100%, 760px);
@@ -421,7 +525,41 @@ img { display: block; max-width: 100%; }
   white-space: nowrap;
 }
 
-.lp-hero--demo .lp-hero-actions { justify-content: center; margin-top: 24px; }
+/* A status line belongs on an edge, not in the middle of a stack. Where the
+   hero is tall enough that pinning the line does not crowd the claim, the
+   pulse leaves the flow and sits on the fold, and the group above centres in
+   the space left over. Only the height matters — a phone held upright has the
+   same fold a monitor has, so it gets the same treatment; on anything shorter
+   (a phone on its side, a half-height window) the line stays in the stack,
+   because there the fold is not a fixed place on the screen anyway.
+
+   The three selectors are deliberately one step more specific than the phone
+   block further down the file, which would otherwise take the reserved space
+   and the width back. */
+@media (min-height: 620px) {
+  .lp-section--hero { position: relative; }
+
+  /* Reserved height, so centring the stack can never run it into the line —
+     and more of it than the line needs, because the group reads better above
+     the middle than on it. Half of whatever is reserved here is how far the
+     field moves up. */
+  .lp-section--hero .lp-hero.lp-hero--demo { padding-bottom: clamp(76px, 20vh, 220px); }
+
+  .lp-section--hero .lp-hero-pulse {
+    position: absolute;
+    left: 50%;
+    bottom: clamp(14px, 2.6vh, 30px);
+    width: min(760px, calc(100% - 44px));
+    margin: 0;
+    transform: translateX(-50%);
+  }
+}
+
+/* Tablets and short laptop windows: the marks tighten before they wrap, and
+   the claim keeps to the width of the field it belongs to. */
+@media (max-width: 900px) {
+  .lp-hero-claim { max-width: 38ch; }
+}
 
 @media (max-width: 600px) {
   .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
@@ -544,16 +682,6 @@ img { display: block; max-width: 100%; }
 .lp-window-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px; }
 .lp-app-body > *,
 .lp-window-body > * { min-width: 0; }
-
-/* The greeting above the empty composer, in the app's voice. */
-.lp-app-greeting {
-  margin: 0;
-  text-align: center;
-  color: var(--ink);
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-regular);
-  letter-spacing: var(--tracking-tight);
-}
 
 /* --- Real-run model pulse -------------------------------------------------
    The benchmark is the controlled proof; this is the product signal beside
@@ -848,6 +976,24 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-base);
   line-height: var(--line-height-ui);
 }
+
+/* The scene mock is now a field and nothing else — no title bar, no greeting
+   above it — so it can be the size it is in the product instead of a small
+   picture of it. Three reserved lines, because the question typed here is
+   longer than the hero's and the mock must not grow while it is written. */
+.lp-scroll-scene .lp-composer {
+  padding: 20px 20px 15px;
+  border-radius: var(--radius-xl);
+}
+
+.lp-scroll-scene .lp-composer-text {
+  min-height: calc(3 * var(--line-height-ui) * 1em);
+  font-size: var(--font-size-lg);
+}
+
+.lp-scroll-scene .lp-composer-row { gap: 10px; }
+.lp-scroll-scene .lp-send { width: 38px; height: 38px; }
+.lp-scroll-scene .lp-send svg { width: 15px; height: 15px; }
 
 .lp-composer-text:empty:not(.is-typing)::before {
   content: "Enter your question";
@@ -1296,27 +1442,35 @@ img { display: block; max-width: 100%; }
 .lp-scene-notes li.is-done { opacity: 0.66; }
 .lp-scene-notes li.is-active { opacity: 1; color: var(--ink); }
 
-@media (min-width: 900px) and (min-height: 620px) {
-  .lp-scroll-scene { min-height: 250vh; }
+/* The scrubbed scenes pin on every screen that is tall enough to hold one,
+   phones included. A phone used to get the fallback playhead: the scene was
+   barely taller than the viewport, so its four phases were spent in a single
+   flick of the thumb and arrived as one blurred change. Pinned, the stage
+   holds still and the scroll becomes the playhead, which is the whole point
+   of the scene — and it is also what empties the screen: one thing moving,
+   nothing queued underneath it.
 
+   The JS needs no branch for this. It already measures travel as (scene
+   height - stage height) and falls back to a pass-through playhead when
+   there is none, so pinning is a pure CSS decision. */
+@media (min-height: 620px) {
+  /* Under 900px the stage is a single column, so it needs less scroll to
+     play through than the two-column desktop version. */
+  .lp-scroll-scene { min-height: 190vh; }
+
+  /* The one place that keeps svh: this stage is pinned while you scroll
+     through it, and dvh would resize it mid-scrub — the browser bar slides
+     away, the stage grows, and everything on it shifts under the thumb that
+     is moving it. svh is the smallest it can ever need to be, so it holds
+     still and the bar simply uncovers page below it. */
   .lp-scene-stage {
     position: sticky;
     top: 54px;
     display: flex;
     align-items: center;
     min-height: calc(100vh - 54px);
+    min-height: calc(100svh - 54px);
   }
-
-  /* Copy on the left, the product on the right, both held still while the
-     run advances between them. */
-  .lp-scroll-scene .lp-shell {
-    display: grid;
-    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-    align-items: center;
-    gap: clamp(32px, 4.5vw, 70px);
-  }
-
-  .lp-scroll-scene .lp-scene-visual { margin-top: 0; }
 
   /* One hairline that fills as the scene plays — the only chrome the scroll
      animation gets, and it fades out at both ends like every other horizon. */
@@ -1338,6 +1492,22 @@ img { display: block; max-width: 100%; }
     width: var(--p, 0%);
     background: var(--ink-3);
   }
+}
+
+@media (min-width: 900px) and (min-height: 620px) {
+  .lp-scroll-scene { min-height: 250vh; }
+
+  /* Copy on the left, the product on the right, both held still while the
+     run advances between them. */
+  .lp-scroll-scene .lp-shell {
+    display: grid;
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+    align-items: center;
+    gap: clamp(32px, 4.5vw, 70px);
+  }
+
+  .lp-scroll-scene .lp-scene-visual { margin-top: 0; }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2589,34 +2759,41 @@ img { display: block; max-width: 100%; }
   .lp-display,
   .lp-hero .lp-display { font-size: 2.05rem; line-height: 1.14; }
   .lp-h2 { font-size: 1.6rem; line-height: 1.16; }
-  .lp-eyebrow { margin-bottom: 10px; font-size: var(--font-size-xs); }
-  .lp-lead { margin-top: 14px; font-size: var(--font-size-base); }
+  /* With a screen per section there is room to breathe again: the phone used
+     to be tuned for a page where everything had to be packed. */
+  .lp-eyebrow { margin-bottom: 14px; font-size: var(--font-size-xs); }
+  .lp-lead { margin-top: 18px; font-size: var(--font-size-base); }
   .lp-head .lp-lead,
   .lp-hero .lp-lead { max-width: none; }
 
   .lp-wide-only { display: none; }
 
-  /* --- Hero: the field is the call to action, the rest is its caption ----- */
+  /* --- Hero: one screen, and the field is what it is for ----------------- */
+  /* Only reached on a phone too short for the pinned pulse; otherwise the
+     .lp-section--hero rule above reserves the space instead. */
   .lp-hero.lp-hero--demo { padding-bottom: 32px; }
-  .lp-hero-prompt.lp-prompt { margin-top: 24px; }
+  .lp-hero-prompt.lp-prompt { margin-top: 30px; }
 
-  /* Eight marks in one row say "eight available providers" as well as labelled pills
-     say it over two. The names stay readable to screen readers. */
-  .lp-hero-models { gap: 6px; margin-top: 16px; }
-  .lp-hero-models span { padding: 7px; }
-  .lp-hero-models img { width: 18px; height: 18px; }
-  .lp-hero-models .lp-chip-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    white-space: nowrap;
-    clip-path: inset(50%);
+  /* Nine marks have to stay one row here, or the "one image" they make falls
+     apart: 9 x 20px plus eight 10px gaps is 260px inside a 331px column. */
+  .lp-hero-models { --mark-size: 20px; gap: 10px; margin-top: 16px; }
+
+  /* Only the narrowest phones need the last step: at 360px the row still has
+     328px to sit in, below that it would break into a second, lopsided line. */
+  @media (max-width: 360px) {
+    .lp-hero-models { --mark-size: 18px; gap: 8px; }
+
+    /* Below this width the longest question in the loop needs a third line,
+       and two reserved lines would let the field jump again. Measured, not
+       guessed: at 360px and up all five questions fit in two. */
+    .lp-hero-prompt .lp-prompt-text { min-height: calc(3 * var(--line-height-ui) * 1em); }
   }
 
-  .lp-hero-note { margin-top: 14px; font-size: var(--font-size-xs); }
+  /* The h1 keeps its size here. At 18px it was smaller than every h2 on the
+     page and barely above the placeholder inside the field it introduces —
+     which is exactly how it read: like a caption for the field rather than
+     the sentence the page is about. Only the measure narrows. */
+  .lp-hero-claim { max-width: 24ch; }
 
   /* Without its explanatory half the pulse strip is a status line again, so
      it goes back to one row: dot, label, link. */
@@ -2625,12 +2802,48 @@ img { display: block; max-width: 100%; }
     margin-top: 18px;
   }
   .lp-hero-pulse-link { grid-column: auto; }
-  .lp-hero--demo .lp-hero-actions { margin-top: 18px; }
+
+  /* Every section gets a screen of its own. A phone used to show the end of
+     one topic and the beginning of the next in the same frame, which is why
+     the page read as crowded even after the copy was trimmed: nothing was
+     ever alone on the screen. min-height, not height — a section with more
+     to say than a screen holds still grows past it. */
+  main > .lp-section:not(.lp-section--hero) {
+    min-height: calc(100vh - 54px);
+    min-height: calc(100dvh - 54px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* A scene wraps its stage in a full-bleed element rather than the shell, so
+     it has to claim the width a flex item would otherwise shrink away from. */
+  main > .lp-section > .lp-scroll-scene { width: 100%; }
 
   /* --- Scenes ------------------------------------------------------------ */
   .lp-scene-visual,
-  .lp-scene-03 .lp-scene-visual { margin-top: 26px; }
-  .lp-scene-notes { margin-top: 14px; gap: 8px; font-size: var(--font-size-sm); }
+  .lp-scene-03 .lp-scene-visual { margin-top: 34px; }
+  .lp-scene-notes { margin-top: 24px; gap: 12px; font-size: var(--font-size-sm); }
+
+  /* The <b> label and the sentence after it are two flex items. On a wide
+     screen they sit on one line and read as one note; in a 343px column they
+     become two ragged columns ("The run / switch." above "How many models /
+     answer"), which is what made this list look like a table. Block flow puts
+     the note back into one sentence and the dot back in front of it. */
+  .lp-scene-notes li { display: block; }
+  .lp-scene-notes li::before {
+    display: inline-block;
+    margin-right: 8px;
+    transform: translateY(-3px);
+  }
+
+  /* The mocks keep their content and lose their chrome. A fake title bar and
+     a fake quota ring are what makes a screenshot look like a screenshot on a
+     wide screen; in a 343px column they are two rows that say nothing, ahead
+     of the one row that says everything. The same goes for the fine print
+     inside the composer: true, and unreadable at this size. */
+  .lp-app-bar,
+  .lp-composer-foot { display: none; }
 
   /* Reading key: three rows of sample + caption ahead of a mock that shows
      the same three states in use. The captions carry it on their own. */

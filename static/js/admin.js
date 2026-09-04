@@ -123,7 +123,8 @@ document.getElementById('tab-models').addEventListener('change', () => {
 // ==============================
 // Meta-Helfer (Alias-Aufloesung, server-erzwungene Modelle)
 // ==============================
-function meta() { return globalModelsData.meta || {}; }
+// Der Server liefert die Metadaten unter '_meta'; ein Provider heisst 'meta'.
+function meta() { return globalModelsData._meta || {}; }
 function providerLabel(provider) { return (meta().provider_labels || {})[provider] || provider; }
 function dependencyReasons(provider, model) {
     return ((((meta().dependencies || {})[provider] || {})[model]) || []);
@@ -2067,7 +2068,7 @@ function renderTopicModelPlan(providerModels) {
         options.forEach(model => {
             const option = document.createElement('option');
             option.value = model;
-            option.textContent = ((globalModelsData.meta || {}).labels || {})[model] || model;
+            option.textContent = (meta().labels || {})[model] || model;
             option.selected = model === chosen;
             select.appendChild(option);
         });

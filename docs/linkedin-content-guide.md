@@ -15,6 +15,8 @@ incorporate the owner's feedback and apply to every future draft.
   sentence mechanically; express the idea through evidence.
 - Write like a thoughtful founder or product researcher, not a generic AI
   marketing account. Avoid inflated claims, canned hooks, and AI clichés.
+- Do not use em dashes in LinkedIn copy or asset text. Restructure the sentence
+  or use a full stop, comma, colon, or parentheses instead.
 - In a feature announcement, lead unambiguously with the user value. Trust,
   safeguards, and limitations should explain why the feature is well designed;
   they must not make consens.io appear to argue against or "roast" the feature
@@ -25,16 +27,22 @@ incorporate the owner's feedback and apply to every future draft.
 
 - Use only the real consens.io mark and wordmark from the current project.
   Never invent a logo, icon, symbol, wordmark, or brand color.
+- Preserve the source logo's intrinsic aspect ratio. In particular,
+  `static/favicon.png` is 279 × 200, so never force it into a square width and
+  height. Set one dimension and keep the other automatic, matching the public
+  site's treatment.
 - Read the current public templates and CSS before designing. Treat
   `static/css/public-tokens.css`, `static/css/landing.css`, and
   `static/css/components-consensus-insights.css` as the visual source of truth.
 - Product mockups must match the current product, including copy, scores,
   provider assignments, marker color, line style, thickness, and offset.
 - Marker styling is not remembered from an older post. It is inspected in the
-  current CSS every time. As of 2026-08-26, checked claims use translucent
-  highlighter fills with cloned fragments across line breaks: green for full
-  agreement, grey for nuance, amber for split support, and red for a genuine
-  contradiction. Do not reintroduce underline styling in an asset.
+  current CSS every time. As of 2026-09-04, checked claims use translucent
+  highlighter fills with 0.1em/0.14em padding, 3px corners, and cloned
+  fragments across line breaks: green for full agreement, amber for split
+  support, red for a genuine contradiction, and grey for nuance or thin
+  coverage. Thin coverage is deliberately the quietest fill and its badge uses
+  a dash instead of a ratio. Do not reintroduce underline styling in an asset.
 
 ## Art direction
 

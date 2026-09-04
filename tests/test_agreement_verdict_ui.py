@@ -66,6 +66,26 @@ def test_the_old_agreement_score_switch_choice_still_applies():
     assert 'localStorage.getItem(AGREEMENT_SCORE_STORAGE_KEY) === "false"' in init
 
 
+def test_sentence_checks_have_a_discreet_persistent_visibility_control():
+    template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    insights = (ROOT / "static" / "js" / "consensus-insights.js").read_text(
+        encoding="utf-8"
+    )
+    shell = (ROOT / "static" / "css" / "shell.css").read_text(encoding="utf-8")
+    inputs = (ROOT / "static" / "css" / "components-input.css").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'id="consensusMarkerToggle"' in template
+    assert '>Hide checks</button>' in template
+    assert ":not(.consensus-marker-toggle)" in inputs
+    assert "consensio.showConsensusMarkers.v1" in insights
+    assert 'classList.toggle(MARKERS_HIDDEN_CLASS, !show)' in insights
+    assert 'show ? "Hide checks" : "Show checks"' in insights
+    assert "body.consensus-markers-hidden .consensus-marker-legend-copy" in shell
+    assert "body.consensus-markers-hidden .consensus-answer-body .claim-badge" in shell
+
+
 def test_public_mockups_use_the_same_score_semantics():
     landing = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
     engine = (ROOT / "templates" / "consensus-engine.html").read_text(

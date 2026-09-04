@@ -588,10 +588,19 @@
                    mehr das Unmarkierte erklaeren, sondern die Farben - und
                    vor allem, dass Zustimmung kein Wahrheitsbeweis ist. -->
               <p id="consensusMarkerLegend" class="consensus-marker-legend" hidden>
-                Every checkable sentence was compared against each model: green means supported,
-                amber means the models are split, red marks a contradiction, and grey means they
-                differed only in detail — or that too few of them addressed the sentence at all.
-                Models agreeing is not proof.
+                <span class="consensus-marker-legend-copy">
+                  Every checkable sentence was compared against each model: green means supported,
+                  amber means the models are split, red marks a contradiction, and grey means they
+                  differed only in detail — or that too few of them addressed the sentence at all.
+                  Models agreeing is not proof.
+                </span>
+                <button
+                  type="button"
+                  id="consensusMarkerToggle"
+                  class="consensus-marker-toggle"
+                  aria-controls="consensusAnswerBody consensusClaimsFallback"
+                  aria-expanded="true"
+                >Hide checks</button>
               </p>
               <!-- Beleg-Fuss: uebernimmt, wenn der Lauf sich ausblendet. Seit
                    2026-07-28 zwei Zeilen statt drei (Grid in shell.css):

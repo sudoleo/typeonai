@@ -89,7 +89,7 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     watch = read("static/js/watch.js")
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
-    assert "score: 52" in demo
+    assert "score: 45" in demo
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.
@@ -122,6 +122,18 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     assert 'id="modelLeaderboard"' in pulse_page
     assert "not a popularity vote" in pulse_page.lower()
     assert 'href="/benchmark"' in pulse_page
+
+
+def test_model_pulse_inverts_all_monochrome_provider_logos_in_dark_mode():
+    pulse_css = read("static/css/model-pulse.css")
+    pulse_page = read("templates/model-pulse.html")
+
+    for asset in ("chatgpt", "grok", "kimi", "meta.svg", "zai"):
+        assert (
+            f'.dark-mode .pulse-board .lp-model-pulse-icon img[src*="{asset}"]'
+            in pulse_css
+        )
+    assert "/static/css/model-pulse.css?v=20260904-logodark1" in pulse_page
 
 
 def test_meta_muse_is_present_across_public_provider_surfaces():
@@ -171,14 +183,23 @@ def test_consensus_run_requires_two_selected_models_before_starting():
     assert "choose at least 2" in model_picker
 
 
-def test_cross_check_greeting_uses_the_same_light_typography_in_app_and_landing():
+def test_cross_check_greeting_is_light_in_the_app_and_absent_from_the_landing_mock():
+    """Die Begruessung lebt nur noch in der App.
+
+    Die Landing-Szene 01 hat sie am 04.09.2026 verloren: das Feld tippt sich
+    eine echte Frage selbst hinein und sagt damit dasselbe, ohne eine Zeile
+    Text dafuer auszugeben. Der Test haelt beide Haelften fest - die leichte
+    Schrift in der App, und dass das Mock die Zeile nicht wieder einsammelt.
+    """
     app_css = read("static/css/components-input.css")
     landing_css = read("static/css/landing.css")
+    landing_html = read("templates/landing.html")
 
     app_rule = app_css.split(".hero-greeting {", 1)[1].split("}", 1)[0]
-    landing_rule = landing_css.split(".lp-app-greeting {", 1)[1].split("}", 1)[0]
     assert "font-weight: var(--font-weight-regular)" in app_rule
-    assert "font-weight: var(--font-weight-regular)" in landing_rule
+
+    assert "lp-app-greeting" not in landing_html
+    assert ".lp-app-greeting {" not in landing_css
 
 
 def test_demo_never_writes_product_usage_signals():

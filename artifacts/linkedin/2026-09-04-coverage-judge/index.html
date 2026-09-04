@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>consens.io - Coverage Judge</title>
+  <style>
+    @font-face {
+      font-family: "Inter Variable";
+      src: url("file:///C:/Users/maxlp/OneDrive/Dokumente/typeonai/static/fonts/inter/InterVariable.woff2") format("woff2");
+      font-style: normal;
+      font-weight: 100 900;
+    }
+
+    :root {
+      --ground: #f2f1ef;
+      --raise: #eae8e5;
+      --well: #e6e4e0;
+      --ink: #222428;
+      --ink-2: #5c5f66;
+      --ink-3: #64676d;
+      --line: rgba(34, 36, 40, 0.14);
+      --line-soft: rgba(34, 36, 40, 0.07);
+      --agree: #3d8f76;
+      --partial: #a8791b;
+      --dispute: #a94f34;
+      --mark-agree: color-mix(in srgb, var(--agree) 13%, transparent);
+      --mark-split: color-mix(in srgb, var(--partial) 20%, transparent);
+      --mark-major: color-mix(in srgb, var(--dispute) 20%, transparent);
+      --mark-thin: color-mix(in srgb, var(--ink) 5%, transparent);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 1080px;
+      height: 1350px;
+      margin: 0;
+      overflow: hidden;
+      background: var(--ground);
+      color: var(--ink);
+      font-family: "Inter Variable", Inter, "Segoe UI", sans-serif;
+      font-optical-sizing: auto;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      position: relative;
+      padding: 62px 76px 52px;
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 13px;
+      font-size: 25px;
+      font-weight: 650;
+      letter-spacing: -0.025em;
+    }
+
+    .brand img {
+      width: 38px;
+      height: auto;
+      display: block;
+      filter: invert(1);
+    }
+
+    .edition {
+      color: var(--ink-3);
+      font-size: 15px;
+      font-weight: 620;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .intro {
+      max-width: 860px;
+      margin-top: 72px;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin: 0;
+      font-size: 61px;
+      font-weight: 620;
+      letter-spacing: -0.052em;
+      line-height: 1.04;
+    }
+
+    .dek {
+      max-width: 835px;
+      margin: 23px 0 0;
+      color: var(--ink-2);
+      font-size: 24px;
+      font-weight: 430;
+      letter-spacing: -0.016em;
+      line-height: 1.42;
+    }
+
+    .rule {
+      height: 1px;
+      margin-top: 42px;
+      background: var(--line);
+    }
+
+    .flow {
+      position: relative;
+      display: grid;
+      grid-template-columns: 238px 1fr;
+      column-gap: 62px;
+      margin-top: 38px;
+    }
+
+    .flow-label {
+      padding-top: 2px;
+      color: var(--ink-3);
+      font-size: 15px;
+      font-weight: 660;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .flow-stage {
+      position: relative;
+      min-height: 82px;
+      padding: 0 0 30px 36px;
+    }
+
+    .flow-stage::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: 8px;
+      bottom: 0;
+      width: 1px;
+      background: var(--ink);
+    }
+
+    .flow-stage::after {
+      content: "";
+      position: absolute;
+      left: 1px;
+      top: 5px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ink);
+    }
+
+    .flow-stage h2,
+    .judge h3,
+    .result h2 {
+      margin: 0;
+      font-size: 23px;
+      font-weight: 660;
+      letter-spacing: -0.022em;
+      line-height: 1.25;
+    }
+
+    .flow-stage p {
+      margin: 6px 0 0;
+      color: var(--ink-2);
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .source-bars {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .source-bars i {
+      width: 38px;
+      height: 5px;
+      display: block;
+      background: var(--ink-3);
+    }
+
+    .judges-wrap {
+      position: relative;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 42px;
+      padding: 2px 0 32px 36px;
+    }
+
+    .judges-wrap::before {
+      content: "";
+      position: absolute;
+      left: 5px;
+      top: -24px;
+      width: 1px;
+      height: 43px;
+      background: var(--ink);
+    }
+
+    .judges-wrap::after {
+      content: "";
+      position: absolute;
+      left: 5px;
+      right: 0;
+      top: 18px;
+      height: 1px;
+      background: var(--ink);
+    }
+
+    .judge {
+      position: relative;
+      z-index: 1;
+      min-height: 112px;
+      padding: 0 18px 0 16px;
+      background: var(--ground);
+    }
+
+    .judge::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 13px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ink);
+    }
+
+    .judge .kicker {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--ink-3);
+      font-size: 13px;
+      font-weight: 660;
+      letter-spacing: 0.105em;
+      text-transform: uppercase;
+    }
+
+    .judge h3 { font-size: 20px; }
+
+    .judge p {
+      margin: 6px 0 0;
+      color: var(--ink-2);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .result {
+      position: relative;
+      margin-left: 36px;
+      padding: 22px 24px 24px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--raise);
+      box-shadow: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 34px rgba(28, 30, 33, 0.08);
+    }
+
+    .result::before {
+      content: "";
+      position: absolute;
+      left: -31px;
+      top: -33px;
+      width: 1px;
+      height: 61px;
+      background: var(--ink);
+    }
+
+    .result::after {
+      content: "";
+      position: absolute;
+      left: -35px;
+      top: 24px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ink);
+    }
+
+    .result-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 20px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .result-meta {
+      color: var(--ink-3);
+      font-size: 13px;
+      font-weight: 560;
+    }
+
+    .claims {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 22px;
+      margin-top: 18px;
+    }
+
+    .claim {
+      font-size: 19px;
+      line-height: 1.55;
+    }
+
+    .mark {
+      padding: 0.1em 0.14em;
+      margin: 0 -0.02em;
+      border-radius: 3px;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+    }
+
+    .mark.agree { background: var(--mark-agree); }
+    .mark.split { background: var(--mark-split); }
+    .mark.major { background: var(--mark-major); }
+    .mark.thin { background: var(--mark-thin); }
+
+    .claim-note {
+      display: block;
+      margin-top: 6px;
+      color: var(--ink-3);
+      font-size: 13px;
+      font-weight: 620;
+      letter-spacing: 0.055em;
+      text-transform: uppercase;
+    }
+
+    .claim-note b { color: var(--ink); font-weight: 690; }
+
+    .bottom-line {
+      position: absolute;
+      left: 76px;
+      right: 76px;
+      bottom: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 28px;
+      color: var(--ink-3);
+      font-size: 14px;
+    }
+
+    .bottom-line strong {
+      color: var(--ink);
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+    }
+  </style>
+</head>
+<body>
+  <header class="topline">
+    <div class="brand">
+      <img src="file:///C:/Users/maxlp/OneDrive/Dokumente/typeonai/static/favicon.png" alt="">
+      <span>consens.io</span>
+    </div>
+    <div class="edition">Engine note · September 2026</div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <h1>Every checkable sentence now gets a verdict.</h1>
+      <p class="dek">One judge finds the disagreement. A second judge checks who supports each sentence and who never addressed it.</p>
+    </section>
+
+    <div class="rule"></div>
+
+    <section class="flow" aria-label="How consens.io checks a consensus answer">
+      <div class="flow-label">The evidence</div>
+      <div class="flow-stage">
+        <h2>Up to six independent model answers</h2>
+        <p>The originals stay separate and visible.</p>
+        <div class="source-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="flow-label">The synthesis</div>
+      <div class="flow-stage">
+        <h2>Consensus Engine</h2>
+        <p>Writes one readable answer from the included responses.</p>
+      </div>
+
+      <div class="flow-label">The checks</div>
+      <div class="judges-wrap">
+        <article class="judge">
+          <span class="kicker">Differences Judge</span>
+          <h3>What conflicts?</h3>
+          <p>Finds substantive contradictions and the positions behind them.</p>
+        </article>
+        <article class="judge">
+          <span class="kicker">Coverage Judge</span>
+          <h3>Who supports each sentence?</h3>
+          <p>Requires a stance from every model for every sentence ID.</p>
+        </article>
+      </div>
+
+      <div class="flow-label">The result</div>
+      <section class="result" aria-label="Example consensus answer markers">
+        <div class="result-head">
+          <h2>Consensus Answer</h2>
+          <span class="result-meta">Demo scenario · real interface copy</span>
+        </div>
+        <div class="claims">
+          <div class="claim">
+            <span class="mark agree">Say what she actually gets on the 15th.</span>
+            <span class="claim-note"><b>6/6</b> · supported</span>
+          </div>
+          <div class="claim">
+            <span class="mark split">Name the day you will confirm the 29th.</span>
+            <span class="claim-note"><b>4/6</b> · split support</span>
+          </div>
+          <div class="claim">
+            <span class="mark thin">Name the cause, or leave it vague.</span>
+            <span class="claim-note"><b>-</b> · detail or thin coverage</span>
+          </div>
+          <div class="claim">
+            <span class="mark major">Keep the closing question, or cut it.</span>
+            <span class="claim-note">Contradiction</span>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="bottom-line">
+    <strong>Unchecked no longer looks like agreed.</strong>
+    <span>consens.io</span>
+  </footer>
+</body>
+</html>

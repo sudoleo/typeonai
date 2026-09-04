@@ -2651,6 +2651,75 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   color: var(--ink);
 }
 
+/* Satzpruefungen sind standardmaessig sichtbar, lassen sich aber direkt an
+   ihrer Legende aus dem Lesefluss nehmen. Der Schalter ist bewusst nur ein
+   leiser Textlink; im Aus-Zustand ersetzt er die komplette Erklaerung. */
+.consensus-marker-toggle {
+  display: inline-flex;
+  align-items: baseline;
+  margin: 0 0 0 0.45em;
+  padding: 0;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  vertical-align: baseline;
+  white-space: nowrap;
+  appearance: none;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  opacity: 0.72;
+}
+
+.consensus-marker-toggle:hover,
+.consensus-marker-toggle:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink-2);
+  text-decoration-color: currentColor;
+  opacity: 1;
+  outline: none;
+}
+
+.consensus-marker-toggle:focus-visible {
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+body.consensus-markers-hidden .consensus-marker-legend-copy {
+  display: none;
+}
+
+body.consensus-markers-hidden .consensus-marker-legend {
+  margin-top: 7px;
+}
+
+body.consensus-markers-hidden .consensus-marker-toggle {
+  margin-left: 0;
+}
+
+body.consensus-markers-hidden .consensus-answer-body .claim-badge,
+body.consensus-markers-hidden .consensus-claims-fallback {
+  display: none !important;
+}
+
+body.consensus-markers-hidden .consensus-answer-body .cx-claim,
+body.consensus-markers-hidden .consensus-answer-body .cx-claim.is-hovered {
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background-color: transparent;
+  cursor: text;
+  outline: none;
+}
+
 .consensus-differences-panel {
   max-width: none;
 }

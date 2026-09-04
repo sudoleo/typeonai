@@ -107,6 +107,60 @@
 
           function $(id) { return document.getElementById(id); }
 
+          // Die Satzpruefung bleibt Teil des Ergebnisses; diese Praeferenz
+          // schaltet nur ihre visuelle Ebene ab. Der winzige Link am Ende der
+          // Legende ist absichtlich der einzige UI-Chrome dafuer.
+          const MARKER_VISIBILITY_STORAGE_KEY = "consensio.showConsensusMarkers.v1";
+          const MARKERS_HIDDEN_CLASS = "consensus-markers-hidden";
+          const markerToggle = $("consensusMarkerToggle");
+
+          function storedConsensusMarkersVisible() {
+            try {
+              return window.localStorage.getItem(MARKER_VISIBILITY_STORAGE_KEY) !== "false";
+            } catch (_) {
+              return true;
+            }
+          }
+
+          function syncMarkerPassageAccess(visible) {
+            document.querySelectorAll(".cx-claim").forEach(function (mark) {
+              ["role", "tabindex", "aria-label"].forEach(function (attribute) {
+                const dataKey = "markerVisible" + attribute.replace(
+                  /(^|-)([a-z])/g,
+                  function (_all, _dash, letter) { return letter.toUpperCase(); }
+                );
+                if (!visible) {
+                  if (mark.hasAttribute(attribute) && !(dataKey in mark.dataset)) {
+                    mark.dataset[dataKey] = mark.getAttribute(attribute);
+                  }
+                  mark.removeAttribute(attribute);
+                } else if (dataKey in mark.dataset) {
+                  mark.setAttribute(attribute, mark.dataset[dataKey]);
+                  delete mark.dataset[dataKey];
+                }
+              });
+            });
+          }
+
+          function applyConsensusMarkerVisibility(visible) {
+            const show = visible !== false;
+            document.body.classList.toggle(MARKERS_HIDDEN_CLASS, !show);
+            syncMarkerPassageAccess(show);
+            if (!show) closeClaimPopover();
+            if (markerToggle) {
+              markerToggle.textContent = show ? "Hide checks" : "Show checks";
+              markerToggle.setAttribute("aria-expanded", String(show));
+              markerToggle.setAttribute(
+                "aria-label",
+                show ? "Hide sentence checks" : "Show sentence checks"
+              );
+            }
+          }
+
+          function restoreConsensusMarkerVisibility() {
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+          }
+
           function modelDisplayName(model) {
             const box = $(MODEL_BOX_IDS[model] || "");
             return (box && box.dataset.shortLabel) || model;
@@ -1526,6 +1580,11 @@
               window.App?.consensusPipeline?.renderProvenance?.();
             }
 
+            // Auch spaeter gerenderte History-Turns verlieren im Aus-Zustand
+            // ihre Passage-Tabstopps. CSS allein wuerde sie nur unsichtbar
+            // machen, aber fuer Tastatur und Screenreader aktiv lassen.
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible());
+
             return {
               claims_anchored: claims.length - unanchored.length,
               claims_unanchored: unanchored.length,
@@ -2421,6 +2480,23 @@
             });
             return true;
           }
+
+          // Erst nach Aufbau des gesamten Moduls anwenden: Im versteckten
+          // Startzustand schliesst applyConsensusMarkerVisibility ein eventuell
+          // offenes Popover und braucht deshalb dessen inzwischen initialisierten
+          // Modal-State.
+          restoreConsensusMarkerVisibility();
+          markerToggle?.addEventListener("click", function () {
+            const show = document.body.classList.contains(MARKERS_HIDDEN_CLASS);
+            try {
+              window.localStorage.setItem(MARKER_VISIBILITY_STORAGE_KEY, String(show));
+            } catch (_) { /* Storage denial: the session state still works. */ }
+            applyConsensusMarkerVisibility(show);
+            window.trackUmamiEvent?.("app_consensus_markers_visibility_changed", {
+              visible: show
+            });
+          });
+          window.addEventListener("pageshow", restoreConsensusMarkerVisibility);
 
           window.renderConsensusInsights = renderConsensusInsights;
           window.renderStoredConsensusClaims = renderStoredConsensusClaims;

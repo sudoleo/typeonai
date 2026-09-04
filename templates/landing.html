@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260902-meta1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260904-hero1">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -77,9 +77,10 @@
          demo in /app (?demo=1 -> demo.js auto-runs the scripted flow). -->
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero lp-hero--demo">
-        <div class="lp-hero-copy">
-          <h1 class="lp-display">AI answers shape what the world believes.<br>We track when they move.</h1>
-        </div>
+        <!-- The page's h1, one voice below the display size it used to have:
+             big enough to be read before the field, small enough that the
+             field stays the thing you reach for. -->
+        <h1 class="lp-hero-claim"><span>AI answers shape what the world believes.</span> <span>We track when they move.</span></h1>
 
         <a id="heroDemoField" class="lp-prompt lp-hero-prompt" href="/app?demo=1"
            data-umami-event="landing_hero_demo_start"
@@ -102,9 +103,9 @@
           </span>
         </a>
 
-        <!-- The provider names are wrapped so a phone can drop them to the
-             accessibility tree and keep just the marks: the same claim in
-             one quiet row instead of two rows of pills. -->
+        <!-- The provider names live in the accessibility tree only: nine marks
+             are one image, nine labelled pills are a second line of text under
+             a field that is supposed to be the loudest thing on the screen. -->
         <div class="lp-chips lp-hero-models" aria-label="Nine model families available; each run compares up to six">
           <span><img src="/static/icons/chat_icons/chatgpt.png" alt=""><span class="lp-chip-name">ChatGPT</span></span>
           <span><img src="/static/icons/chat_icons/claude.png" alt=""><span class="lp-chip-name">Claude</span></span>
@@ -116,21 +117,14 @@
           <span><img src="/static/icons/chat_icons/zai.svg" alt=""><span class="lp-chip-name">GLM</span></span>
           <span><img src="/static/icons/chat_icons/meta.svg" alt=""><span class="lp-chip-name">Muse</span></span>
         </div>
-        <!-- .lp-wide-only marks a sentence that earns its place on a wide
-             screen and is only weight on a phone. It is hidden, not removed:
-             the reasoning stays in the page for anyone on a desktop. -->
-        <p class="lp-hero-note">No account needed. The demo replays a real run<span class="lp-wide-only">: six independent answers, then one consensus with the contradictions marked inside it</span>.</p>
-
+        <!-- On a screen tall enough for it the pulse is pinned to the bottom
+             edge of the first screen (see landing.css): a status line reads as
+             a status line down there, and it shows the page continues. -->
         <a class="lp-hero-pulse" href="/model-pulse" data-umami-event="landing_open_model_pulse">
           <span class="lp-hero-pulse-status" aria-hidden="true"></span>
           <span><strong>Live model pulse</strong><span class="lp-wide-only">See which model answers most often earn the judge's pick in real runs.</span></span>
           <span class="lp-hero-pulse-link">View leaderboard&nbsp;›</span>
         </a>
-
-        <div class="lp-hero-actions">
-          <a id="ctaButton" href="/app" class="lp-link">Open the app</a>
-          <a href="#watch" class="lp-link" data-umami-event="landing_watch_workflow">See Watches</a>
-        </div>
       </div>
     </section>
 
@@ -149,7 +143,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">One field, one run switch, one send. The app opens exactly here, with no modes to learn before the first question.</p>
+              <p class="lp-lead">One field, one run switch, one send.<span class="lp-wide-only"> The app opens exactly here, with no modes to learn before the first question.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <div class="lp-app">
@@ -161,7 +155,9 @@
                   </span>
                 </div>
                 <div class="lp-app-body">
-                  <p class="lp-app-greeting">What should the models cross-check?</p>
+                  <!-- The greeting is gone on purpose. The field types a real
+                       question into itself, which says the same thing without
+                       spending a line of text on it. -->
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text></span>
                     <div class="lp-composer-row">
@@ -197,7 +193,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">02 · Run</p>
               <h2 class="lp-h2">One run, narrated end to end.</h2>
-              <p class="lp-lead">Six models answer in parallel, then the consensus is written and an uninvolved model checks it for contradictions. Scroll to move the run.</p>
+              <p class="lp-lead">Six models answer in parallel, then the consensus is written and an uninvolved model checks it for contradictions.<span class="lp-wide-only"> Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <div class="lp-app">
@@ -296,7 +292,7 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">03 · Decide</p>
           <h2 class="lp-h2">The doubt is marked in the answer.</h2>
-          <p class="lp-lead">One answer, read top to bottom — with the disagreement written into it rather than hidden behind it. Four things carry that, and you can try each one here.</p>
+          <p class="lp-lead">One answer, read top to bottom — with the disagreement written into it rather than hidden behind it.<span class="lp-wide-only"> Four things carry that, and you can try each one here.</span></p>
         </div>
 
         <ol class="lp-steps">

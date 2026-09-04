@@ -80,7 +80,7 @@ describe("watch model configuration", () => {
                 free: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash", deepseek: "deepseek-v4-flash" },
                 pro: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash", deepseek: "deepseek-v4-flash" },
             },
-            meta: { provider_credentials: { openai: true, gemini: true, deepseek: true } },
+            _meta: { provider_credentials: { openai: true, gemini: true, deepseek: true } },
         });
 
         const { free } = tierCells(window);
@@ -97,7 +97,7 @@ describe("watch model configuration", () => {
                 free: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash", deepseek: "deepseek-v4-flash" },
                 pro: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash", deepseek: "deepseek-v4-flash" },
             },
-            meta: { provider_credentials: { openai: true, gemini: true, deepseek: false } },
+            _meta: { provider_credentials: { openai: true, gemini: true, deepseek: false } },
         });
 
         const { free } = tierCells(window);
@@ -115,7 +115,7 @@ describe("watch model configuration", () => {
                 free: { openai: "gpt-5.6-luna", deepseek: "deepseek-v4-pro" },
                 pro: { openai: "gpt-5.6-luna", deepseek: "deepseek-v4-pro" },
             },
-            meta: { provider_credentials: { openai: true, deepseek: true } },
+            _meta: { provider_credentials: { openai: true, deepseek: true } },
         });
 
         const { free, pro } = tierCells(window);
@@ -133,7 +133,7 @@ describe("watch model configuration", () => {
                 free: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash" },
                 pro: { openai: "gpt-5.6-luna", gemini: "gemini-3.7-flash" },
             },
-            meta: {},
+            _meta: {},
         });
 
         expect(chipTexts(tierCells(window).free)).toEqual([]);

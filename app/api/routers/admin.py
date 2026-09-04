@@ -733,6 +733,11 @@ def admin_get_benchmark_run(request: Request, run_id: str):
 
 
 PROVIDER_KEYS = tuple(cfg.PROVIDERS)
+# Schluessel der Metadaten in der /api/admin/models-Antwort. Bewusst mit
+# Unterstrich, damit kein Provider-Key ihn je verdecken kann.
+ADMIN_META_KEY = "_meta"
+if ADMIN_META_KEY in PROVIDER_KEYS:  # pragma: no cover - Konfigurationsfehler
+    raise RuntimeError(f"Provider key '{ADMIN_META_KEY}' collides with the admin meta envelope")
 
 
 def _ordered_unique(items, drop=None, ensure=None) -> list:
@@ -1388,7 +1393,9 @@ def get_models(request: Request):
                 "limits": get_limits_config(),
                 "memory_edit": cfg.get_memory_edit_config(),
             }
-        data["meta"] = _admin_meta(data)
+        # Der Umschlag-Key darf nie wie ein Provider heissen: die Familie
+        # "meta" (Muse) haette sonst ihre Modell-Liste verloren.
+        data[ADMIN_META_KEY] = _admin_meta(data)
         return data
     except Exception as exc:
         logging.error("Error fetching models category=%s", safe_exception(exc))

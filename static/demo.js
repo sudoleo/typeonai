@@ -29,6 +29,8 @@ const DEMO_SCENARIO_PROMPT =
 // jeder, der eine fertige Nachricht pruefen laesst.
 const DEMO_TYPED_QUESTION = DEMO_SCENARIO_PROMPT.split("\n")[0];
 
+const DEMO_MODELS = ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"];
+
 const DEMO_DATA = {
   delays: { OpenAI: 1400, Mistral: 2500, Anthropic: 2900, Gemini: 3600, DeepSeek: 4300, Grok: 5000 },
   responses: {
@@ -153,14 +155,16 @@ const DEMO_DATA = {
   //
   // Der Score ist nicht gegriffen, sondern die Rechnung aus
   // app/services/llm/consensus_scoring.py auf genau diese Daten:
-  // Claim-Schnitt 5.5/6 = 0.9167, minus 0.25 (major) - 0.10 (minor)
-  // - 0.05 (emphasis) = 0.5167 -> 52, Deckel 0.64 greift nicht.
+  // Claim-Schnitt 16.1667/19 = 0.8509, minus 0.25 (major) - 0.10 (minor)
+  // - 0.05 (emphasis) = 0.4509 -> 45, Deckel 0.64 greift nicht. Anders
+  // als die alte Demo traegt jetzt jeder pruefbare Satz einen Claim; dieselbe
+  // Uneinigkeit taucht deshalb auch in den paraphrasierten Beispielsaetzen auf.
   differencesData: {
-    models_compared: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
+    models_compared: DEMO_MODELS,
     best_model: "Anthropic",
     judges: { differences: { provider: "Gemini" } },
     agreement: {
-      score: 52,
+      score: 45,
       level: "partially",
       model_count: 6,
       major_contradictions: 1,
@@ -169,34 +173,61 @@ const DEMO_DATA = {
     },
     claims: [
       {
-        anchor: "The new date belongs in the first line",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
-        dissent: []
+        anchor: "Consensus: send it — after two fixes",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
       },
       {
-        anchor: "Send it today, not on the 15th",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
-        dissent: []
-      },
-      {
-        anchor: "Say what Anna actually gets on the 15th",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
-        dissent: []
+        anchor: "All six models read the draft as close to sendable",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
       },
       {
         anchor: "Nothing in the draft is impolite",
-        agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek", "Grok"],
-        dissent: []
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "The risk is in three sentences",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "The new date belongs in the first line",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "She is scanning for a date.",
+        agree: ["OpenAI", "Mistral", "Gemini", "Grok"],
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "Send it today, not on the 15th",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "Say what Anna actually gets on the 15th",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
       },
       {
         anchor: "Put it in writing, so she can forward it",
         agree: ["OpenAI", "Mistral", "Anthropic", "Gemini", "DeepSeek"],
-        dissent: [
-          {
-            model: "Grok",
-            quote: "if you normally talk to this client on the phone, call first and send the same three lines right after"
-          }
-        ]
+        dissent: [{
+          model: "Grok",
+          quote: "if you normally talk to this client on the phone, call first and send the same three lines right after"
+        }],
+        coverage: "split"
       },
       {
         anchor: "Name the day you will confirm the 29th",
@@ -210,7 +241,81 @@ const DEMO_DATA = {
             model: "Grok",
             quote: "Don’t stack a new promise on top of one you just broke"
           }
-        ]
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "The closing line splits the models down the middle",
+        agree: ["OpenAI", "Gemini", "Grok"],
+        dissent: [
+          { model: "Mistral", quote: "cut ‘let me know if that’s a problem’" },
+          { model: "Anthropic", quote: "Close with a commitment instead of a question" },
+          { model: "DeepSeek", quote: "Cut the closing question" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "A few things came up on our side is the weakest sentence in the draft",
+        agree: ["OpenAI", "Anthropic", "DeepSeek"],
+        dissent: [
+          { model: "Mistral", quote: "the reason, kept to a clause" },
+          { model: "Gemini", quote: "fine as it stands" },
+          { model: "Grok", quote: "Leave the reason vague" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "The apology itself is not disputed",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "Hi Anna, the launch moves to the 29th",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "One clause on the cause.",
+        agree: ["OpenAI", "Anthropic", "DeepSeek"],
+        dissent: [
+          { model: "Mistral", quote: "A detailed reason moves the conversation to your process" },
+          { model: "Gemini", quote: "fine as it stands" },
+          { model: "Grok", quote: "Leave the reason vague" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "What you will have on the 15th is the checkout flow on staging",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
+      },
+      {
+        anchor: "I will confirm the 29th by the 22nd at the latest.",
+        agree: ["Mistral", "Anthropic", "Gemini", "DeepSeek"],
+        dissent: [
+          { model: "OpenAI", quote: "A promised status note is a second date you now also have to hit" },
+          { model: "Grok", quote: "Don’t stack a new promise on top of one you just broke" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "Your closing line.",
+        agree: ["OpenAI", "Gemini", "Grok"],
+        dissent: [
+          { model: "Mistral", quote: "cut ‘let me know if that’s a problem’" },
+          { model: "Anthropic", quote: "Close with a commitment instead of a question" },
+          { model: "DeepSeek", quote: "Cut the closing question" }
+        ],
+        coverage: "split"
+      },
+      {
+        anchor: "Both bracketed parts are the ones the models could not settle for you",
+        agree: DEMO_MODELS,
+        dissent: [],
+        coverage: "supported"
       }
     ],
     differences: [

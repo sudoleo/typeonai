@@ -1483,7 +1483,13 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   stabilen Container **`#consensusAnswerBody`** — einziges Render-/Streamziel,
   Zugriff ausschließlich über **`window.App.consensusBodyEl(scope?)`**
   (das alte `.consensus-main p` gibt es nicht mehr). Darunter liegt eine
-  Legendenzeile (`#consensusMarkerLegend`) und der zugeklappte
+  Legendenzeile (`#consensusMarkerLegend`) mit dem bewusst dezenten
+  `#consensusMarkerToggle`: Er blendet Farben, Quoten, unankerte Claim-Zeilen
+  und die lange Legende rein clientseitig aus, lässt Analyse/Differences aber
+  bestehen und persistiert die Präferenz unter
+  `localStorage.consensio.showConsensusMarkers.v1`. Im Aus-Zustand bleibt nur
+  „Show checks“ als Wiederaktivierung sichtbar; eingeschaltet ist derselbe
+  flächenlose Inline-Link als „Hide checks“ erkennbar. Darunter folgt der zugeklappte
   `<details id="consensusDifferencesPanel" class="consensus-differences
   consensus-differences-panel">`; `#differencesCards` und das Karten-Rendering
   sind inhaltlich unverändert. `window.App.differencesPanel.{setSynthesizing,
@@ -1497,6 +1503,9 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   strittige **Thema** statt einer Zählung (deterministisch aus
   `differences[].claim`, kein zusätzlicher LLM-Call). Hintergrund und
   Entscheidungen: `docs/consensus-inline-confidence-brief.md`.
+  Die lokale Produkt-Demo spiegelt denselben Coverage-Vertrag: Jeder ihrer 19
+  prüfbaren Consensus-Sätze besitzt einen expliziten `supported`-/`split`-Claim;
+  Difference-Marker übersteuern an überlappenden Sätzen weiterhin das Badge.
 - `executeConsensusRun(context)` (`consensus-run.js`) liest Modellantworten,
   `excluded_models`, Modelllabels, Quellen und `consensus_model` ausschließlich
   aus dem gebundenen Context und ruft **`POST /consensus`** (`stream:true`) mit

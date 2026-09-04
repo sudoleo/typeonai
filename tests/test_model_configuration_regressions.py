@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 import app.core.config as cfg
 from app.api.routers.admin import (
+    ADMIN_META_KEY,
+    PROVIDER_KEYS,
     _admin_meta,
     _server_enforced_models,
     normalize_models_document,
@@ -388,6 +390,19 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.get_model_label("mistral-medium-4"), "Mistral Medium 4")
         self.assertEqual(cfg.get_model_label("claude-haiku-4-5"), "Claude Haiku 4.5")
         self.assertEqual(cfg.get_model_label("gpt-5.1"), "GPT-5.1")
+
+    def test_admin_meta_envelope_cannot_shadow_a_provider_list(self):
+        """Die Familie "meta" (Muse) verlor ihre Modell-Liste an die Metadaten.
+
+        Der Umschlag-Key muss ausserhalb des Provider-Namensraums liegen,
+        sonst liefert der GET fuer diesen Provider ein dict statt einer Liste
+        und die Admin-UI bricht beim ersten forEach ab.
+        """
+        self.assertNotIn(ADMIN_META_KEY, PROVIDER_KEYS)
+        data = {provider: ["model-a"] for provider in PROVIDER_KEYS}
+        data[ADMIN_META_KEY] = _admin_meta(data)
+        for provider in PROVIDER_KEYS:
+            self.assertIsInstance(data[provider], list, provider)
 
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""

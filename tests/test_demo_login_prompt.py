@@ -47,7 +47,37 @@ class DemoLoginPromptContractTests(unittest.TestCase):
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 
         self.assertIn("agreement: {", demo_module)
-        self.assertIn("score: 52,", demo_module)
+        self.assertIn("score: 45,", demo_module)
+
+    def test_every_checkable_demo_passage_has_a_coverage_claim(self):
+        demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
+        claims = demo_module.split("    claims: [", 1)[1].split(
+            "    differences: [", 1
+        )[0]
+        anchors = (
+            "Consensus: send it — after two fixes",
+            "All six models read the draft as close to sendable",
+            "Nothing in the draft is impolite",
+            "The risk is in three sentences",
+            "The new date belongs in the first line",
+            "She is scanning for a date.",
+            "Send it today, not on the 15th",
+            "Say what Anna actually gets on the 15th",
+            "Put it in writing, so she can forward it",
+            "Name the day you will confirm the 29th",
+            "The closing line splits the models down the middle",
+            "A few things came up on our side is the weakest sentence in the draft",
+            "The apology itself is not disputed",
+            "Hi Anna, the launch moves to the 29th",
+            "One clause on the cause.",
+            "What you will have on the 15th is the checkout flow on staging",
+            "I will confirm the 29th by the 22nd at the latest.",
+            "Your closing line.",
+            "Both bracketed parts are the ones the models could not settle for you",
+        )
+        for anchor in anchors:
+            self.assertIn(f'anchor: "{anchor}"', claims)
+        self.assertEqual(claims.count('coverage: "'), len(anchors))
 
 
 if __name__ == "__main__":
