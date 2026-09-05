@@ -45,20 +45,18 @@
 
       <section class="legal-panel">
         <h2>1. Controller</h2>
-        <p>
-          The controller under the GDPR is the operator of consens.io:
-          <strong id="controllerName" aria-label="Name inserted via JavaScript"></strong>.
-          The postal address is provided in the <a href="/imprint">Imprint</a>.<br>
-          Contact: <a id="contactEmail" href="#" rel="nofollow" aria-label="Email inserted via JavaScript"></a>
-        </p>
+        <p><strong>Max Plack</strong><br>Lutherstraße 79<br>30171 Hannover<br>Germany</p>
+        <p>Email: <a href="mailto:contact@consens.io">contact@consens.io</a>.
+          Also see the <a href="/imprint">Imprint</a>. The project is privately operated in Germany and currently not monetised.</p>
       </section>
 
       <section class="legal-panel">
         <h2>2. Purposes and data we process</h2>
         <ul>
-          <li><strong>Prompts and model outputs in the web app:</strong> used to provide the service, send requests to selected AI models, and display answers. We do not permanently store prompts or outputs from ordinary web-app runs unless you save them as bookmarks or explicitly create a shared or watched result.</li>
-          <li><strong>Consensus API runs:</strong> the administrator-issued Consensus API stores the submitted question, server-selected model plan, model outputs, consensus, differences analysis, status, and timestamps in Firestore so clients can retrieve asynchronous results and safely retry requests. API-run content and its idempotency mapping are automatically deleted no later than 30 days after acceptance; clients can delete completed runs earlier. API keys are stored only as a SHA-256 hash plus a short non-secret display prefix and audit timestamps. During account deletion, a minimal UID-bound block record may be retained temporarily if cleanup must be retried.</li>
-          <li><strong>Technical logs:</strong> timestamps and basic diagnostics for stability, security, and abuse prevention.</li>
+          <li><strong>Prompts and model outputs in the web app:</strong> used to provide the service, send requests to selected AI models, and display answers. Signed-in Consensus conversations are automatically stored in Google Cloud Firestore, including questions, model answers, consensus, differences, sources, conversation context and attachment metadata. The app also automatically saves the associated sidebar bookmark. This does not require a separate Save action. Follow-up questions reuse stored conversation context, which may be condensed by an additional AI call. These records remain until you delete the conversation/bookmark or your account; there is no general automatic chat-expiry period. A separate temporary result for sharing expires after 24 hours and is removed by periodic cleanup, independently of the saved conversation.</li>
+          <li><strong>Consensus API runs:</strong> the administrator-issued Consensus API stores the submitted question, server-selected model plan, model outputs, consensus, differences analysis, status, and timestamps in Firestore so clients can retrieve asynchronous results and safely retry requests. API-run content and its idempotency mapping expire 30 days after acceptance and are removed by periodic cleanup; clients can delete completed runs earlier. API keys are stored only as a SHA-256 hash plus a short non-secret display prefix and audit timestamps. During account deletion, a minimal UID-bound block record may be retained temporarily if cleanup must be retried.</li>
+          <li><strong>Technical requests and logs:</strong> your IP address, requested resource, connection/browser information and time are processed to deliver pages and protect the service. Application diagnostics use content-free error categories, counts and timings. Hosting infrastructure may keep separate access logs; the absence of IP addresses from our application database does not mean that infrastructure providers never process them.</li>
+          <li><strong>Attachments:</strong> files or extracted text are processed in server memory and sent to the model endpoints needed for your request. File bytes are not saved in Firestore. File names/types and any file contents quoted or summarised in saved answers can remain in conversation records or published content.</li>
           <li><strong>Account data:</strong> if you sign up, your e-mail address and a user ID are processed via Google Firebase Authentication (including optional Google Sign-In) for access control, quota handling, and related usage features. Your tier and saved bookmarks (query, answers, sources, attachment metadata) are stored in Google Cloud Firestore until you delete them or your account.</li>
           <li><strong>Your memory (optional profile and notes):</strong> in Settings you can write a short profile about yourself
             (who you are, what you work on, how you want answers written, constraints that always apply) and a longer
@@ -70,16 +68,15 @@
             your text, and the selected add-or-correct intent to the configured model through OpenRouter. It may return only one structured replace, append, or delete proposal;
             our server validates and applies it. A Remember action may append or replace one uniquely matching passage but cannot delete one.
             We store an idempotency record, persistent usage counters, and the previous Memory revision
-            for the short Undo window. These records and revisions are never used for Watch, Publisher, or Topic runs and are deleted with your account.
+            for Undo. The Undo time limit limits the action, not the storage lifetime of revision records; those records remain until account deletion. These records and revisions are never used for Watch, Publisher, or Topic runs and are deleted with your account.
             Only text you enter in Memory settings or explicitly submit through Remember or Correct memory is stored and used. You can
-            edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled
-            Watch reruns and published pages never include it. Please do not enter special-category data (for example
+            edit it, pause it with a single switch, or clear it at any time; it is deleted with your account. Scheduled Watch reruns do not receive your Memory profile as a separate input, and published pages do not display it as a profile field. However, generated answers or questions can reflect personal details from Memory; review content before publishing it. Please do not enter special-category data (for example
             health, beliefs, or political opinions) or other people&rsquo;s personal data.</li>
-          <li><strong>Abuse prevention:</strong> to enforce the one-account-per-person rule, we temporarily process your IP address and match it against the account ID. This mapping is held in volatile server memory only and is not written to a database (legal basis: Art. 6(1)(f) GDPR, prevention of quota abuse).</li>
+          <li><strong>Abuse prevention and usage:</strong> IP-based rate limits and account-bound counters prevent overload and quota abuse. We store usage, tier, request-idempotency and vote records, but no IP-to-account registration mapping. Model-ranking votes are bound to your account internally; the public ranking contains aggregate model counts.</li>
           <li><strong>Feedback:</strong> if you send feedback, we store your message, the e-mail address you optionally provide, your account ID, and a timestamp, for as long as needed to follow up on the feedback.</li>
-          <li><strong>Pro interest list:</strong> if you click a Pro-interest option, we store your account ID, e-mail address, and a timestamp so we can inform you about this feature.</li>
-          <li><strong>Local storage:</strong> used for interface preferences, session flags, and optional user settings. We do not use non-essential cookies.</li>
-          <li><strong>Your own OpenRouter key, optional:</strong> if you enter it, the key is stored in your browser only. With each request, it is transmitted over an encrypted connection through our server to OpenRouter, which acts as our processor for this purpose. We do not store your key on the server.</li>
+          <li><strong>Earlier interest requests:</strong> records from the former Pro-interest feature can contain account ID, email and timestamp. The current app no longer offers that submission. Existing records are removed with account deletion or on an erasure request where no overriding retention ground applies.</li>
+          <li><strong>Browser storage and cookies:</strong> Firebase uses browser storage to maintain your requested login, with session-only storage as a fallback. A first-party HttpOnly session cookie for protected pages expires after one hour or is removed on logout. Local/session storage also holds interface and model preferences, feature flags and, if entered, your OpenRouter key. Persistent settings remain until changed or cleared in the app or browser. Storage/access strictly necessary for a service you expressly request is based on § 25(2)(2) TDDDG; related personal-data processing uses the GDPR grounds below. Rejecting or clearing browser storage can prevent persistent login or settings.</li>
+          <li><strong>Your own OpenRouter key, optional:</strong> if you enter it, the key is stored in your browser only. With each request, it is transmitted over an encrypted connection through our server to OpenRouter to authenticate your model requests. We do not store your key on the server.</li>
         </ul>
       </section>
 
@@ -112,37 +109,34 @@
         </p>
         <p class="subtle">
           Legal basis: Art. 6(1)(f) GDPR, our legitimate interest in measuring aggregate product usage, improving the
-          service, maintaining security, and prioritizing development. You can object to this processing under Art. 21
-          GDPR using the contact details above.
+          service, maintaining security, and prioritizing development. You can object to this processing under Art. 21 GDPR using the contact details above. To disable tracking in this browser, <a href="/privacy?notrack=1">turn off Umami tracking</a>. This saves a local opt-out preference; clearing browser storage removes that preference. You can <a href="/privacy?notrack=0">remove the opt-out</a> at any time. The tracker also respects browser Do Not Track signals.
         </p>
       </section>
 
       <section class="legal-panel">
         <h2>4. Provider routing</h2>
-        <p>
-          All model requests are sent first to OpenRouter (OpenRouter, Inc., USA), which routes them to the model
-          providers selected for the query: OpenAI (USA), Anthropic (USA), Google (USA), Mistral AI (France), xAI
-          (USA), DeepSeek (People's Republic of China), Moonshot AI/Kimi (Singapore and affiliated operations in
-          China), Z.ai/GLM (Singapore and affiliated operations in China), and Meta (USA). The selected model families and their
-          labels remain visible in the app; each run compares no more than six of them.
-        </p>
-        <p>
-          consens.io marks every OpenRouter request as Zero Data Retention (ZDR). OpenRouter does not log prompt or
-          response content for these requests, does not use it for training, and routes only to provider endpoints
-          that do not retain prompt or response content. The underlying provider still processes the request in
-          order to generate its answer. We do not enable provider pinning.
-        </p>
-        <p>
-          <strong>Note on providers connected to China:</strong> if you select DeepSeek, Kimi, or GLM, or use a
-          server-selected Consensus API run containing one of those families, OpenRouter may transmit the request to
-          an eligible endpoint of that provider. This can involve processing in China, a country without an EU
-          adequacy decision. Do not submit content that must not be processed there.
-          See also the <a href="/terms">Terms of Use</a>.
-        </p>
-        <p class="subtle">
-          Necessary infrastructure providers, authentication services, and selected AI providers may still process
-          data where needed to operate the service.
-        </p>
+        <p>Model requests go through <a href="https://openrouter.ai/privacy">OpenRouter, Inc. (USA)</a>.
+          Available model families include OpenAI, Anthropic/Claude, Google/Gemini, Mistral, xAI/Grok,
+          DeepSeek, Moonshot AI/Kimi, Z.ai/GLM and Meta/Muse. A model developer is not necessarily the company
+          hosting the endpoint: OpenRouter can route the same model to different infrastructure providers.</p>
+        <p>Depending on the feature, requests include your question, instructions, enabled Memory, attachments,
+          earlier conversation context, model answers and sources. Consensus, Differences, coverage checks,
+          dispute resolution, context preparation and explicit Memory edits can involve additional configured
+          models beyond the comparison models. Scheduled Watches and API runs use server-configured models.
+          Deselecting a comparison model therefore does not exclude every possible processing endpoint.</p>
+        <p>Our inference requests set OpenRouter's Zero Data Retention routing option. According to
+          <a href="https://openrouter.ai/docs/guides/features/zdr">OpenRouter's ZDR documentation</a>, this
+          limits inference routing to endpoints with a non-retention policy. It is not a promise that every
+          service keeps no data: temporary in-memory prompt caching is permitted, operational metadata is
+          separate, and web-search tools are outside this routing guarantee. OpenRouter's own optional content
+          logging also depends on the account's settings.</p>
+        <p>Model runs can use OpenRouter's web-search tool. Search terms derived from your input may reach
+          the selected search service, including <a href="https://exa.ai/privacy-policy">Exa</a> or native
+          search services. Their processing and retention are separate from inference ZDR.</p>
+        <p>There is no EU-only endpoint restriction. Processing can take place outside the EU/EEA, including
+          the USA and, depending on the actual endpoint, Singapore or China. Model labels alone do not identify
+          the country of processing. Do not submit confidential information or sensitive personal data.
+          This precaution does not replace our own data-protection obligations.</p>
       </section>
 
       <section class="legal-panel">
@@ -156,13 +150,12 @@
         </p>
         <p>
           Shared pages created through the Share action are public: anyone with the link can read them, and selected
-          pages may appear in search engines after a manual review by us. Watch pages can instead be private. A private
+          pages may appear in search engines through operator-controlled indexing, including automated publication of operator-configured Publisher/Topic content. Watch pages can instead be private. A private
           Watch page is available only to its creator while signed in, is never submitted for indexing, and is not
           shown as a related page. Please do not include personal data in content you make public.
         </p>
         <p>
-          Visitors can report a shared page ("Report this page"). Reports are stored without any personal data.
-          as anonymous counters per reason only; we do not store the reporter's IP address or browser data.
+          Visitors can report a shared page ("Report this page"). The report record contains counters per reason, without a reporter account, IP address or browser data. The HTTP request is still subject to ordinary technical processing and rate limits.
         </p>
         <p>
           If you enable Consensus Watch, we periodically rerun only the original question using a limited set of
@@ -190,9 +183,8 @@
         </p>
         <p>
           <strong>Following a public Watch page (visitors):</strong> Visitors can subscribe to change notifications
-          for a public Watch page by entering an e-mail address, without creating an account. The subscription only
-          becomes active after the address is confirmed via a link we send to it (double opt-in); if the link is not
-          used, nothing is stored. For active subscriptions we store only the confirmed e-mail address, the followed
+          for a public Watch page or Topic by entering an e-mail address, without creating an account. The subscription only
+          becomes active after the address is confirmed via a link we send to it (double opt-in); before confirmation, we already store hashed recipient/resource identifiers, send times and abuse-prevention counters. These are pseudonymous, not anonymous. The confirmation challenge expires after three days; expiry of the link does not itself delete all anti-abuse records. For active subscriptions we store only the confirmed e-mail address, the followed
           page, and the confirmation date, but no IP address or browser data. The address is used exclusively to send
           notifications about material changes to that page. Every notification includes a signed unsubscribe link
           that removes the address without requiring login. Follower addresses are deleted immediately when the
@@ -200,11 +192,11 @@
         </p>
         <p><strong>Retention and deletion:</strong></p>
         <ul>
-          <li>Consensus results that are eligible for sharing are kept server-side for a maximum of
-            <strong>24 hours</strong>; if you do not share them within that period, they are deleted automatically.</li>
+          <li>Consensus results that are eligible for sharing are kept server-side with an expiry of
+            <strong>24 hours</strong> and are then removed by periodic cleanup. Saved conversations and bookmarks have their own storage lifetime.</li>
           <li>Shared pages remain online until you revoke them or delete your account.</li>
           <li>When you revoke a shared page, it immediately becomes unavailable to the public and is
-            <strong>permanently deleted within 30 days</strong>. Copies cached by browsers or search engines for a
+            <strong>scheduled for permanent deletion after a 30-day retention period</strong> by periodic cleanup. Copies cached by browsers or search engines for a
             short period are outside our control.</li>
           <li>When you delete your account, all your watches, watch history, shared pages, pending results and Telegram
             connection/delivery metadata are deleted as part of the account-deletion process.</li>
@@ -213,8 +205,7 @@
             when the followed page is revoked or deleted.</li>
         </ul>
         <p class="subtle">
-          Legal bases: Art. 6(1)(b) GDPR for publishing and managing pages you create and for delivering follower
-          notifications requested via double opt-in; Art. 6(1)(f) GDPR for moderation, report handling, and abuse
+          Legal bases: Art. 6(1)(b) GDPR for publishing and managing pages you create and for your own Watch settings and requested service notifications; Art. 6(1)(a) GDPR for visitor email subscriptions confirmed via double opt-in (withdrawable at any time through the unsubscribe link); Art. 6(1)(f) GDPR for moderation, report handling, and abuse
           prevention.
         </p>
       </section>
@@ -222,56 +213,79 @@
       <section class="legal-panel">
         <h2>6. Legal bases under the GDPR</h2>
         <ul>
-          <li><strong>Art. 6(1)(b):</strong> performance of the service you request.</li>
-          <li><strong>Art. 6(1)(f):</strong> legitimate interests in security, stability, abuse prevention, and aggregated product improvement.</li>
-          <li><strong>Art. 6(1)(a):</strong> where we explicitly ask for consent.</li>
+          <li><strong>Art. 6(1)(b):</strong> providing your requested account, AI comparisons, conversation history,
+            Memory, API access, sharing and Watch functions, and answering service-related requests.</li>
+          <li><strong>Art. 6(1)(f):</strong> protecting the service against abuse, diagnosing faults, moderating
+            public content, handling general feedback and maintaining aggregate model statistics. Our interests
+            are a secure, reliable service and the protection of users and third parties.</li>
+          <li><strong>Art. 6(1)(a):</strong> optional visitor email subscriptions and any separately requested
+            consent. Withdrawal applies to future processing and does not affect earlier lawful processing.</li>
+          <li><strong>Art. 6(1)(c):</strong> where processing is required to comply with a specific legal obligation,
+            such as handling data-subject requests or lawful authority orders.</li>
         </ul>
+        <p>Providing an email address is necessary for an account or email subscription; submitting a question
+          is necessary for an AI run. These are not statutory duties, but the requested feature cannot work
+          without that information. Memory, uploads, sharing and Telegram are optional.</p>
+        <p>We do not use AI outputs to make decisions about you with legal or similarly significant effects
+          under Art. 22 GDPR. Technical access and usage limits are enforced automatically; contact us to
+          request a review if you believe a restriction is mistaken.</p>
       </section>
 
       <section class="legal-panel">
         <h2>7. Recipients, processors, and international transfers</h2>
-        <p>
-          To provide the service, we use the following categories of providers, who may process data on our
-          instructions as processors or as independent providers when their interfaces are used:
-        </p>
         <ul>
-          <li><strong>Hosting:</strong> Render (Render Services, Inc., USA) hosts the application server, including technical request logs.</li>
-          <li><strong>Authentication and database:</strong> Google Firebase Authentication and Google Cloud Firestore (Google Ireland Ltd. / Google LLC, USA) for accounts, tier status, and bookmarks.</li>
-          <li><strong>Analytics:</strong> Umami Cloud (see section 3).</li>
-          <li><strong>AI routing:</strong> OpenRouter (OpenRouter, Inc., USA) as processor, with ZDR enabled for every request.</li>
-          <li><strong>AI model providers:</strong> the underlying providers selected per query (see section 4).</li>
-          <li><strong>Optional notifications:</strong> Telegram Messenger Inc. via the Telegram Bot API, only after you
-            connect Telegram and enable that delivery channel. Telegram receives the notification content described
-            in section 5.</li>
+          <li><strong>Hosting:</strong> Render Services, Inc. (USA), for application hosting and technical requests.
+            <a href="https://render.com/privacy">Render privacy information</a>.</li>
+          <li><strong>Accounts and database:</strong> Google Firebase Authentication and Cloud Firestore,
+            supplied by Google under the applicable account agreement, for authentication and stored application data.
+            Google Sign-In is optional. <a href="https://firebase.google.com/support/privacy">Firebase privacy information</a>.</li>
+          <li><strong>Analytics:</strong> Umami Cloud for the usage analytics described in section 3.</li>
+          <li><strong>AI and search:</strong> OpenRouter and the inference/search endpoints described in section 4.</li>
+          <li><strong>Email:</strong> Firebase for account verification and password setup/reset; the configured
+            SMTP delivery service for Watch/Topic confirmations, notifications and Morning Briefs. Delivery
+            involves recipient address, subject and message content, which can contain your question and results.</li>
+          <li><strong>Browser dependencies:</strong> Google (gstatic.com) and jsDelivr (cdn.jsdelivr.net) receive
+            technical requests including IP address when pages load their authentication, rendering or maths libraries.
+            <a href="https://www.jsdelivr.com/terms/privacy-policy">jsDelivr privacy information</a>.</li>
+          <li><strong>Telegram:</strong> optional delivery of your Watch notifications after connection and channel
+            activation. Separately, the operator's Telegram bot receives content-free operational alerts
+            (such as error categories or registration events), without prompts, emails or account identifiers.</li>
+          <li><strong>Other recipients:</strong> readers and search engines for intentionally public content;
+            authorities or advisers only where legally required or necessary to handle a legal claim.</li>
         </ul>
-        <p>
-          Processing may occur outside the EU/EEA, in particular in the USA, Singapore and, if a DeepSeek, Moonshot
-          AI or Z.ai endpoint handles a selected model or server-selected Consensus API run, in China. For transfers to
-          the USA we rely on the EU-U.S. Data Privacy Framework and/or Standard
-          Contractual Clauses; for other transfers on appropriate safeguards under Art. 44 et seq. GDPR or, for
-          those providers, on your request to route the query to that provider (Art. 49(1)(b) GDPR).
-        </p>
+        <p>International transfers require a legal basis under Chapter V GDPR in addition to the processing
+          basis in section 6. An adequacy decision applies only to covered recipients; the EU–US Data Privacy
+          Framework applies only to participating, certified US entities. Other transfers require appropriate
+          safeguards, such as applicable Standard Contractual Clauses and an assessment of the transfer risks.</p>
+        <p>Model selection, acceptance of the Terms, using your own API key and ZDR do not themselves provide
+          those safeguards. We do not rely on a blanket Art. 49(1)(b) exception for routine AI requests.
+          Contact us for information about the applicable recipient and a copy of relevant transfer safeguards.</p>
       </section>
 
       <section class="legal-panel">
         <h2>8. Storage periods</h2>
-        <p>
-          We retain data only as long as necessary for the stated purposes or as required by law. Technical
-          logs are generally kept short-term and do not contain prompt or response content. Consensus API run content
-          is retained for at most 30 days after acceptance and completed API runs can be deleted earlier through the
-          API. Ordinary web-app prompts and outputs are not retained unless you save, share, or watch the result. For
-          bookmarks, shared pages, Watches, and pending share results, the specific retention periods described above
-          apply. On request, we will review earlier deletion.
-        </p>
+        <p>Account data, conversations, context versions, bookmarks, Memory and revision records remain while
+          you use those saved features, until the relevant deletion or account deletion. API runs expire after
+          30 days; temporary share results expire after 24 hours. Expiry and physical deletion are different:
+          periodic cleanup removes expired records, and failed cleanup is retried.</p>
+        <p>Public/private snapshots, Watches and subscriptions follow the deletion rules in section 5.
+          Feedback and correspondence are retained until the matter is resolved, with longer retention only
+          where needed for a legal obligation or a concrete legal claim. Minimal security, quota and
+          subscription-abuse records are processed for prevention of repeated abuse; some are account-bound
+          and removed during account deletion. A hash or expired token is not automatically anonymous or deleted.</p>
+        <p>Account deletion also covers stored chats and context. If a cleanup step fails, the account is blocked
+          from further writes and cleanup is retried; a minimal deletion-job record is retained to complete that work.
+          Hosting logs, email delivery records and infrastructure backups have provider/configuration-dependent
+          retention. There is no promise of immediate deletion from every infrastructure backup.</p>
       </section>
 
       <section class="legal-panel">
         <h2>9. Your rights in the EU/EEA</h2>
         <ul>
           <li>Access, rectification, erasure, restriction, and portability, subject to legal conditions.</li>
-          <li>Right to object to processing based on legitimate interests under Art. 21 GDPR.</li>
+          <li><strong>Right to object:</strong> you may object to processing based on legitimate interests for reasons relating to your particular situation (Art. 21 GDPR); you may object to direct marketing at any time without giving reasons.</li>
           <li>Withdrawal of consent with future effect.</li>
-          <li>Right to lodge a complaint with a supervisory authority, for example the Lower Saxony DPA.</li>
+          <li>Right to lodge a complaint with a supervisory authority, particularly where you live or work or where an alleged infringement occurred; for example <a href="https://www.lfd.niedersachsen.de/">the Lower Saxony data-protection authority</a>, Prinzenstraße 5, 30159 Hannover, Germany.</li>
         </ul>
         <p>
           You can delete your account yourself at any time in the app settings ("Delete account"). This removes
@@ -293,8 +307,7 @@
       <section class="legal-panel">
         <h2>11. Children</h2>
         <p>
-          consens.io is not directed at children. Use the service only if you are old enough to use online
-          services under the law applicable to you.
+          consens.io is not directed at children. The service is intended for people aged 16 or older. Users under 18 also need permission from a parent or legal guardian where required to enter into the service agreement. The age rule is not a blanket consent to data processing.
         </p>
       </section>
 
@@ -304,7 +317,7 @@
           We may update this notice and indicate the last updated date below.
         </p>
         <p>
-          Email: <a id="contactEmail2" href="#" rel="nofollow" aria-label="Email inserted via JavaScript"></a>
+          Email: <a href="mailto:contact@consens.io">contact@consens.io</a>
         </p>
         <div class="links">
           <a href="/app" class="button-secondary">Back to app</a>
@@ -314,25 +327,8 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 31 August 2026" %}
+  {% set public_footer_note = "Last updated: 5 September 2026" %}
   {% include "partials/public_footer.html" %}
 
-  <script>
-    (function () {
-      const parts = ["contact", "consens", "io"];
-      const addr = parts[0] + String.fromCharCode(64) + parts[1] + "." + parts[2];
-      ["contactEmail", "contactEmail2"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.textContent = addr;
-          el.href = "mailto:" + addr;
-        }
-      });
-      const nameEl = document.getElementById("controllerName");
-      if (nameEl) {
-        nameEl.textContent = String.fromCharCode(77,97,120,32,80,108,97,99,107);
-      }
-    })();
-  </script>
 </body>
 </html>

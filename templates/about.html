@@ -70,7 +70,7 @@
         <h2>Why not just ask one model?</h2>
         <p>
           Any single model can be confidently wrong, and one answer never tells you which case you're in.
-          consens.io sends your prompt to several models at once, keeps every original response visible, and
+          consens.io sends your prompt to several models at once, lets you inspect their individual responses, and
           adds a consensus layer that shows where they agree, and flags where they don't.
         </p>
       </section>
@@ -78,11 +78,10 @@
       <section class="legal-panel notice">
         <h2>Does the consensus actually work?</h2>
         <p>
-          Fair question. So we measured it: on <strong>314 closed-book MMLU-Pro questions</strong>, consens.io's
-          consensus was compared head-to-head against the six models it's built from. It came out
-          <strong>first overall</strong>, and pulled clearly ahead on the questions where the models disagree,
-          which is exactly where a single model is most likely to lead you astray. The top of the field is a
-          statistical tie, and we say so on the page; nothing is hidden.
+          We publish an evaluation on <strong>314 closed-book MMLU-Pro questions</strong>, with the tested
+          models, method and limitations on the benchmark page. This is a limited evaluation of a particular
+          configuration, not proof that consensus is generally more accurate. Models can share the same error;
+          agreement scores are not probabilities that an answer is correct.
         </p>
         <div class="links">
           <a href="/benchmark" class="button-secondary">See the benchmark</a>
@@ -106,9 +105,9 @@
         <h2>How it works</h2>
         <ul>
           <li>You choose which models to query and adjust the available options.</li>
-          <li>The backend forwards your prompt to the selected providers.</li>
+          <li>The backend sends requests through OpenRouter to model endpoints and may use web-search services.</li>
           <li>Responses are rendered side by side for direct comparison.</li>
-          <li>A lightweight consensus step highlights overlaps and differences.</li>
+          <li>Additional AI calls produce a consensus and evaluate overlaps and differences.</li>
         </ul>
       </section>
 
@@ -179,7 +178,7 @@
       <section class="legal-panel">
         <h2>Project and maintainer</h2>
         <p>
-          consens.io is built and maintained by a single independent developer. It started as a private workflow
+          consens.io is built and maintained by Max Plack in Germany as a privately operated, currently non-monetised project. Operator and contact details are in the <a href="/imprint">Imprint</a>. It started as a private workflow
           for sanity-checking AI answers and gradually turned into a public side project.
         </p>
         <p>
@@ -191,29 +190,28 @@
       <section class="legal-panel notice" id="cost">
         <h2>What it costs</h2>
         <p>
-          <strong>Nothing. It's free while I'm testing it.</strong> There are limits because every question calls six
-          model providers at once and costs me real money. That's the entire reason, and it's easier to say than to
+          <strong>Nothing. It's free while I'm testing it.</strong> There are limits because a run can call up to six comparison models, plus synthesis and evaluation models, and costs me real money. That's the entire reason, and it's easier to say than to
           dress up as a plan.
         </p>
         <p>
           The same goes for the features that are switched off: those are the expensive runs, so I enable them for
           individual accounts instead of for everyone. There's nothing to buy today either. But if people keep telling
-          me they want those runs regularly, a membership is how I'd make that possible, so let me know. I read
+          me they want those runs regularly, a membership may be an option in future. Any paid offer would require a separate express agreement; free use does not automatically become paid. You can send feedback. I read
           everything at <a href="mailto:contact@consens.io">contact@consens.io</a>, feedback and complaints included.
         </p>
         <p class="subtle">
-          If you need more than the limit allows in the meantime, put your own provider API keys into the app and run
-          it on your own bill. Have fun with it :)
+          If you need more than the limit allows in the meantime, enter your own OpenRouter API key in the app; requests still pass through our server and OpenRouter charges your account under its terms. Have fun with it :)
         </p>
       </section>
 
       <section class="legal-panel">
         <h2>Data handling</h2>
         <ul>
-          <li>Prompts are used to call the selected AI models and display results to you.</li>
+          <li>Prompts, enabled Memory and conversation context are used to call AI models and, when invoked, search services.</li>
+          <li>Signed-in Consensus conversations and their sidebar bookmarks are saved automatically until you delete them or your account. Publishing a private conversation is a separate action.</li>
           <li>Login and account features are handled through authentication infrastructure.</li>
           <li>If you use your own API keys, they are stored locally in your browser and only pass through the server to reach the selected provider; they are never stored server-side.</li>
-          <li>There are no embedded ad-network tracking pixels.</li>
+          <li>There are no embedded ad-network tracking pixels. We use Umami Cloud for usage analytics, as described in the Privacy Notice.</li>
         </ul>
         <p class="subtle">
           For full details, read the <a href="/privacy">Privacy Notice</a>. Avoid secrets, highly sensitive data,
@@ -228,6 +226,7 @@
     </div>
   </main>
 
+  {% set public_footer_note = "Last updated: 5 September 2026" %}
   {% include "partials/public_footer.html" %}
 </body>
 </html>
