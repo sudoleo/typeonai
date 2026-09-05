@@ -37,6 +37,37 @@ a { color: inherit; text-decoration: none; }
 img { display: block; max-width: 100%; }
 
 /* --------------------------------------------------------------------------
+   The input field is the exception to the flat page
+
+   Everywhere else depth comes from tone alone, and the field followed that
+   rule: it was a well, one step DARKER than the section it sat in. On a page
+   whose whole first screen is one field, that is backwards — the thing the
+   visitor is meant to reach for was the quietest surface on it. So the field
+   is the one raised object here: near white in light, a step lighter than
+   the canvas in dark, with the hairline and the soft lift that separate it
+   from whichever section tone it lands in.
+
+   Chips inside it are tinted RELATIVE to the field (an alpha, not a colour),
+   so attach and the run switch keep the same one-step-down relationship on
+   both themes without a second set of overrides.
+   -------------------------------------------------------------------------- */
+:root {
+  --lp-field: #fdfdfc;
+  --lp-field-line: rgba(34, 36, 40, 0.11);
+  --lp-field-lift: 0 1px 2px rgba(28, 30, 33, 0.05), 0 14px 32px -16px rgba(28, 30, 33, 0.26);
+  --lp-field-lift-hover: 0 2px 4px rgba(28, 30, 33, 0.06), 0 20px 42px -18px rgba(28, 30, 33, 0.32);
+  --lp-field-chip: rgba(34, 36, 40, 0.055);
+}
+
+.dark-mode {
+  --lp-field: #303336;
+  --lp-field-line: rgba(255, 255, 255, 0.11);
+  --lp-field-lift: 0 1px 2px rgba(0, 0, 0, 0.32), 0 16px 34px -18px rgba(0, 0, 0, 0.5);
+  --lp-field-lift-hover: 0 2px 5px rgba(0, 0, 0, 0.36), 0 22px 44px -20px rgba(0, 0, 0, 0.6);
+  --lp-field-chip: rgba(255, 255, 255, 0.075);
+}
+
+/* --------------------------------------------------------------------------
    Typography (strict scale)
    -------------------------------------------------------------------------- */
 .lp-eyebrow {
@@ -342,9 +373,9 @@ img { display: block; max-width: 100%; }
 .lp-prompt.lp-hero-prompt:hover,
 .lp-prompt.lp-hero-prompt:focus-visible {
   transform: translateY(-2px);
-  /* The field is a well, so hover is the same hairline focus gets in /app —
-     not a coloured frame and a glow. */
-  box-shadow: 0 0 0 1px var(--line);
+  /* Hover is the field lifting a little further off the section, plus the
+     same hairline focus gets in /app — not a coloured frame and a glow. */
+  box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
 }
 
 .lp-prompt.lp-hero-prompt:focus-visible {
@@ -941,11 +972,13 @@ img { display: block; max-width: 100%; }
 .lp-hero-result .consensus-marker-legend { margin-top: 9px; font-size: var(--font-size-micro); }
 
 /* --------------------------------------------------------------------------
-   The composer — an inset field, not a card
+   The composer — the one raised surface on the page
 
-   Same construction as shell.css: a well one shade darker than the canvas,
-   no contour, and a single row underneath holding attach, the run switch and
-   send. The filled circle is the only massive control in the whole mock.
+   Same construction as shell.css otherwise: no contour drawn around content,
+   and a single row underneath holding attach, the run switch and send. The
+   filled circle is the only massive control in the whole mock. What is
+   different here is the tone: see the --lp-field block at the top of the
+   file for why the field is lit instead of sunk.
    -------------------------------------------------------------------------- */
 .lp-prompt,
 .lp-composer {
@@ -957,15 +990,18 @@ img { display: block; max-width: 100%; }
   padding: 13px 15px 11px;
   border: 0;
   border-radius: var(--radius-xl);
-  background: var(--well);
-  box-shadow: none;
+  background: var(--lp-field);
+  box-shadow: var(--lp-field-lift), 0 0 0 1px var(--lp-field-line);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   transition: box-shadow 0.25s ease;
 }
 
-/* Typing into the field is what focus looks like here. */
-.lp-composer.is-active { box-shadow: 0 0 0 1px var(--line); }
+/* Typing into the field is what focus looks like here: the same hairline
+   /app puts on a focused field, on top of the lift the field already has. */
+.lp-composer.is-active {
+  box-shadow: var(--lp-field-lift-hover), 0 0 0 1px var(--line);
+}
 
 .lp-prompt-text,
 .lp-composer-text {
@@ -986,9 +1022,12 @@ img { display: block; max-width: 100%; }
   border-radius: var(--radius-xl);
 }
 
+/* The question is typed at reading size, not at headline size: the field is
+   a field, and type large enough to read as a title turns the mock into a
+   poster of one. Same size as the body text of the page it sits on. */
 .lp-scroll-scene .lp-composer-text {
   min-height: calc(3 * var(--line-height-ui) * 1em);
-  font-size: var(--font-size-lg);
+  font-size: var(--font-size-base);
 }
 
 .lp-scroll-scene .lp-composer-row { gap: 10px; }
@@ -1035,7 +1074,7 @@ img { display: block; max-width: 100%; }
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--ground);
+  background: var(--lp-field-chip);
   color: var(--ink-2);
   box-shadow: none;
   cursor: default;
@@ -1055,7 +1094,7 @@ img { display: block; max-width: 100%; }
   padding: 6px 12px;
   border: 0;
   border-radius: var(--radius-pill);
-  background: var(--ground);
+  background: var(--lp-field-chip);
   color: var(--ink-2);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-medium);
@@ -1361,6 +1400,43 @@ img { display: block; max-width: 100%; }
   color: var(--ink);
   font-size: var(--font-size-base);
   line-height: var(--line-height-reading);
+}
+
+/* The three sentences under the verdict: the answer taken apart the way the
+   product does it, each line wearing the result of the check on it. This is
+   the payoff of the whole run — a verdict on its own is something one model
+   could have written just as confidently. */
+.lp-run-claims {
+  display: grid;
+  gap: 10px;
+  margin: 13px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Inline flow, not a flex row: the count belongs to the END of the sentence
+   the way it does in /app, and a flex row would drop it onto a line of its
+   own the moment the sentence fills the width. */
+.lp-run-claims li {
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-ui);
+}
+
+/* The counts are a picture here, not a control — section 03 is where they
+   open — so they lose the pointer and sit on the sentence's baseline. */
+.lp-run-claims .claim-badge {
+  cursor: default;
+  transform: translateY(-1px);
+}
+
+/* One line under the marks, and the only sentence on this page that says out
+   loud what the six models bought. */
+.lp-run-result .lp-run-result-open {
+  margin-top: 13px;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
 }
 
 .lp-run-provenance {

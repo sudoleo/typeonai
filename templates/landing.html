@@ -23,7 +23,7 @@
   <meta name="twitter:image" content="https://www.consens.io/static/og-home-v2.png?v=20260802">
   <meta name="twitter:image:alt" content="The risk of one perspective | consens.io">
   <title>Track Where AI Answers Disagree and Change | consens.io</title>
-  <link rel="stylesheet" href="/static/css/landing.css?v=20260904-hero1">
+  <link rel="stylesheet" href="/static/css/landing.css?v=20260905-field2">
   <link rel="stylesheet" href="/static/css/benchmark.css?v=20260731-inter1">
   <link rel="icon" href="/static/favicon.svg?v=20260621-logo2" type="image/svg+xml">
   <link rel="icon" href="/static/favicon-square-dark.png?v=20260621-logo2" sizes="any" type="image/png">
@@ -257,9 +257,24 @@
                 <!-- What the run hands over to once it collapses. -->
                 <div class="lp-run-result" data-run-result>
                   <h3>Consensus answer</h3>
-                  <p><strong>Send it — but the closing line splits the models three against three.</strong></p>
+                  <!-- What the run hands over has to be worth having waited
+                       for. One headline was a verdict with nothing behind it:
+                       it said what the product does, not what six models are
+                       for. So the answer arrives the way it does in /app — a
+                       verdict, then the sentences it is made of, each carrying
+                       what the six actually did with it: agreed, split, or
+                       contradicted each other. Every line and every count is
+                       the demo run's own data (static/demo.js), and the marks
+                       are the same ones section 03 takes apart one by one. -->
+                  <p><strong>Send it — after two fixes, and one call the models will not make for you.</strong></p>
+                  <ul class="lp-run-claims" aria-label="Three sentences from the consensus answer and how the six models divided on each">
+                    <li><span class="cx-claim is-unanimous">The 29th belongs in the first line, ahead of the miss and the apology.</span><span class="claim-badge" aria-hidden="true"><span class="claim-ratio">6/6</span></span></li>
+                    <li><span class="cx-claim is-split">Name the day you will confirm it, so the next update is not another surprise.</span><span class="claim-badge has-dissent" aria-hidden="true"><span class="claim-ratio">4/6</span></span></li>
+                    <li><span class="cx-claim is-major">Keep the closing question, or cut it — three models each way.</span></li>
+                  </ul>
+                  <p class="lp-run-result-open">A single answer would have handed you all three as settled.</p>
                   <div class="lp-run-provenance">
-                    <span><b>6 models</b> · 24 s · 3 contested passages</span>
+                    <span><b>6 models</b> · 24 s · agreement <b>45/100</b></span>
                     <span class="lp-run-provenance-tabs">
                       <span>Differences <b>3</b></span>
                       <span>Model answers <b>6</b></span>
@@ -306,9 +321,14 @@
             <div class="lp-step-visual">
               <div class="lp-excerpt">
               <div class="consensus-verdict is-warn">
-                <span class="verdict-gauge" style="--val:52" title="Agreement score 52/100">
+                <!-- 45 is the score the demo run actually produces (the sum
+                     in app/services/llm/consensus_scoring.py over the data in
+                     static/demo.js), and it is the same number scene 02 now
+                     hands over with. One run, one score, wherever the page
+                     shows it. -->
+                <span class="verdict-gauge" style="--val:45" title="Agreement score 45/100">
                   <span class="verdict-score">
-                    <span class="verdict-score-num">52</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
+                    <span class="verdict-score-num">45</span><span class="verdict-score-unit" aria-hidden="true">/100</span>
                   </span>
                   <span class="verdict-meter" aria-hidden="true"><span class="verdict-meter-fill"></span></span>
                 </span>

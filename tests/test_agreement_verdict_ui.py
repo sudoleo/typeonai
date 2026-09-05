@@ -100,10 +100,14 @@ def test_public_mockups_use_the_same_score_semantics():
     assert "Agreement on the core" not in product
     assert '<div class="consensus-verdict is-calm">' in product
     assert '<span class="verdict-headline">Strong agreement</span>' in product
+    # 45 ist der Score, den der Demo-Lauf wirklich rechnet (consensus_scoring
+    # auf die Daten in static/demo.js). Scene 02 uebergibt ihn im Lauf-Fuss,
+    # Scene 03 zeigt ihn im Verdict — ein Lauf, eine Zahl.
     assert (
-        'style="--val:52" title="Agreement score 52/100"' in landing
+        'style="--val:45" title="Agreement score 45/100"' in landing
         and '<span class="verdict-headline">Partial agreement</span>' in landing
     )
+    assert "agreement <b>45/100</b>" in landing
     # Der Landing-Walkthrough zeigt denselben Lauf wie die Demo in /app: unter
     # 65 faerbt der Verdict-Balken amber, sonst behauptet das Mockup eine Ruhe,
     # die der Score nicht deckt.
